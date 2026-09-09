@@ -1,0 +1,62 @@
+key,de
+allied-expansion-movement-detected,Bewegung des alliierten MBF entdeckt.
+allied-mcv-island,Ein alliiertes MBF bewegt sich auf die Insel zu.
+capture-radar-dome,Erobere die Radarkuppel.
+console,Konsole
+convoy-arrived,Der Konvoi ist angekommen!
+coordinates-allied-expansion-discovered,Alliierte Vorpostenbasis entdeckt.
+deactivate-security-system,Schalte das Sicherheitssystem aus.
+defeat-allied-forces,Besiege die alliierten Streitkräfte.
+defend-radar-dome,Verteidige die Radarkuppel.
+destroy-allied-units-structures,Zerstöre alle alliierten Einheiten und Gebäude.
+destroy-bridges,Zerstöre alle Brücken.
+destroy-capture-radar-dome-reinforcements,"Zerstöre oder erobere die alliierte Radarkuppel, um feindliche Verstärkung zu stoppen."
+destroy-convoys,Vernichte alle durchfahrenden sowjetischen Konvois.
+destroy-oilpumps,Zerstöre alle sowjetischen Ölpumpen.
+destroy-radar-dome-reinforcements,"Zerstöre die alliierte Radarkuppel, um Verstärkung zu verhindern."
+destroy-soviet-units-buildings,Zerstöre alle sowjetischen Einheiten und Gebäude in diesem Gebiet.
+einstein-survive,Einstein muss überleben.
+eliminate-soviets,Vernichte jede sowjetische Präsenz in diesem Gebiet.
+engineer,Pionier
+engineer-reactor-core,Bringe einen Pionier zum Reaktorkern.
+engineer-reprogram-security,Programmiere mit einem Pionier das Sicherheitssystem um.
+engineers-coolant-station,Bringe die Pioniere zu den Kühlstationen.
+escort-convoy,Eskortiere den Konvoi.
+explosive-charge-placed,Sprengladung platziert.
+extract-einstein-helicopter,Bringe Einstein zur Signalfackel.
+find-einstein,Finde Einstein.
+find-lost-tanks,Finde unsere verlorenen Panzer.
+flame-turret-deactivated,Flammenturm deaktiviert.
+free-dogs,Befreie die Hunde.
+free-prisoners,Befreie alle alliierten Soldaten und halte sie am Leben.
+get-engineers-to-consoles,Bringe deine Pioniere zu jeder Startkontrollzentrale.
+keep-trucks-alive,Halte alle Lastwagen am Leben.
+nuclear-missile-deactivated,Atomrakete deaktiviert.
+place-explosive-charges,Platziere Sprengladungen an allen Generatoren.
+protect-civilians,Beschütze alle Zivilisten.
+protect-command-center,Beschütze das Kommandozentrum.
+raze-village,Zerstöre das Dorf.
+reach-target-in,"Die Atomraketen erreichen ihr Ziel in { $time }"
+rescue-engineers,Rette die Pioniere.
+secure-convoy,Sichere den Weg des Konvois.
+spare-the-scientists,"Verschone die Wissenschaftler; sie sind als Kriegsgefangene wertvoller."
+steal-supplies,Sichere das Nachschublager der Basis.
+tanya,Tanya
+tanya-rules-of-engagement,"Commander, ich brauche Ihren direkten Feuerbefehl gemäß den Einsatzregeln!"
+tanya-survive,Tanya muss überleben.
+time-until-meltdown,"Zeit bis zur Kernschmelze: { $time }"
+too-late,Wir sind zu spät!
+we-are-too-late,Wir sind zu spät!
+new-primary-objective,Neues Hauptziel
+new-secondary-objective,Neues Nebenziel
+objective-completed,Ziel erfüllt
+objective-failed,Ziel gescheitert
+rescue-tanya,Befreie Tanya.
+eliminate-soviet-units,Vernichte alle sowjetischen Einheiten in diesem Gebiet.
+infiltrate-warfactory,Infiltriere die sowjetische Waffenfabrik.
+destroy-sam-sites-blocker,"Zerstöre alle vier SAM-Stellungen, die den Hubschrauber unserer Verstärkung am Landen hindern."
+extract-transport,Bringe Tanya zur Signalfackel.
+disguise-spy,"Commander! Sie müssen mich verkleiden, damit ich durch die feindlichen Patrouillen komme."
+skip-heroics,Gute Arbeit! Aber lassen Sie das nächste Mal die Heldentaten.
+battlefield-control,Gefechtsleitung
+spy,Spion

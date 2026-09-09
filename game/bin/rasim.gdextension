@@ -1,0 +1,11 @@
+[configuration]
+
+entry_symbol = "rasim_library_init"
+compatibility_minimum = "4.7"
+
+[libraries]
+
+macos.debug.arm64 = "res://bin/librasim.macos.arm64.dylib"
+macos.release.arm64 = "res://bin/librasim.macos.arm64.dylib"
+android.debug.arm64 = "res://bin/librasim.android.arm64.so"
+android.release.arm64 = "res://bin/librasim.android.arm64.so"

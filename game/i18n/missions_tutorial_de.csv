@@ -1,0 +1,44 @@
+key,de
+tutorial-ui-camera,"Ein Finger wählt Einheiten und gibt Befehle, zwei Finger schwenken die Kamera, drei Finger zoomen (auseinander- oder zusammenziehen)."
+tutorial-ui-statusbar,"Die Leiste oben zeigt Credits, Strombilanz und Lagerstand — behalte sie beim Bauen im Blick."
+tutorial-ui-menu,"Der Menüknopf oben links pausiert, speichert und öffnet Geschwindigkeit und Optionen."
+tutorial-ui-music,Der Musikknopf schaltet die Musik ein oder aus.
+tutorial-obj-deploy,"Wähle dein Mobiles Bau-Fahrzeug (MBF) und tippe es noch einmal an, um es zum Bauhof auszuklappen."
+tutorial-obj-power,Baue ein Kraftwerk.
+tutorial-obj-refinery,Baue eine Erzraffinerie — sie bringt einen Erntewagen für das nahe Erz mit.
+tutorial-ui-economy,Der Erntewagen bringt Erz zur Raffinerie und macht daraus Credits — mehr Lagerplatz gibt es über Erzsilos.
+tutorial-obj-barracks,Baue eine Kaserne.
+tutorial-obj-infantry,Bilde 3 Schützen (E1) in der Kaserne aus.
+tutorial-obj-group-assign,"Wähle deine drei Schützen (Rahmen um sie ziehen) und halte dann die 1 lange gedrückt, um sie als Gruppe zu speichern."
+tutorial-obj-group-select,"Tippe kurz auf die 1, um die gespeicherte Gruppe wieder auszuwählen."
+tutorial-obj-turret,Baue einen Bunker zur Verteidigung.
+tutorial-ui-cmdbar-intro,Die Knopfleiste neben der Minimap hat zehn schnelle Befehle — probiere sie aus.
+tutorial-ui-cmd-sell,"Verkaufe NUR den Bunker: Verkauf antippen, dann den Bunker antippen."
+tutorial-ui-cmd-repair,"Der Bunker ist beschädigt. Tippe Reparatur an, dann den Bunker, um ihn automatisch heilen zu lassen."
+tutorial-ui-cmd-clear,"Tippe Leer an, um die ganze Auswahl aufzuheben."
+tutorial-ui-cmd-add,"Tippe einen Schützen an, dann Mehr+ (Auswahl erweitern), und tippe weitere Schützen an — die Auswahl soll wachsen."
+tutorial-ui-cmd-clear2,"Tippe ins Leere oder erneut Leer an, um die Auswahl wieder aufzuheben."
+tutorial-ui-cmd-all,"Tippe Alle an — das wählt alle Kampfeinheiten, Sammler bleiben außen vor."
+tutorial-ui-cmd-base,"Tippe Basis an, um mit der Kamera zu deinem Bauhof zu springen."
+tutorial-ui-cmd-event,"Alarm springt zum letzten Ereignis, das deine Aufmerksamkeit brauchte."
+tutorial-ui-cmd-sel,"Tippe Ausw. an, um mit der Kamera zu deiner aktuellen Auswahl zu springen."
+tutorial-ui-cmd-zoom,Zoome mit drei auseinandergezogenen Fingern oder den Zoomknöpfen +/− — ändere jetzt die Ansicht.
+tutorial-obj-warfactory,Baue eine Waffenfabrik.
+tutorial-obj-tanks,Baue 2 leichte Panzer (1TNK).
+tutorial-ui-superweapons,"Hier würde ein Superwaffen-Panel erscheinen, sobald du eine baust — in diesem Tutorial keine."
+tutorial-obj-dome,Baue eine Radarkuppel — sie schaltet das Radar auf der Minimap frei.
+tutorial-ui-lowpower,"Die Stromversorgung reicht nicht mehr aus — oben steht Strom jetzt rot, Gebäude dunkeln ab, und das Radar fällt aus."
+tutorial-obj-apwr,Baue ein Fortschrittliches Kraftwerk — es gleicht die Stromversorgung wieder aus.
+tutorial-ui-minimap,"Die Minimap unten links zeigt jetzt dein Baugelände. Tippen springt die Kamera dorthin, ein Angriff pingt darauf."
+tutorial-ui-radial-unit,"Langes Drücken auf eine Einheit öffnet ihr Radialmenü: Angriff, Zwangsfeuer, Bewachen, Zerstreuen, Stopp, Sammeln."
+tutorial-ui-radial-building,"Langes Drücken auf ein Gebäude öffnet sein Radialmenü: Reparieren, Primär, Verkaufen, Sammelpunkt."
+tutorial-ui-infocard,Langes Drücken auf eine gegnerische Einheit oder ein Gebäude zeigt die Infokarte.
+tutorial-ui-selection-gestures,Doppeltippen wählt alle Einheiten desselben Typs auf dem Bildschirm; ein gezogener Rahmen wählt einen Bereich.
+tutorial-ui-attackmove,"Ein Tipp auf freien Boden ist reine Bewegung; für eine Angriffsbewegung (verteidigt sich unterwegs) wähle im Radialmenü einer Einheit „Angriffsbewegung“."
+tutorial-obj-defend,Ein kleiner Gegnertrupp greift an! Wähle deine Einheiten und verteidige deine Basis.
+tutorial-obj-attack,"Lange in der Nähe der Gegnerbasis drücken und „Angriff“ wählen, um sie zu zerstören."
+tutorial-side-repair,Nebenziel: Repariere ein beschädigtes Gebäude.
+tutorial-side-sell,Nebenziel: Verkaufe ein Gebäude.
+tutorial-hint-openbar,Öffne zuerst die Bauleiste (Kranhaken-Knopf unten rechts).
+tutorial-hint-switchtab,Wechsle zum passenden Reiter der Bauleiste.
+tutorial-hint-place,"Setze das Gebäude in die Nähe deiner Basis — grün heißt erlaubt. Tippe noch einmal darauf, um zu bauen."

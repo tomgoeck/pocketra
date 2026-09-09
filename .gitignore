@@ -1,0 +1,35 @@
+# EA-Assets und alles daraus Abgeleitete bleibt draussen
+content/
+game/assets/
+
+# Godot
+.godot/
+game/bin/*.so
+game/bin/*.dylib
+game/bin/*.dll
+*.translation
+build/
+
+# GDExtension / SCons
+*.os
+*.obj
+.sconsign.dblite
+compile_commands.json
+
+# Build-Ausgaben
+build/
+*.o
+*.a
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# OpenRA-Referenz-Checkout (GPL, nicht unser Code)
+reference/
+__pycache__/
+*.pyc

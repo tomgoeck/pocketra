@@ -1,0 +1,346 @@
+keys,de,en
+ui.build_toggle_tip,Baumenü,Build menu
+ui.build_confirm,Bauen,Build
+ui.cancel,Abbrechen,Cancel
+ui.back,Zurück,Back
+ui.understood,Verstanden,Got it
+toast.group_selected,Gruppe %d: %d Einheiten,Group %d: %d units
+toast.group_assigned,Gruppe %d zugewiesen: %d Einheiten,Group %d assigned: %d units
+toast.placing,Platzieren: %s,Placing: %s
+toast.sold,Verkauft,Sold
+toast.sell_impossible,Verkauf nicht möglich,Sale not possible
+toast.built,Gebaut,Built
+toast.cannot_build_here,Kann hier nicht bauen,Cannot build here.
+toast.order_cancelled,Befehl abgebrochen,Order cancelled
+toast.cancelled,Abgebrochen,Cancelled
+toast.select_target,Ziel wählen: %s,Select target: %s
+toast.move_count,Bewegen (%d Einheiten),Move (%d units)
+toast.attack_move_count,Angriffszug (%d Einheiten),Attack move (%d units)
+toast.no_harvester,Kein Harvester in der Auswahl,No harvester selected
+toast.force_fire_impossible,Zwangsfeuer nicht möglich,Force fire not possible
+toast.guarding,Bewacht: %s,Guarding: %s
+toast.no_guard_target,Kein Ziel zum Bewachen,No target to guard
+toast.tap_again_to_build,Nochmal tippen zum Bauen,Tap again to build
+toast.sale_cancelled,Verkauf abgebrochen,Sale cancelled
+toast.repair_at_depot,Reparatur im Depot,Repairing at depot
+toast.landing,Landen auf %s,Landing at %s
+toast.deliver_ore,Abladen: %s,Delivering to %s
+toast.deployed,Ausgeklappt,Deployed
+toast.deploy_impossible,Hier nicht ausklappbar,Cannot deploy here
+toast.mine_laid,Mine gelegt,Mine laid
+toast.mine_impossible,Keine Minen mehr,No mines left
+toast.boarding,Einsteigen: %s,Boarding: %s
+toast.unloading,Entladen,Unloading
+toast.nobody_aboard,Niemand an Bord,Nobody aboard
+toast.rally_set,Sammelpunkt gesetzt,Rally point set
+toast.no_rally_point,Dieses Gebäude hat keinen Sammelpunkt,This building has no rally point
+toast.rally_ground_only,Sammelpunkt nur auf freien Boden,Rally point on clear ground only
+toast.capturing,Erobern: %s,Capturing: %s
+toast.repairing_building,Reparieren: %s,Repairing: %s
+toast.demolishing,Sprengen: %s,Demolishing: %s
+toast.infiltrating,Infiltrieren: %s,Infiltrating: %s
+toast.disguised_as,Verkleidet als %s,Disguised as %s
+toast.attacking,Angriff auf %s (%d Einheiten),Attacking %s (%d units)
+toast.own_building_required,Eigenes Gebäude antippen,Tap your own building
+toast.sold_unit,%s verkauft,%s sold
+toast.repair_toggled,Reparatur umgeschaltet,Repair toggled
+toast.repair_not_needed,nicht nötig,not needed
+toast.ground,Boden,Ground
+label.owner_own,eigen,own
+label.owner_neutral,neutral,neutral
+label.owner_hostile,feindlich,hostile
+label.ore_pct,Erz %d %%,Ore %d %%
+cmd.sell.label,Verkauf,Sell
+cmd.sell.tip,Gebäude antippen = verkaufen,Tap a building to sell
+cmd.repair.label,Rep.,Rep.
+cmd.repair.tip,Gebäude antippen = reparieren,Tap a building to repair
+cmd.add.label,Mehr+,More+
+cmd.add.tip,Auswahl erweitern statt ersetzen,Add to selection instead of replacing it
+cmd.all.label,Alle,All
+cmd.all.tip,Alle eigenen Einheiten wählen,Select all own units
+cmd.clear.label,Leer,Clear
+cmd.clear.tip,Auswahl aufheben,Clear selection
+cmd.base.label,Basis,Base
+cmd.base.tip,Kamera zur Basis,Camera to base
+cmd.event.label,Alarm,Alert
+cmd.event.tip,Kamera zum letzten Angriff,Camera to last attack
+cmd.sel.label,Ausw.,Sel.
+cmd.sel.tip,Kamera zur Auswahl,Camera to selection
+cmd.zoom_in.label,Zoom +,Zoom +
+cmd.zoom_in.tip,Näher heran,Zoom in
+cmd.zoom_out.label,Zoom -,Zoom -
+cmd.zoom_out.tip,Weiter weg,Zoom out
+help.btn.music,Musik ein- oder ausschalten.,Turn music on or off.
+help.btn.menu,"Spielmenü öffnen: Fortsetzen, Ziele, Steuerung, Musik, Beenden.","Open the game menu: resume, objectives, controls, music, quit."
+help.btn.build_toggle,Bauleiste ein- oder ausblenden.,Show or hide the build bar.
+help.btn.sell,"Verkauf: Gebäude antippen, um es zu verkaufen (50 % Erstattung).","Sell: tap a building to sell it (50% refund)."
+help.btn.repair,"Reparatur: Gebäude antippen, um die Reparatur ein- oder auszuschalten.","Repair: tap a building to toggle repair on or off."
+help.btn.add,"Mehr+: die nächste Auswahl zur bestehenden hinzufügen, statt sie zu ersetzen.","More+: add the next selection instead of replacing it."
+help.btn.all,Alle: alle eigenen Einheiten auswählen.,All: select every unit you own.
+help.btn.clear,Leer: Auswahl aufheben.,Clear: deselect everything.
+help.btn.base,Basis: Kamera zur eigenen Basis springen lassen.,Base: jump the camera to your base.
+help.btn.event,Alarm: Kamera zum letzten Angriff springen lassen.,Alert: jump the camera to the last attack.
+help.btn.sel,Ausw.: Kamera zur aktuellen Auswahl springen lassen.,Sel.: jump the camera to the current selection.
+help.btn.zoom_in,Zoom +: näher heranzoomen.,Zoom +: zoom in closer.
+help.btn.zoom_out,Zoom −: weiter herauszoomen.,Zoom −: zoom further out.
+help.btn.tab_building,Reiter Gebäude: Bauliste für Gebäude anzeigen.,Buildings tab: show the building production list.
+help.btn.tab_defense,Reiter Abwehr: Bauliste für Verteidigungsanlagen anzeigen.,Defense tab: show the defense structure list.
+help.btn.tab_infantry,Reiter Infanterie: Bauliste für Infanterie anzeigen.,Infantry tab: show the infantry production list.
+help.btn.tab_vehicle,Reiter Fahrzeuge: Bauliste für Fahrzeuge anzeigen.,Vehicles tab: show the vehicle production list.
+help.btn.tab_aircraft,Reiter Flugzeuge: Bauliste für Flugzeuge anzeigen.,Aircraft tab: show the aircraft production list.
+help.btn.tab_ship,Reiter Schiffe: Bauliste für Schiffe anzeigen.,Ships tab: show the ship production list.
+toast.add_select,Auswahl erweitern: %s,Add to selection: %s
+word.on,an,on
+word.off,aus,off
+toast.all_units_count,Alle Einheiten: %d,All units: %d
+toast.selection_cleared,Auswahl aufgehoben,Selection cleared
+toast.no_event,Kein Ereignis,No event
+toast.nothing_selected,Nichts ausgewählt,Nothing selected
+toast.mode_tap_building,%s: eigenes Gebäude antippen,%s: tap your own building
+word.sell_verb,Verkaufen,Sell
+word.repair_verb,Reparieren,Repair
+toast.mode_off,Modus aus,Mode off
+toast.no_base,Keine Basis,No base
+notify.building,Bau begonnen,Building
+notify.building_in_progress,Bau läuft bereits,Unable to comply. Building in progress.
+notify.construction_complete,Gebäude fertig,Construction complete.
+notify.unit_ready,Einheit bereit,Unit ready.
+notify.insufficient_funds,Nicht genug Geld,Insufficient funds.
+notify.no_build,Nicht mehr baubar,Unable to build more.
+notify.cancelled,Auftrag abgebrochen,Cancelled.
+notify.new_options,Neue Bauoptionen,New construction options.
+notify.low_power,Strom niedrig,Low power.
+notify.structure_sold,Gebäude verkauft,Structure sold.
+notify.repairing,Reparatur läuft,Repairing.
+notify.primary_selected,Primärgebäude gesetzt,Primary building selected.
+notify.unit_repaired,Einheit repariert,Unit repaired.
+notify.win,Sieg,Mission Accomplished
+notify.lose,Niederlage,Mission Failed
+notify.silos_needed,Lager voll — Silo bauen,Silos needed.
+notify.cannot_place,Hier kann nicht gebaut werden,Cannot build here.
+gameover.won,SIEG,MISSION ACCOMPLISHED
+gameover.lost,NIEDERLAGE,MISSION FAILED
+gameover.stats,Eigene Einheiten: %d   Gegner: %d,Own units: %d   Enemy: %d
+gameover.next_mission,Nächste Mission,Next Mission
+gameover.new_game,Neues Spiel,New Game
+gameover.retry_mission,Mission wiederholen,Retry Mission
+gameover.keep_watching,Weiter zuschauen,Keep Watching
+gameover.main_menu,Hauptmenü,Main Menu
+gameover.mission_done,Mission erfüllt.,Mission accomplished.
+gameover.mission_failed,Mission gescheitert.,Mission failed.
+gameover.all_enemies_destroyed,Alle Gegner vernichtet.,All enemies destroyed.
+gameover.base_fallen,Deine Basis ist gefallen.,Your base has fallen.
+objectives.title,Ziele,Objectives
+objectives.time,Zeit: %s,Time: %s
+objectives.none_yet,Noch keine Ziele — das Missionsskript setzt sie im Verlauf.,No objectives yet — the mission script sets them as it goes.
+objectives.skirmish_destroy,• Zerstöre alle gegnerischen Gebäude und Einheiten.,• Destroy all enemy buildings and units.
+objectives.skirmish_survive,• Verliere nicht deine eigene Basis.,• Don't lose your own base.
+menu.controls,Steuerung,Controls
+pause.title,Pause,Pause
+pause.resume,Fortsetzen,Resume
+pause.objectives,Ziele & Briefing,Objectives & Briefing
+pause.save,Speichern,Save
+pause.load,Laden,Load
+pause.restart,Neustart,Restart
+pause.give_up,Aufgeben,Give Up
+pause.quit_game,Spiel beenden,Quit Game
+options.music_on,Musik: an,Music: on
+options.music_off,Musik: aus,Music: off
+menu.missions.start,Mission starten,Start Mission
+briefing.video,Briefing-Film,Briefing Video
+radial.action.attack,Angriff,Attack
+radial.action.force_fire,Zwangsfeuer,Force Fire
+radial.action.guard,Bewachen,Guard
+radial.action.scatter,Zerstreuen,Scatter
+radial.action.stop,Stopp,Stop
+radial.action.harvest,Ernten,Harvest
+radial.action.mine,Mine legen,Lay mine
+radial.action.repair,Reparieren,Repair
+radial.action.primary,Primär,Primary
+radial.action.sell,Verkaufen,Sell
+radial.action.deploy,Ausklappen,Deploy
+radial.action.unload,Entladen,Unload
+radial.action.attack_move,Angriffszug,Attack Move
+radial.action.move,Bewegen,Move
+radial.action.clear,Leeren,Clear
+radial.target.force_fire,Zwangsfeuer — Stelle wählen,Force fire — pick location
+radial.target.guard,Bewachen — Einheit oder Gebäude wählen,Guard — pick unit or building
+menu.main.continue,Weiter,Continue
+menu.main.load,Laden,Load
+menu.main.tutorial,Tutorial,Tutorial
+menu.main.skirmish,Gefecht,Skirmish
+menu.main.missions,Missionen (im Test),Missions (beta)
+menu.main.options,Optionen,Settings
+menu.main.quit,Beenden,Quit
+menu.main.subtitle,Godot-Neubau · Logik nach OpenRA,Godot remake · Logic follows OpenRA
+menu.skirmish.start,Spiel starten,Start Game
+menu.skirmish.mine,Ich: %s,Me: %s
+menu.skirmish.ai_faction,KI: %s,AI: %s
+menu.skirmish.starting_units,Starteinheiten: %s,Starting units: %s
+menu.skirmish.units_none,nur MCV,MCV only
+menu.skirmish.units_light,leichte Unterstützung,light support
+menu.skirmish.units_heavy,schwere Unterstützung,heavy support
+menu.skirmish.crates,Kisten: %s,Crates: %s
+menu.skirmish.explored_map,Karte erkundet: %s,Explored map: %s
+menu.skirmish.fog,Nebel: %s,Fog: %s
+menu.skirmish.ai_count,KI-Gegner: %d,AI opponents: %d
+menu.skirmish.ai_difficulty,KI-Stärke: %s,AI strength: %s
+menu.skirmish.ai_easy,Leicht,Easy
+menu.skirmish.ai_normal,Mittel,Normal
+menu.skirmish.ai_hard,Schwer,Hard
+menu.skirmish.credits,Startgeld: %d,Starting cash: %d
+menu.skirmish.map_info,"%s
+%d Spieler · %s · %d×%d Zellen","%s
+%d players · %s · %d×%d cells"
+faction.allies,Alliierte,Allies
+faction.soviet,Sowjets,Soviets
+menu.missions.progress,"%s — %d von %d spielbar, %d geschafft","%s — %d of %d playable, %d completed"
+menu.missions.difficulty,Schwierigkeit: %s,Difficulty: %s
+menu.missions.pick,"Im Test: Skripte laufen, Balance und Spielbarkeit sind noch nicht von Hand geprüft. Gesperrte Einträge nennen den Grund.","Beta: scripts run, balance and playability are not yet hand-tested. Locked entries name the reason."
+menu.missions.completed_suffix,   (bereits geschafft),   (already completed)
+menu.missions.locked,"%s
+Gesperrt: %s","%s
+Locked: %s"
+menu.missions.no_difficulty,Diese Mission kennt keine Schwierigkeitsgrade.,This mission has no difficulty levels.
+menu.options.language,Sprache: %s,Language: %s
+menu.options.master,Gesamt,Master
+menu.options.music,Musik,Music
+menu.options.sfx,Effekte,Effects
+menu.options.voice,Sprache,Voice
+menu.options.video,Video,Video
+menu.options.controls_button,Steuerung ansehen,View Controls
+tileset.temperat,gemäßigt,temperate
+tileset.snow,Schnee,Snow
+tileset.desert,Wüste,Desert
+tileset.interior,innen,interior
+campaign.allied,Alliierte Kampagne,Allied Campaign
+campaign.soviet,Sowjetische Kampagne,Soviet Campaign
+campaign.counterstrike_allied,Counterstrike: Alliierte,Counterstrike Allied Missions
+campaign.counterstrike_soviet,Counterstrike: Sowjets,Counterstrike Soviet Missions
+campaign.aftermath_allied,Aftermath: Alliierte,Aftermath Allied Missions
+campaign.aftermath_soviet,Aftermath: Sowjets,Aftermath Soviet Missions
+campaign.openra_originals,OpenRA-Originale,OpenRA Originals
+campaign.ant_missions,Ameisen-Missionen,Ant Missions
+difficulty.easy,leicht,Easy
+difficulty.normal,normal,Normal
+difficulty.hard,schwer,Hard
+difficulty.tough,hart,Tough
+lock.map_missing,Karte fehlt,Map missing
+lock.script_missing,Skript fehlt,Script missing
+lock.tileset_missing,Tileset %s fehlt,Tileset %s missing
+lock.not_ported,noch nicht übertragen,not ported yet
+lock.reason.allies_05a,"Spion und Verstärkung kommen per Landungsboot, Tanya wird per Chinook ausgeflogen; die vier SAM-Stellungen des Nebenziels sind reine Flugabwehr und in der Sim nicht vorhanden","The spy and every reinforcement arrive by landing craft, Tanya is flown out by Chinook; the four SAM sites of the side objective are pure anti-air and do not exist in the sim"
+lock.reason.allies_05b,"wie allies-05a: Landungsboot beim Einsetzen und bei jeder Verstärkung, Chinook-Extraktion, SAM-Stellungen","like allies-05a: landing craft for the insertion and every reinforcement, Chinook extraction, SAM sites"
+lock.reason.allies_06a,erstes Hauptziel ist der Bau einer Werft (syrd) — Marinewerften produzieren nur Schiffe und sind nicht unterstützt; der Spion muss zudem per Landungsboot über die Bucht,the first main objective is building a naval yard (syrd) — naval yards only produce ships and are unsupported; the spy also has to cross the bay by landing craft
+lock.reason.allies_06b,einziges Startziel ist die Spion-Infiltration der Tech-Center jenseits der Bucht — ohne Landungsboot gibt es keinen Weg dorthin,the only starting objective is spy infiltration of the tech centers across the bay — without a landing craft there is no way there
+lock.reason.soviet_03,der fliehende Spion versteckt sich in Hütten (Cargo/EnterTransport), fährt per Landungsboot und wird per Chinook ausgeflogen,the fleeing spy hides in huts (Cargo/EnterTransport), travels by landing craft and is flown out by Chinook
+buildbar.buildings,Gebäude,Buildings
+buildbar.defense,Abwehr,Defense
+buildbar.infantry,Infanterie,Infantry
+buildbar.vehicles,Fahrzeuge,Vehicles
+buildbar.aircraft,Flugzeuge,Aircraft
+buildbar.ships,Schiffe,Ships
+buildbar.ready,BEREIT,READY
+buildbar.hold_count,HALT ×%d,HOLD ×%d
+buildbar.limit,Limit,Limit
+buildbar.locked,gesperrt,locked
+buildbar.production_building,Produktionsgebäude,Production building
+buildbar.limit_reached,%s: Höchstzahl erreicht%s,%s: limit reached%s
+buildbar.requires,%s benötigt: %s,%s requires: %s
+buildbar.missing_producer,%s: %s fehlt,%s: %s missing
+buildbar.not_buildable_now,%s ist gerade nicht baubar,%s cannot be built right now
+buildbar.queue_empty,Nichts in der Warteschlange,Nothing in the queue
+buildbar.resume,Fortsetzen,Resume
+buildbar.hold,Anhalten,Hold
+buildbar.cancel_one,1 abbrechen,Cancel 1
+buildbar.cancel_all,Alle abbrechen,Cancel All
+buildbar.info.price,Preis: $%d,Price: $%d
+buildbar.info.time,Bauzeit: %d:%02d,Build time: %d:%02d
+buildbar.info.power_gen,Strom: +%d,Power: +%d
+buildbar.info.power_use,Strom: −%d,Power: −%d
+status.credits,Credits,Credits
+status.storage,Lager %d / %d,Storage %d / %d
+status.power,Strom,Power
+status.power_detail,Bedarf %d · Strom %d,Drain %d · Power %d
+gesture.one_finger.label,Ein Finger,One finger
+gesture.one_finger.desc,gehört immer den Einheiten — nie der Kamera,always controls units — never the camera
+gesture.tap_own.label,Tippen auf eigene Einheit,Tap own unit
+gesture.tap_own.desc,auswählen,select
+gesture.double_tap.label,Doppeltippen,Double-tap
+gesture.double_tap.desc,alle sichtbaren Einheiten desselben Typs,all visible units of the same type
+gesture.drag_empty.label,Ziehen auf leerem Boden,Drag on empty ground
+gesture.drag_empty.desc,Auswahlrahmen; am Bildschirmrand schwenkt die Karte mit,selection box; panning at the screen edge scrolls the map
+gesture.tap_ground.label,Tippen auf Boden,Tap ground
+gesture.tap_ground.desc,hinbewegen,move there
+gesture.tap_enemy.label,Tippen auf Gegner,Tap enemy
+gesture.tap_enemy.desc,angreifen,attack
+gesture.tap_ore.label,Tippen auf Erz (Harvester),Tap ore (harvester)
+gesture.tap_ore.desc,dort ernten,harvest there
+gesture.long_press_selection.label,Langes Drücken mit Auswahl,Long press with selection
+gesture.long_press_selection.desc,"Radialmenü: Angriffszug, Bewegen, Stopp, Zerstreuen, Ernten","Radial menu: attack move, move, stop, scatter, harvest"
+gesture.long_press_empty.label,Langes Drücken ohne Auswahl,Long press without selection
+gesture.long_press_empty.desc,Name und Zustand des Objekts darunter,name and status of the object underneath
+gesture.two_finger_drag.label,Zwei Finger ziehen,Two-finger drag
+gesture.two_finger_drag.desc,Karte schwenken,pan the map
+gesture.three_finger_spread.label,Drei Finger spreizen,Three-finger spread
+gesture.three_finger_spread.desc,zoomen — oder die Knöpfe Zoom + / Zoom - unten links,zoom — or the Zoom + / Zoom - buttons bottom left
+gesture.minimap.label,Minimap,Minimap
+gesture.minimap.desc,"Tippen springt dorthin, Doppeltippen zur eigenen Basis","tap to jump there, double-tap for your own base"
+gesture.build_bar.label,Bauleiste,Build bar
+gesture.build_bar.desc,"Tippen baut, Wischen scrollt, langes Drücken bricht ab","tap to build, swipe to scroll, long press to cancel"
+gesture.place_building.label,Gebäude setzen,Place building
+gesture.place_building.desc,"Icon tippen, Stelle tippen, dieselbe Stelle nochmal = bauen","tap the icon, tap the spot, tap the same spot again to build"
+gesture.group_column.label,"Gruppenspalte links","Group column, left"
+gesture.group_column.desc,"Tippen wählt, Doppeltippen springt hin, langes Drücken weist zu","tap to select, double-tap to jump there, long press to assign"
+gesture.bottom_buttons.label,"Knöpfe unten links","Buttons, bottom left"
+gesture.bottom_buttons.desc,"Verkaufen, Reparieren, Auswahl erweitern, alle Einheiten, Basis, Alarm","Sell, repair, add to selection, all units, base, alert"
+test.build_bar_run,Testlauf: Bauleiste,Test run: build bar
+sp.ironcurtain,Eiserner Vorhang,Iron Curtain
+sp.chronoshift,Chronosphäre,Chronosphere
+sp.nuke,Atomrakete,Nuclear missile
+sp.gps,GPS-Satellit,GPS satellite
+toast.sp_fired,%s ausgelöst,%s activated
+toast.sp_not_ready,%s lädt noch,%s is still charging
+toast.sp_no_power,Zu wenig Strom: %s lädt nicht,Low power: %s is not charging
+toast.sp_chrono_dest,Zielzelle für die Chronosphäre antippen,Tap the chronoshift destination
+toast.sp_failed,Nicht möglich,Not possible
+toast.sp_gps_auto,"%s startet von selbst, sobald er geladen ist","%s launches by itself once charged"
+ui.ready,BEREIT,READY
+menu.options.game_speed,Geschwindigkeit,Game speed
+speed.slowest,Sehr langsam,Slowest
+speed.slower,Langsam,Slower
+speed.normal,Normal,Normal
+speed.fast,Schnell,Fast
+speed.faster,Sehr schnell,Faster
+save.slot,Slot %s,Slot %s
+save.slot_auto,Autosave,Autosave
+save.slot_empty,leer,empty
+save.none,Noch kein Spielstand,No saved game yet
+save.saved,In Slot %s gespeichert,Saved to slot %s
+save.failed,Speichern fehlgeschlagen,Saving failed
+save.autosaved,Automatisch gespeichert,Autosaved
+save.mode_skirmish,Gefecht,Skirmish
+save.mode_mission,Mission,Mission
+save.mode_restart,Mission (Neustart),Mission (restart)
+save.mission_restart_only,"Missionen sichern nur den Startpunkt: Der Stand beginnt die Mission von vorn.","Missions only store the starting point: loading restarts the mission."
+lobby.you,Ich,You
+lobby.ai,KI %d,AI %d
+lobby.team,Team %s,Team %s
+lobby.team_none,–,–
+lobby.spawn,Startpunkt: %s,Start: %s
+lobby.spawn_random,zufällig,random
+lobby.map_hint,Marker antippen = eigener Startpunkt,Tap a marker to pick your start
+lobby.slots,Plätze,Slots
+faction.random,Zufällig,Random
+toast.you_play,Du spielst: %s,You play: %s
+info.armor,Panzerung: %s,Armor: %s
+info.speed,Tempo: %s Zellen/s,Speed: %s cells/s
+info.weapon_range,Waffe: %s · Reichweite %s Zellen,Weapon: %s · Range %s cells
+info.prereq,Voraussetzung: %s,Requires: %s
+info.unarmed,Unbewaffnet,Unarmed
+armor.none,keine,none
+armor.wood,Holz,wood
+armor.light,leicht,light
+armor.heavy,schwer,heavy
+armor.concrete,Beton,concrete
+armor.tree,Baum,tree

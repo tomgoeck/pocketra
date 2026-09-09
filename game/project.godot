@@ -1,0 +1,46 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+
+config_version=5
+
+[autoload]
+
+Lang="*res://scripts/i18n/lang.gd"
+Names="*res://scripts/i18n/names.gd"
+MusicPlayer="*res://scripts/music.gd"
+
+[application]
+
+config/name="PocketRA"
+run/main_scene="res://scenes/intro.tscn"
+config/features=PackedStringArray("4.7", "Mobile")
+; Android-Zurücktaste beendet nicht die App — sie wird in proto_main/main_menu behandelt (Audit 09, N3)
+config/quit_on_go_back=false
+config/icon="res://icons/icon.png"
+boot_splash/bg_color=Color(0.03, 0.03, 0.03, 1)
+boot_splash/image="res://icons/splash.png"
+boot_splash/fullsize=true
+boot_splash/use_filter=true
+
+[internationalization]
+
+locale/translations=PackedStringArray("res://i18n/strings.de.translation", "res://i18n/strings.en.translation")
+locale/fallback="en"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/handheld/orientation=4
+window/stretch/mode="disabled"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true
+textures/canvas_textures/default_texture_filter=0

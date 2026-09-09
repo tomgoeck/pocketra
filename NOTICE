@@ -1,0 +1,20 @@
+PocketRA — Hinweise zu Lizenz und Herkunft
+
+EA has not endorsed and does not support this product.
+
+PocketRA ist ein freies, nicht-kommerzielles Fan-Projekt und weder von Electronic Arts
+unterstützt noch mit Electronic Arts oder Westwood Studios verbunden. Command & Conquer
+und Red Alert sind Marken von Electronic Arts Inc.
+
+Der Quellcode steht unter der GNU General Public License, Version 3 oder später
+(siehe LICENSE). Die Spielregeln, Karten und Missionslogik sind aus den Daten von
+OpenRA (https://github.com/OpenRA/OpenRA, GPL-3.0-or-later) abgeleitet.
+
+Dieses Repository enthält keine Grafiken, Sounds, Musik oder Videos des Originalspiels.
+Die Originaldateien werden — wie bei OpenRA — im Rahmen der Lizenz genutzt, die die
+C&C Franchise Modding Guidelines von Electronic Arts einräumen: kostenlos, nicht-
+kommerziell, ohne Musikdateien aus C&C-Spielen. Wer PocketRA baut oder spielt, bezieht
+diese Dateien selbst (frei verfügbare Basisdateien über die OpenRA-Spiegel oder die
+eigene Kopie des Spiels).
+
+godot-cpp (gdext/godot-cpp) steht unter der MIT-Lizenz der Godot Engine.
