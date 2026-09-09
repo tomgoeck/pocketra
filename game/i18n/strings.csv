@@ -1,0 +1,662 @@
+keys,de,en
+ui.build_toggle_tip,Baumenü,Build menu
+ui.build_confirm,Bauen,Build
+ui.cancel,Abbrechen,Cancel
+ui.back,Zurück,Back
+ui.close,Schließen,Close
+ui.understood,Verstanden,Got it
+toast.group_selected,Gruppe %d: %d Einheiten,Group %d: %d units
+toast.group_assigned,Gruppe %d zugewiesen: %d Einheiten,Group %d assigned: %d units
+toast.placing,Platzieren: %s,Placing: %s
+toast.sold,Verkauft,Sold
+toast.sold_for,Verkauft für %d,Sold for %d
+toast.sell_impossible,Verkauf nicht möglich,Sale not possible
+toast.built,Gebaut,Built
+toast.cannot_build_here,Kann hier nicht bauen,Cannot build here.
+toast.order_cancelled,Befehl abgebrochen,Order cancelled
+toast.cancelled,Abgebrochen,Cancelled
+toast.placement_cancelled,"Platzierung abgebrochen — Gebäude bleibt bereit, Cameo antippen","Placement cancelled — building stays ready, tap its cameo"
+toast.select_target,Ziel wählen: %s,Select target: %s
+toast.move_count,Bewegen (%d Einheiten),Move (%d units)
+toast.attack_move_count,Angriffszug (%d Einheiten),Attack move (%d units)
+toast.no_harvester,Kein Harvester in der Auswahl,No harvester selected
+toast.force_fire_impossible,Zwangsfeuer nicht möglich,Force fire not possible
+toast.guarding,Bewacht: %s,Guarding: %s
+toast.no_guard_target,Kein Ziel zum Bewachen,No target to guard
+toast.tap_again_to_build,Nochmal tippen zum Bauen,Tap again to build
+toast.sale_cancelled,Verkauf abgebrochen,Sale cancelled
+toast.repair_at_depot,Reparatur im Depot,Repairing at depot
+toast.landing,Landen auf %s,Landing at %s
+toast.deliver_ore,Abladen: %s,Delivering to %s
+toast.deployed,Ausgeklappt,Deployed
+toast.deploy_impossible,Hier nicht ausklappbar,Cannot deploy here
+toast.detonating,"Sprengfolge läuft — der Panzer zerstört sich selbst","Detonation sequence started — the tank destroys itself"
+toast.demolished,Sprengstoff gezündet,Explosives detonated
+toast.detonate_impossible,Sprengen hier nicht möglich,Cannot detonate here
+toast.chrono_jumped,Gesprungen,Teleported
+toast.chrono_impossible,Sprung nicht möglich,Teleport not possible
+toast.chrono_charging,Chrono-Antrieb lädt noch,Chrono drive still charging
+toast.mine_laid,Mine gelegt,Mine laid
+toast.mine_impossible,Keine Minen mehr,No mines left
+toast.boarding,Einsteigen: %s,Boarding: %s
+toast.unloading,Entladen,Unloading
+toast.nobody_aboard,Niemand an Bord,Nobody aboard
+toast.unload_blocked,Hier ist kein Platz zum Aussteigen,No room to unload here
+toast.rally_set,Sammelpunkt gesetzt,Rally point set
+toast.no_rally_point,Dieses Gebäude hat keinen Sammelpunkt,This building has no rally point
+toast.rally_ground_only,Sammelpunkt nur auf freien Boden,Rally point on clear ground only
+toast.capturing,Erobern: %s,Capturing: %s
+toast.repairing_building,Reparieren: %s,Repairing: %s
+toast.demolishing,Sprengen: %s,Demolishing: %s
+toast.demolish_impossible,Hier kann keine Sprengladung gelegt werden,Cannot plant explosives here
+toast.infiltrating,Infiltrieren: %s,Infiltrating: %s
+toast.repairing_bridge,Brücke reparieren: %s,Repairing bridge: %s
+toast.disguised_as,Verkleidet als %s,Disguised as %s
+toast.attacking,Angriff auf %s (%d Einheiten),Attacking %s (%d units)
+toast.force_attacking,Zwangsfeuer auf %s (%d Einheiten),Force firing at %s (%d units)
+toast.own_building_required,Eigenes Gebäude antippen,Tap your own building
+toast.sold_unit,%s verkauft,%s sold
+toast.repair_toggled,Reparatur umgeschaltet,Repair toggled
+toast.repair_not_needed,nicht nötig,not needed
+toast.primary_set,Primäre Anlage gesetzt,Primary building set
+toast.produces_nothing,Baut nichts,Produces nothing
+toast.ground,Boden,Ground
+label.owner_own,eigen,own
+label.owner_neutral,neutral,neutral
+label.owner_hostile,feindlich,hostile
+label.ore_pct,Erz %d %%,Ore %d %%
+cmd.sell.label,Verkauf,Sell
+cmd.sell.tip,Gebäude antippen = verkaufen,Tap a building to sell
+cmd.repair.label,Rep.,Rep.
+cmd.repair.tip,Gebäude antippen = reparieren,Tap a building to repair
+cmd.add.label,Mehr+,More+
+cmd.add.tip,Auswahl erweitern statt ersetzen,Add to selection instead of replacing it
+cmd.all.label,Alle,All
+cmd.all.tip,Alle eigenen Einheiten wählen,Select all own units
+cmd.clear.label,Leer,Clear
+cmd.clear.tip,Auswahl aufheben,Clear selection
+cmd.base.label,Basis,Base
+cmd.base.tip,Kamera zur Basis,Camera to base
+cmd.event.label,Alarm,Alert
+cmd.event.tip,Kamera zum letzten Angriff,Camera to last attack
+cmd.sel.label,Ausw.,Sel.
+cmd.sel.tip,Kamera zur Auswahl,Camera to selection
+cmd.zoom_in.label,Zoom +,Zoom +
+cmd.zoom_in.tip,Näher heran,Zoom in
+cmd.zoom_out.label,Zoom -,Zoom -
+cmd.zoom_out.tip,Weiter weg,Zoom out
+help.btn.music,Musik ein- oder ausschalten.,Turn music on or off.
+help.btn.menu,"Spielmenü öffnen: Fortsetzen, Ziele, Steuerung, Musik, Beenden.","Open the game menu: resume, objectives, controls, music, quit."
+help.btn.build_toggle,Bauleiste ein- oder ausblenden.,Show or hide the build bar.
+help.btn.sell,"Verkauf: Gebäude antippen, um es zu verkaufen (50 % Erstattung).","Sell: tap a building to sell it (50% refund)."
+help.btn.repair,"Reparatur: Gebäude antippen, um die Reparatur ein- oder auszuschalten.","Repair: tap a building to toggle repair on or off."
+help.btn.add,"Mehr+: die nächste Auswahl zur bestehenden hinzufügen, statt sie zu ersetzen. Solange der Modus läuft, ist der Bildschirmrand gelb.","More+: add the next selection instead of replacing it. While the mode is on, the screen border is yellow."
+help.btn.all,Alle: alle eigenen Einheiten auswählen.,All: select every unit you own.
+help.btn.clear,Leer: Auswahl aufheben.,Clear: deselect everything.
+help.btn.base,Basis: Kamera zur eigenen Basis springen lassen.,Base: jump the camera to your base.
+help.btn.event,Alarm: Kamera zum letzten Angriff springen lassen.,Alert: jump the camera to the last attack.
+help.btn.sel,Ausw.: Kamera zur aktuellen Auswahl springen lassen.,Sel.: jump the camera to the current selection.
+help.btn.zoom_in,Zoom +: näher heranzoomen.,Zoom +: zoom in closer.
+help.btn.zoom_out,Zoom −: weiter herauszoomen.,Zoom −: zoom further out.
+help.btn.tab_building,Reiter Gebäude: Bauliste für Gebäude anzeigen.,Buildings tab: show the building production list.
+help.btn.tab_defense,Reiter Abwehr: Bauliste für Verteidigungsanlagen anzeigen.,Defense tab: show the defense structure list.
+help.btn.tab_infantry,Reiter Infanterie: Bauliste für Infanterie anzeigen.,Infantry tab: show the infantry production list.
+help.btn.tab_vehicle,Reiter Fahrzeuge: Bauliste für Fahrzeuge anzeigen.,Vehicles tab: show the vehicle production list.
+help.btn.tab_aircraft,Reiter Flugzeuge: Bauliste für Flugzeuge anzeigen.,Aircraft tab: show the aircraft production list.
+help.btn.tab_ship,Reiter Schiffe: Bauliste für Schiffe anzeigen.,Ships tab: show the ship production list.
+help.btn.sp_iron,"Eiserner Vorhang: macht eigene Einheiten und Gebäude kurz unverwundbar. Antippen, wenn der goldene Rahmen leuchtet, dann das Ziel wählen.","Iron Curtain: makes your own units and buildings briefly invulnerable. Tap it once the golden frame lights up, then pick the target."
+help.btn.sp_chrono,"Chronosphäre: versetzt eine Einheit an eine andere Stelle der Karte. Erst die Einheit antippen, dann das Ziel.","Chronosphere: teleports a unit elsewhere on the map. Tap the unit first, then the destination."
+help.btn.sp_nuke,"Atomrakete: schlägt nach kurzem Flug am gewählten Ort ein. Antippen, wenn der goldene Rahmen leuchtet, dann das Ziel wählen.","Nuclear missile: strikes the chosen spot after a short flight. Tap it once the golden frame lights up, then pick the target."
+help.btn.sp_gps,"GPS-Satellit: deckt einmalig die ganze Karte auf. Startet von selbst, sobald er geladen ist.",GPS satellite: reveals the whole map once. Launches by itself as soon as it is charged.
+help.btn.sp_more,"Weitere Superwaffen: gezeigt wird die, die als Nächstes fertig wird. Antippen fächert die übrigen waagerecht auf, noch einmal antippen schließt wieder.","More support powers: the one shown is the next one ready. Tap to fan out the rest sideways, tap again to close."
+toast.add_select,Auswahl erweitern: %s,Add to selection: %s
+word.on,an,on
+word.off,aus,off
+toast.all_units_count,Alle Einheiten: %d,All units: %d
+toast.selection_cleared,Auswahl aufgehoben,Selection cleared
+toast.no_event,Kein Ereignis,No event
+toast.nothing_selected,Nichts ausgewählt,Nothing selected
+toast.mode_tap_building,%s: eigenes Gebäude antippen,%s: tap your own building
+word.sell_verb,Verkaufen,Sell
+word.repair_verb,Reparieren,Repair
+toast.mode_off,Modus aus,Mode off
+toast.no_base,Keine Basis,No base
+notify.building,Bau begonnen,Building
+notify.building_in_progress,Bau läuft bereits,Unable to comply. Building in progress.
+notify.construction_complete,Gebäude fertig,Construction complete.
+notify.unit_ready,Einheit bereit,Unit ready.
+notify.insufficient_funds,Nicht genug Geld,Insufficient funds.
+notify.no_build,Nicht mehr baubar,Unable to build more.
+notify.cancelled,Auftrag abgebrochen,Cancelled.
+notify.new_options,Neue Bauoptionen,New construction options.
+notify.low_power,Strom niedrig,Low power.
+notify.structure_sold,Gebäude verkauft,Structure sold.
+notify.repairing,Reparatur läuft,Repairing.
+notify.primary_selected,Primärgebäude gesetzt,Primary building selected.
+notify.unit_repaired,Einheit repariert,Unit repaired.
+notify.win,Sieg,Mission Accomplished
+notify.lose,Niederlage,Mission Failed
+notify.silos_needed,Lager voll — Silo bauen,Silos needed.
+notify.cannot_place,Hier kann nicht gebaut werden,Cannot build here.
+gameover.won,SIEG,MISSION ACCOMPLISHED
+gameover.lost,NIEDERLAGE,MISSION FAILED
+gameover.stats,Eigene Einheiten: %d   Gegner: %d,Own units: %d   Enemy: %d
+gameover.next_mission,Nächste Mission,Next Mission
+gameover.new_game,Neues Spiel,New Game
+gameover.retry_mission,Mission wiederholen,Retry Mission
+gameover.keep_watching,Weiter zuschauen,Keep Watching
+gameover.main_menu,Hauptmenü,Main Menu
+gameover.mission_done,Mission erfüllt.,Mission accomplished.
+gameover.mission_failed,Mission gescheitert.,Mission failed.
+gameover.all_enemies_destroyed,Alle Gegner vernichtet.,All enemies destroyed.
+gameover.base_fallen,Deine Basis ist gefallen.,Your base has fallen.
+objectives.title,Ziele,Objectives
+objectives.time,Zeit: %s,Time: %s
+objectives.none_yet,Noch keine Ziele — das Missionsskript setzt sie im Verlauf.,No objectives yet — the mission script sets them as it goes.
+objectives.skirmish_destroy,• Zerstöre alle gegnerischen Gebäude und Einheiten.,• Destroy all enemy buildings and units.
+objectives.skirmish_survive,• Verliere nicht deine eigene Basis.,• Don't lose your own base.
+menu.controls,Steuerung,Controls
+pause.title,Pause,Pause
+pause.resume,Fortsetzen,Resume
+pause.objectives,Ziele & Briefing,Objectives & Briefing
+pause.save,Speichern,Save
+pause.load,Laden,Load
+pause.restart,Neustart,Restart
+pause.give_up,Aufgeben,Give Up
+pause.quit_game,Spiel beenden,Quit Game
+options.music_on,Musik: an,Music: on
+options.music_off,Musik: aus,Music: off
+menu.missions.start,Mission starten,Start Mission
+briefing.video,Briefing-Film,Briefing Video
+radial.action.attack,Angriff,Attack
+radial.action.force_fire,Zwangsfeuer,Force Fire
+radial.action.force_attack,Zwangsangriff,Force Attack
+radial.action.info,Infokarte,Info card
+radial.action.guard,Bewachen,Guard
+radial.action.scatter,Zerstreuen,Scatter
+radial.action.stop,Stopp,Stop
+radial.action.harvest,Ernten,Harvest
+radial.action.mine,Mine legen,Lay mine
+radial.action.detonate,Sprengen,Detonate
+radial.action.c4,Sprengen (C4),Demolish (C4)
+info.deploy.deploy,"Sonderfunktion: Antippen der ausgewählten Einheit klappt sie zum Bauhof aus.","Special ability: tapping the selected unit deploys it into a Construction Yard."
+info.deploy.mine,"Sonderfunktion: Antippen der ausgewählten Einheit legt eine Mine unter dem Fahrzeug. Vorrat fünf Minen, Nachschub an der Reparaturwerkstatt.","Special ability: tapping the selected unit lays a mine under the vehicle. Five mines, resupplied at the Service Depot."
+info.deploy.detonate,"Sonderfunktion: Antippen der ausgewählten Einheit startet die Sprengfolge — Erschütterungsschaden auf Fahrzeuge und Gebäude im Umkreis von sieben Zellen, danach zerstört sich der Panzer selbst.","Special ability: tapping the selected unit starts the detonation sequence — seismic damage to vehicles and buildings within seven cells, then the tank destroys itself."
+info.deploy.demolish,"Sonderfunktion: Antippen der ausgewählten Einheit zündet die Ladung sofort. Der Lastwagen wird dabei zerstört.","Special ability: tapping the selected unit detonates the charge at once. The truck is destroyed."
+info.deploy.chrono,"Sonderfunktion: Antippen der ausgewählten Einheit wählt ein Sprungziel an jeder Stelle der Karte. Danach lädt der Antrieb zehn Sekunden nach.","Special ability: tapping the selected unit picks a teleport target anywhere on the map. The drive then recharges for ten seconds."
+radial.action.chrono,Springen,Teleport
+radial.action.repair,Reparieren,Repair
+radial.action.primary,Primär,Primary
+radial.action.sell,Verkaufen,Sell
+radial.action.deploy,Ausklappen,Deploy
+radial.action.unload,Entladen,Unload
+radial.action.attack_move,Angriffszug,Attack Move
+radial.action.move,Bewegen,Move
+radial.action.clear,Leeren,Clear
+radial.target.force_fire,Zwangsfeuer — Stelle wählen,Force fire — pick location
+radial.target.guard,Bewachen — Einheit oder Gebäude wählen,Guard — pick unit or building
+menu.main.continue,Weiter,Continue
+menu.main.load,Laden,Load
+menu.main.tutorial,Tutorial,Tutorial
+menu.main.skirmish,Gefecht,Skirmish
+menu.skirmish.empty,"Keine Karten vorhanden. Bitte unter Optionen → Spielinhalte das Freeware-Paket herunterladen.","No maps available. Please download the freeware package under Settings → Game content."
+menu.main.missions,Missionen (im Test),Missions (beta)
+menu.main.options,Optionen,Settings
+menu.main.quit,Beenden,Quit
+menu.main.subtitle,Godot-Neubau · Logik nach OpenRA,Godot remake · Logic follows OpenRA
+menu.skirmish.start,Spiel starten,Start Game
+menu.skirmish.mine,Ich: %s,Me: %s
+menu.skirmish.ai_faction,KI: %s,AI: %s
+menu.skirmish.starting_units,Starteinheiten: %s,Starting units: %s
+menu.skirmish.units_none,nur MCV,MCV only
+menu.skirmish.units_light,leichte Unterstützung,light support
+menu.skirmish.units_heavy,schwere Unterstützung,heavy support
+menu.skirmish.crates,Kisten: %s,Crates: %s
+menu.skirmish.explored_map,Karte erkundet: %s,Explored map: %s
+menu.skirmish.fog,Nebel: %s,Fog: %s
+menu.skirmish.ai_count,KI-Gegner: %d,AI opponents: %d
+menu.skirmish.ai_difficulty,KI-Stärke: %s,AI strength: %s
+menu.skirmish.ai_easy,Leicht,Easy
+menu.skirmish.ai_normal,Mittel,Normal
+menu.skirmish.ai_hard,Schwer,Hard
+menu.skirmish.credits,Startgeld: %d,Starting cash: %d
+menu.skirmish.map_info,"%s
+%d Spieler · %s · %d×%d Zellen","%s
+%d players · %s · %d×%d cells"
+faction.allies,Alliierte,Allies
+faction.soviet,Sowjets,Soviets
+menu.missions.progress,"%s — %d von %d spielbar, %d geschafft","%s — %d of %d playable, %d completed"
+menu.missions.difficulty,Schwierigkeit: %s,Difficulty: %s
+menu.missions.pick,"Im Test: Skripte laufen, Balance und Spielbarkeit sind noch nicht von Hand geprüft. Gesperrte Einträge nennen den Grund.","Beta: scripts run, balance and playability are not yet hand-tested. Locked entries name the reason."
+menu.missions.completed_suffix,   (bereits geschafft),   (already completed)
+menu.missions.locked,"%s
+Gesperrt: %s","%s
+Locked: %s"
+menu.missions.no_difficulty,Diese Mission kennt keine Schwierigkeitsgrade.,This mission has no difficulty levels.
+menu.options.language,Sprache: %s,Language: %s
+menu.options.master,Gesamt,Master
+menu.options.music,Musik,Music
+menu.options.sfx,Effekte,Effects
+menu.options.voice,Sprache,Voice
+menu.options.video,Video,Video
+menu.options.controls_button,Steuerung ansehen,View Controls
+menu.options.fullscreen_on,Vollbild: an (F11),Fullscreen: on (F11)
+menu.options.fullscreen_off,Vollbild: aus (F11),Fullscreen: off (F11)
+tileset.temperat,gemäßigt,temperate
+tileset.snow,Schnee,Snow
+tileset.desert,Wüste,Desert
+tileset.interior,innen,interior
+campaign.allied,Alliierte Kampagne,Allied Campaign
+campaign.soviet,Sowjetische Kampagne,Soviet Campaign
+campaign.counterstrike_allied,Counterstrike: Alliierte,Counterstrike Allied Missions
+campaign.counterstrike_soviet,Counterstrike: Sowjets,Counterstrike Soviet Missions
+campaign.aftermath_allied,Aftermath: Alliierte,Aftermath Allied Missions
+campaign.aftermath_soviet,Aftermath: Sowjets,Aftermath Soviet Missions
+campaign.openra_originals,OpenRA-Originale,OpenRA Originals
+campaign.ant_missions,Ameisen-Missionen,Ant Missions
+difficulty.easy,leicht,Easy
+difficulty.normal,normal,Normal
+difficulty.hard,schwer,Hard
+difficulty.tough,hart,Tough
+lock.map_missing,Karte fehlt,Map missing
+lock.script_missing,Skript fehlt,Script missing
+lock.tileset_missing,Tileset %s fehlt,Tileset %s missing
+lock.not_ported,noch nicht übertragen,not ported yet
+lock.reason.allies_05a,"Spion und Verstärkung kommen per Landungsboot, Tanya wird per Chinook ausgeflogen; die vier SAM-Stellungen des Nebenziels sind reine Flugabwehr und in der Sim nicht vorhanden","The spy and every reinforcement arrive by landing craft, Tanya is flown out by Chinook; the four SAM sites of the side objective are pure anti-air and do not exist in the sim"
+lock.reason.allies_05b,"wie allies-05a: Landungsboot beim Einsetzen und bei jeder Verstärkung, Chinook-Extraktion, SAM-Stellungen","like allies-05a: landing craft for the insertion and every reinforcement, Chinook extraction, SAM sites"
+lock.reason.allies_06a,Werft (syrd) und Landungsboot gibt es seit 2026-09-04; das Missionsskript ist noch nicht übertragen,naval yard (syrd) and landing craft exist since 2026-09-04; the mission script has not been ported yet
+lock.reason.allies_06b,Landungsboot und Spion-Infiltration gibt es seit 2026-09-04; das Missionsskript ist noch nicht übertragen,landing craft and spy infiltration exist since 2026-09-04; the mission script has not been ported yet
+lock.reason.soviet_03,"Cargo, Landungsboot und Transporthubschrauber gibt es seit 2026-09-04; das Missionsskript ist noch nicht übertragen","cargo, landing craft and transport helicopter exist since 2026-09-04; the mission script has not been ported yet"
+buildbar.buildings,Gebäude,Buildings
+buildbar.defense,Abwehr,Defense
+buildbar.infantry,Infanterie,Infantry
+buildbar.vehicles,Fahrzeuge,Vehicles
+buildbar.aircraft,Flugzeuge,Aircraft
+buildbar.ships,Schiffe,Ships
+buildbar.ready,BEREIT,READY
+buildbar.hold_count,HALT ×%d,HOLD ×%d
+buildbar.limit,Limit,Limit
+buildbar.locked,gesperrt,locked
+buildbar.production_building,Produktionsgebäude,Production building
+buildbar.limit_reached,%s: Höchstzahl erreicht%s,%s: limit reached%s
+buildbar.requires,%s benötigt: %s,%s requires: %s
+buildbar.missing_producer,%s: %s fehlt,%s: %s missing
+buildbar.not_buildable_now,%s ist gerade nicht baubar,%s cannot be built right now
+buildbar.no_landing_pad,%s: kein freier Landeplatz,%s: no free landing pad
+buildbar.queue_empty,Nichts in der Warteschlange,Nothing in the queue
+buildbar.resume,Fortsetzen,Resume
+buildbar.hold,Anhalten,Hold
+buildbar.ready_hint,"Fertig. Antippen platziert das Gebäude; „Abbrechen“ in der Platzierung behält es hier. Die Produktion brichst Du unten ab (Kosten werden erstattet).","Ready. Tap to place it; „Cancel“ during placement keeps it here. Cancel the production below (cost is refunded)."
+buildbar.cancel_one,1 abbrechen,Cancel 1
+buildbar.cancel_all,Alle abbrechen,Cancel All
+buildbar.info.price,Preis: $%d,Price: $%d
+buildbar.info.time,Bauzeit: %d:%02d,Build time: %d:%02d
+buildbar.info.power_gen,Strom: +%d,Power: +%d
+buildbar.info.power_use,Strom: −%d,Power: −%d
+status.credits,Credits,Credits
+status.storage,Lager %d / %d,Storage %d / %d
+status.power,Strom,Power
+status.power_detail,Bedarf %d · Strom %d,Drain %d · Power %d
+gesture.one_finger.label,Ein Finger,One finger
+gesture.one_finger.desc,gehört immer den Einheiten — nie der Kamera,always controls units — never the camera
+gesture.tap_own.label,Tippen auf eigene Einheit,Tap own unit
+gesture.tap_own.desc,auswählen,select
+gesture.double_tap.label,Doppeltippen,Double-tap
+gesture.double_tap.desc,alle sichtbaren Einheiten desselben Typs,all visible units of the same type
+gesture.drag_empty.label,Ziehen auf leerem Boden,Drag on empty ground
+gesture.drag_empty.desc,Auswahlrahmen; am Bildschirmrand schwenkt die Karte mit,selection box; panning at the screen edge scrolls the map
+gesture.tap_ground.label,Tippen auf Boden,Tap ground
+gesture.tap_ground.desc,hinbewegen,move there
+gesture.tap_enemy.label,Tippen auf Gegner,Tap enemy
+gesture.tap_enemy.desc,angreifen,attack
+gesture.tap_ore.label,Tippen auf Erz (Harvester),Tap ore (harvester)
+gesture.tap_ore.desc,dort ernten,harvest there
+gesture.long_press_selection.label,Langes Drücken mit Auswahl,Long press with selection
+gesture.long_press_selection.desc,"Radialmenü: Angriffszug, Bewegen, Stopp, Zerstreuen, Ernten","Radial menu: attack move, move, stop, scatter, harvest"
+gesture.long_press_own.label,Langes Drücken auf eigene Einheit,Long press on own unit
+gesture.long_press_own.desc,"Radialmenü mit Zwangsangriff — Angreifen (Zwangsfeuer) auf eigene, verbündete und neutrale Ziele","Radial menu with Force Attack — attack your own, allied and neutral targets"
+gesture.long_press_empty.label,Langes Drücken ohne Auswahl,Long press without selection
+gesture.long_press_empty.desc,Name und Zustand des Objekts darunter,name and status of the object underneath
+gesture.two_finger_drag.label,Zwei Finger ziehen,Two-finger drag
+gesture.two_finger_drag.desc,Karte schwenken,pan the map
+gesture.three_finger_spread.label,Drei Finger spreizen,Three-finger spread
+gesture.three_finger_spread.desc,zoomen — oder die Knöpfe Zoom + / Zoom - unten links,zoom — or the Zoom + / Zoom - buttons bottom left
+gesture.minimap.label,Minimap,Minimap
+gesture.minimap.desc,"Tippen springt dorthin, Doppeltippen zur eigenen Basis","tap to jump there, double-tap for your own base"
+gesture.build_bar.label,Bauleiste,Build bar
+gesture.build_bar.desc,"Tippen baut, Wischen scrollt, langes Drücken bricht ab","tap to build, swipe to scroll, long press to cancel"
+gesture.place_building.label,Gebäude setzen,Place building
+gesture.place_building.desc,"Icon tippen, Stelle tippen, dieselbe Stelle nochmal = bauen","tap the icon, tap the spot, tap the same spot again to build"
+gesture.group_column.label,"Gruppenspalte links","Group column, left"
+gesture.group_column.desc,"Tippen wählt, Doppeltippen springt hin, langes Drücken weist zu","tap to select, double-tap to jump there, long press to assign"
+gesture.bottom_buttons.label,"Knöpfe unten links","Buttons, bottom left"
+gesture.bottom_buttons.desc,"Verkaufen, Reparieren, Auswahl erweitern, alle Einheiten, Basis, Alarm","Sell, repair, add to selection, all units, base, alert"
+test.build_bar_run,Testlauf: Bauleiste,Test run: build bar
+sp.ironcurtain,Eiserner Vorhang,Iron Curtain
+sp.chronoshift,Chronosphäre,Chronosphere
+sp.nuke,Atomrakete,Nuclear missile
+sp.gps,GPS-Satellit,GPS satellite
+sp.more,Weitere Superwaffen,More support powers
+toast.sp_fired,%s ausgelöst,%s activated
+toast.sp_not_ready,%s lädt noch,%s is still charging
+toast.sp_no_power,Zu wenig Strom: %s lädt nicht,Low power: %s is not charging
+toast.sp_chrono_dest,Zielzelle für die Chronosphäre antippen,Tap the chronoshift destination
+toast.sp_failed,Nicht möglich,Not possible
+toast.sp_gps_auto,"%s startet von selbst, sobald er geladen ist","%s launches by itself once charged"
+ui.ready,BEREIT,READY
+menu.options.game_speed,Geschwindigkeit,Game speed
+speed.slowest,Sehr langsam,Slowest
+speed.slower,Langsam,Slower
+speed.normal,Normal,Normal
+speed.fast,Schnell,Fast
+speed.faster,Sehr schnell,Faster
+save.slot,Slot %s,Slot %s
+save.slot_auto,Autosave,Autosave
+save.slot_empty,leer,empty
+save.none,Noch kein Spielstand,No saved game yet
+save.saved,In Slot %s gespeichert,Saved to slot %s
+save.failed,Speichern fehlgeschlagen,Saving failed
+save.autosaved,Automatisch gespeichert,Autosaved
+save.mode_skirmish,Gefecht,Skirmish
+save.mode_mission,Mission,Mission
+save.mode_restart,Mission (Neustart),Mission (restart)
+save.mission_restart_only,"Missionen sichern nur den Startpunkt: Der Stand beginnt die Mission von vorn.","Missions only store the starting point: loading restarts the mission."
+lobby.you,Ich,You
+lobby.ai,KI %d,AI %d
+lobby.team,Team %s,Team %s
+lobby.team_none,–,–
+lobby.spawn,Startpunkt: %s,Start: %s
+lobby.spawn_random,zufällig,random
+lobby.map_hint,Marker antippen = eigener Startpunkt,Tap a marker to pick your start
+lobby.spawn_taken,Startpunkt ist schon belegt,That start point is taken
+lobby.slots,Plätze,Slots
+faction.random,Zufällig,Random
+toast.you_play,Du spielst: %s,You play: %s
+info.armor,Panzerung: %s,Armor: %s
+info.speed,Tempo: %s Zellen/s,Speed: %s cells/s
+info.weapon_range,Waffe: %s · Reichweite %s Zellen,Weapon: %s · Range %s cells
+info.prereq,Voraussetzung: %s,Requires: %s
+info.unarmed,Unbewaffnet,Unarmed
+armor.none,keine,none
+armor.wood,Holz,wood
+armor.light,leicht,light
+armor.heavy,schwer,heavy
+armor.concrete,Beton,concrete
+armor.tree,Baum,tree
+menu.options.content_button,Spielinhalte,Game content
+content.locked_hint,"Erst unter Optionen → Spielinhalte das Freeware-Paket herunterladen.","Download the freeware package under Settings → Game content first."
+content.title,Spielinhalte einrichten,Set up game content
+content.freeware_title,"Freeware-Paket (Pflicht)","Freeware package (required)"
+content.freeware_hint,"Enthält Einheiten, Gebäude, Gelände, Karten, Regeln und Soundeffekte — alles, was ein Gefecht braucht. Ohne dieses Paket bleiben Gefecht, Missionen und Tutorial gesperrt.","Contains units, buildings, terrain, maps, rules and sound effects — everything a battle needs. Without it, skirmish, missions and the tutorial stay locked."
+content.cd_title,CD-Inhalte (optional),CD content (optional)
+content.cd_hint,"Optional: Missionsfilme und Original-Musik.","Optional: mission movies and the original music."
+content.cd_allied,Alliierte CD,Allied CD
+content.cd_soviet,Sowjet-CD,Soviet CD
+content.cd_german,Deutsche CD,German CD
+content.pick_file,Datei wählen (ISO/MIX),Choose file (ISO/MIX)
+content.pick_title,"Eigene CD oder eigenes Abbild","Your own CD or image"
+content.pick_unsupported,Dateiauswahl wird auf diesem Gerät nicht unterstützt.,File picker is not supported on this device.
+content.lang_hint,"Deutsche Sprachausgabe gibt es nur mit der deutschen CD.","German voice acting is only available with the German CD."
+content.voice_en,"Sprachausgabe: Englisch","Voices: English"
+content.voice_de,"Sprachausgabe: Deutsch (%d Dateien)","Voices: German (%d files)"
+content.voice_missing,"Sprachausgabe: Englisch — die deutschen Stimmen sind noch nicht aus der CD ausgelesen.","Voices: English — the German voices have not been read out of the CD yet."
+content.voice_build,Deutsche Stimmen auslesen,Read German voices
+content.voice_rebuild,Deutsche Stimmen neu auslesen,Read German voices again
+content.voice_done,"Deutsche Sprachausgabe bereit (%d Dateien).","German voices ready (%d files)."
+content.voice_partial,"Nur %d von %d deutschen Clips — die Bestätigungen der Fahrzeuge fehlen. Sie stecken in Archiven, die ein älterer Import nicht behalten hat: die deutsche CD einmal löschen und neu einlesen holt sie nach.","Only %d of %d German clips — the vehicle acknowledgements are missing. They sit in archives an older import did not keep: delete the German CD once and read it in again to get them."
+content.err_voice,Deutsche Stimmen konnten nicht ausgelesen werden.,Could not read the German voices.
+content.installed,Installiert (%s),Installed (%s)
+content.not_installed,Nicht installiert,Not installed
+content.dev_bundled,In dieser Entwicklungsfassung bereits enthalten.,Already bundled in this development build.
+content.download,Herunterladen (%s MB),Download (%s MB)
+content.cd_download,Herunterladen,Download
+content.delete,Löschen,Delete
+content.cancelled,Abgebrochen.,Cancelled.
+content.done,Fertig.,Done.
+content.err_request,Anfrage fehlgeschlagen (%s),Request failed (%s)
+content.err_download,"Download fehlgeschlagen (Ergebnis %s, Code %s)","Download failed (result %s, code %s)"
+content.err_checksum,"Prüfsumme falsch (erwartet %s, erhalten %s)","Checksum mismatch (expected %s, got %s)"
+content.err_zip,Zip-Archiv beschädigt oder leer.,Zip archive damaged or empty.
+content.err_backend,Inhalte-Erweiterung noch nicht geladen — bitte später erneut versuchen.,Content extension not loaded yet — please try again later.
+content.err_iso,Abbild konnte nicht gelesen werden.,Could not read image.
+content.err_space,"Zu wenig freier Speicher: %s frei, mindestens %s nötig (Abbild rund 650 MB plus Auslesen).","Not enough free storage: %s free, at least %s required (image about 650 MB plus extraction)."
+update.checking,Suche nach Aktualisierungen …,Checking for updates …
+update.downloading,Aktualisierung wird geladen … %d %%,Downloading update … %d %%
+update.uptodate,Spielinhalt ist aktuell.,Game content is up to date.
+update.ready,Aktualisierung geladen — Neustart nötig,Update downloaded — restart required
+update.restart_now,Jetzt neu starten,Restart now
+update.restart_hint,Beim nächsten Start der App aktiv.,Active the next time you start the app.
+update.need_app,Neue App-Version nötig,New app version required
+update.get_apk,Neue App herunterladen,Download new app
+update.app_available,App %s verfügbar,App %s available
+update.app_new_title,Neue Version %s verfügbar,Version %s is available
+"update.app_new_body","Es gibt eine neuere App-Version. Der Spielinhalt aktualisiert sich weiterhin von selbst — die neue App bringt Änderungen, die nur mit einer Installation kommen.","A newer version of the app is available. Game content keeps updating on its own — the new app brings changes that only arrive with an install."
+update.app_new_edition,Für Deine Fassung: %s,For your edition: %s
+update.edition_full,Vollfassung,Full edition
+update.edition_dist,Verteilfassung,Distribution edition
+update.app_new_get,Herunterladen,Download
+update.app_new_later,Später,Later
+update.err_checksum,Aktualisierung fehlerhaft — wird verworfen.,Update was damaged — discarded.
+update.check_on,Aktualisierungen beim Start prüfen: an,Check for updates on start: on
+update.check_off,Aktualisierungen beim Start prüfen: aus,Check for updates on start: off
+update.check_now,Jetzt nach Aktualisierungen suchen,Check for updates now
+update.versions,App %s · Spielinhalt %s,App %s · game content %s
+update.pack_bundled,aus der App,from the app
+update.blocked_title,Diese Fassung wird nicht mehr unterstützt,This version is no longer supported
+update.blocked_default,"Diese Fassung des Spiels wurde stillgelegt. Bitte lade die aktuelle App-Version herunter.","This build of the game has been retired. Please download the current app version."
+update.recheck,Erneut prüfen,Check again
+update.edition_ios,iOS-Fassung über TestFlight,iOS build via TestFlight
+update.edition_windows,Windows-Fassung,Windows build
+update.edition_macos,macOS-Fassung,macOS build
+update.get_ios,Neue Fassung über TestFlight,Get the new build via TestFlight
+"update.blocked_ios","Diese Fassung des Spiels wurde stillgelegt. Auf iPhone und iPad kommt die neue Fassung über TestFlight oder Xcode — im Spiel lässt sie sich nicht laden.","This build of the game has been retired. On iPhone and iPad the new build arrives via TestFlight or Xcode — it cannot be downloaded inside the game."
+content.why_title,"Warum Du etwas herunterladen musst","Why you need to download something"
+content.why,"Diese App enthält nur eigenen Code. Grafiken, Sounds, Filme und Musik von Westwood und Electronic Arts sind urheberrechtlich geschützt und dürfen nicht mitgeliefert werden — die Spieldaten muss jeder selbst beschaffen.","This app contains only its own code. Graphics, sounds, movies and music by Westwood and Electronic Arts are copyrighted and may not be shipped with it — everyone has to obtain the game data themselves."
+content.why2,"Alles Geladene bleibt nur auf diesem Gerät. Die App lädt nichts hoch und gibt nichts weiter. Unter „Optionen → Spielinhalte“ siehst Du, was installiert ist, und kannst alles wieder löschen.","Everything downloaded stays on this device only. The app uploads nothing and passes nothing on. Under “Settings → Game content” you can see what is installed and delete it all again."
+content.freeware_src,"Herkunft: Electronic Arts hat diese Ausgabe 2008 kostenlos freigegeben. Geladen wird sie vom Community-Spiegel openra.ppmsite.com — demselben, den OpenRA benutzt.","Where it comes from: Electronic Arts released this edition for free in 2008. It is downloaded from the community mirror openra.ppmsite.com — the same one OpenRA uses."
+content.cd_src,"Herkunft: Abbilder der Original-CDs aus dem Internet-Archiv (archive.org). Die App lädt sie nur herunter und gibt nichts weiter. Aus dem Abbild werden nur die nötigen Archivdateien ausgelesen, danach wird es sofort gelöscht. Rund 650 MB je Download — WLAN empfohlen, 1,5 GB frei.","Where they come from: images of the original CDs from the Internet Archive (archive.org). The app only downloads them and passes nothing on. Only the archive files that are needed are read out of the image, then it is deleted right away. About 650 MB per download — Wi-Fi recommended, 1.5 GB free."
+content.cd_allied_what,"Missionsfilme der Alliierten, Original-Musik","Allied mission movies, original music"
+content.cd_soviet_what,"Missionsfilme der Sowjets, Original-Musik","Soviet mission movies, original music"
+content.cd_german_what,"Deutsche Sprachausgabe und Beschriftungen, Filme, Musik","German voice acting and labels, movies, music"
+content.pick_hint,"Liegt die Original-CD oder ein Abbild schon auf dem Gerät, kannst Du sie ohne Download direkt auslesen lassen. Auch dabei wird nur das Nötige entnommen; Deine eigene Datei bleibt unverändert liegen.","If the original CD or an image is already on the device you can have it read directly, without any download. Only what is needed is taken from it; your own file stays where it is, unchanged."
+content.queue_pos,Auftrag %d von %d,Job %d of %d
+content.queued,In Warteschlange,Queued
+content.continue,Weiter,Continue
+content.space_unknown,Freier Speicher lässt sich auf diesem Gerät nicht prüfen — bitte mindestens %s frei halten.,Free storage cannot be checked on this device — please keep at least %s free.
+content.pick_folder_hint,"Auf diesem Gerät gibt es keine Dateiauswahl: Lege die ISO-Datei mit der Dateien-App in den Ordner „%s“ der App und tippe dann auf „Ordner prüfen“.","This device has no file picker: put the ISO file into the app’s “%s” folder using the Files app, then tap “Check folder”."
+content.pick_scan,Ordner prüfen,Check folder
+content.pick_none,"Keine ISO- oder MIX-Datei im Ordner „%s“ gefunden.","No ISO or MIX file found in the “%s” folder."
+content.pick_use,%s auslesen,Read %s
+content.busy_pick,Es läuft schon ein Auftrag — bitte warten oder abbrechen.,A job is already running — please wait or cancel.
+content.reload,Spielinhalte neu laden,Reload game content
+content.delete_all,Spielinhalte löschen,Delete game content
+content.delete_all_confirm,"Wirklich alle heruntergeladenen Spielinhalte löschen? Gefecht, Missionen und Tutorial sind danach wieder gesperrt, bis das Freeware-Paket erneut geladen wurde.","Really delete all downloaded game content? Skirmish, missions and tutorial will be locked again until the freeware package has been downloaded once more."
+content.delete_all_yes,"Ja, löschen","Yes, delete"
+content.status_langs,Sprachen: %s,Languages: %s
+content.status_total,Belegter Platz: %s,Storage used: %s
+content.phase_download,Freeware-Paket laden,Downloading freeware package
+content.phase_checksum,Prüfsumme prüfen,Verifying checksum
+content.phase_unzip,Entpacken,Extracting
+content.phase_atlas,Atlas %s bauen,Building atlas %s
+content.phase_sfx,Sounds wandeln,Converting sounds
+content.phase_iso,Abbild auslesen,Reading disc image
+content.speed,%s/s,%s/s
+content.retry,Erneut versuchen,Try again
+content.log_show,Protokoll anzeigen,Show log
+content.log_hide,Protokoll verbergen,Hide log
+content.err_code,"(Ergebnis %d, Code %d)","(result %d, code %d)"
+content.err_stalled,Verbindung unterbrochen — seit %d Sekunden kamen keine Daten mehr an.,Connection stalled — no data received for %d seconds.
+content.err_net_resolve,Keine Verbindung — ist das Internet an? Die Serveradresse ließ sich nicht auflösen.,No connection — is the internet on? The server address could not be resolved.
+content.err_net_connect,Keine Verbindung zum Server — Internet an? Berechtigung erteilt?,Cannot reach the server — internet on? Permission granted?
+content.err_net_conn,Die Verbindung ist während des Downloads abgerissen.,The connection dropped during the download.
+content.err_net_tls,"Verschlüsselter Verbindungsaufbau fehlgeschlagen (TLS) — Datum und Uhrzeit des Geräts prüfen.","Secure handshake failed (TLS) — check the device date and time."
+content.err_net_noresp,Der Server hat nicht geantwortet.,The server did not respond.
+content.err_net_timeout,Zeitüberschreitung beim Warten auf den Server.,Timed out waiting for the server.
+content.err_net_write,Die Datei ließ sich nicht schreiben — ist der Speicher voll?,Could not write the file — is storage full?
+content.err_net_open,Die Zieldatei ließ sich nicht anlegen.,Could not create the target file.
+content.err_net_redirect,Zu viele Weiterleitungen — der Spiegel antwortet nicht wie erwartet.,Too many redirects — the mirror is not answering as expected.
+content.err_net_other,Netzwerkfehler beim Herunterladen.,Network error while downloading.
+content.err_http_404,Die Datei liegt nicht mehr auf dem Server (HTTP 404).,The file is no longer on the server (HTTP 404).
+content.err_http_403,Der Server hat den Zugriff abgelehnt (HTTP 403).,The server refused access (HTTP 403).
+content.err_http_5xx,Der Server meldet einen Fehler (HTTP %d) — später noch einmal versuchen.,The server reports an error (HTTP %d) — try again later.
+content.err_http_other,Unerwartete Antwort des Servers (HTTP %d).,Unexpected response from the server (HTTP %d).
+log.title,Protokoll,Log
+log.copy,Protokoll kopieren,Copy log
+log.refresh,Aktualisieren,Refresh
+log.copied,In die Zwischenablage kopiert (%d Zeilen).,Copied to the clipboard (%d lines).
+log.unavailable,Diese App-Version führt noch kein eigenes Protokoll — bitte die neue App laden.,This app version does not keep its own log yet — please install the new app.
+menu.options.log_button,Protokoll anzeigen,Show log
+music.src_scores,aus scores.mix (Original-CD),from scores.mix (original CD)
+music.src_folder,"aus dem Ordner „original/music“","from the “original/music” folder"
+music.src_own,eigene Stücke,own tracks
+options.music_source_original,Musik: Original (CD),Music: original (CD)
+options.music_source_own,Musik: Eigene Stücke,Music: own tracks
+options.music_now,Läuft: %s,Now playing: %s
+content.disclaimer_title,Bevor es losgeht,Before you start
+content.disclaimer_1,"Diese App enthält keine Spieldaten von Westwood oder Electronic Arts. Sie besteht nur aus eigenem Code.","This app contains no game data from Westwood or Electronic Arts. It consists only of its own code."
+content.disclaimer_2,"Auf Deinen Wunsch lädt sie die Spieldaten von Dritten: das Freeware-Paket vom Community-Spiegel openra.ppmsite.com — Electronic Arts hat diese Ausgabe 2008 kostenlos freigegeben — und CD-Abbilder aus dem Internet-Archiv (archive.org).","At your request it downloads the game data from third parties: the freeware package from the community mirror openra.ppmsite.com — Electronic Arts released this edition free of charge in 2008 — and CD images from the Internet Archive (archive.org)."
+content.disclaimer_3,"Du bist selbst dafür verantwortlich, dass Du diese Inhalte nutzen darfst — bei den CD-Abbildern zum Beispiel, weil Dir die Original-CDs gehören.","You are responsible for making sure you are allowed to use this content — for the CD images, for example, because you own the original CDs."
+content.disclaimer_4,"Die Autoren dieser App stellen die Inhalte nicht bereit und übernehmen keine Haftung dafür.","The authors of this app do not provide the content and accept no liability for it."
+content.disclaimer_5,"Heruntergeladene Abbilder werden nach dem Auslesen sofort gelöscht. Alles bleibt auf diesem Gerät; die App lädt nichts hoch.","Downloaded images are deleted immediately after they have been read. Everything stays on this device; the app uploads nothing."
+content.disclaimer_6,"Die Rechte an Command & Conquer: Alarmstufe Rot liegen bei Electronic Arts.","The rights to Command & Conquer: Red Alert belong to Electronic Arts."
+content.disclaimer_accept,"Ich habe verstanden und stimme zu","I understand and agree"
+content.disclaimer_close,Schließen,Close
+content.disclaimer_short,"Kurz: Die App enthält keine Inhalte von Westwood oder Electronic Arts. Die Spieldaten lädt sie auf Deinen Wunsch von Dritten (openra.ppmsite.com, archive.org). Du musst selbst dafür sorgen, dass Du sie nutzen darfst; die Autoren haften nicht dafür. Rechte an Alarmstufe Rot: Electronic Arts.","In short: the app contains no content from Westwood or Electronic Arts. It downloads the game data from third parties at your request (openra.ppmsite.com, archive.org). You must make sure yourself that you are allowed to use it; the authors accept no liability. Rights to Red Alert: Electronic Arts."
+content.disclaimer_read,Hinweis noch einmal lesen,Read the notice again
+menu.main.multiplayer,Mehrspieler,Multiplayer
+mp.your_name,Spielername,Player name
+mp.intro,"Spielt zu zweit bis zu sechst über den Vermittler. Einer legt einen Raum an und nennt den Code, die anderen treten damit bei.","Play with up to six players through the relay. One player creates a room and shares the code, the others join with it."
+mp.create,Raum erstellen,Create room
+mp.join,Beitreten,Join
+mp.create_room,Raum anlegen,Create
+mp.join_room,Raum betreten,Join room
+mp.server,Server: %s,Server: %s
+mp.enter_code,Spielcode eingeben,Enter game code
+mp.code_hint,"Sechs Zeichen, die der Gastgeber vorliest.","Six characters read out by the host."
+mp.code_incomplete,Der Code ist noch nicht vollständig.,The code is not complete yet.
+mp.connecting,Verbinde …,Connecting …
+mp.error,Fehler: %s,Error: %s
+mp.disconnected,Verbindung getrennt.,Connection closed.
+mp.map,Karte: %s,Map: %s
+mp.seats_info,"Karte bietet %d Plätze, nutzbar sind %d","Map offers %d slots, %d are usable"
+mp.seats_plain,%d Plätze,%d slots
+mp.leave,Raum verlassen,Leave room
+mp.ready,Bereit,Ready
+mp.not_ready,Nicht bereit,Not ready
+mp.start,Starten,Start
+mp.add_bot,KI hinzufügen,Add AI
+mp.bot,KI,AI
+mp.waiting,"Warte auf %s … (%.0f s)","Waiting for %s … (%.0f s)"
+mp.lost,Verbindung verloren,Connection lost
+mp.desync,Die Spielstände laufen auseinander (Rahmen %d) — Partie beendet,Games are out of sync (frame %d) — match ended
+mp.desync_title,Spielstände laufen auseinander,Out of sync
+mp.ping,Ping %d ms,Ping %d ms
+mp.ping_none,Ping —,Ping —
+mp.lag,Rückstand %d,Lag %d
+mp.chat_log,Chatverlauf,Chat log
+mp.result_win,Sieg,Victory
+mp.result_loss,Niederlage,Defeat
+mp.result_open,im Spiel,in play
+mp.err.full,Der Raum ist voll.,The room is full.
+mp.err.nocode,Diesen Spielcode gibt es nicht.,No room with that code.
+mp.err.mismatch,Die Spielstände passen nicht zusammen — bitte aktualisieren.,Versions do not match — please update.
+mp.err.badstate,Der Vermittler hat die Verbindung beendet.,The relay ended the connection.
+mp.err.ratelimit,Zu viele Nachrichten — kurz warten.,Too many messages — wait a moment.
+mp.err.notallowed,Das ist hier nicht erlaubt.,Not allowed here.
+mp.err.nothost,Nur der Gastgeber darf das.,Only the host may do that.
+mp.pick_map,Karte,Map
+mp.preview,Kartenvorschau,Map preview
+mp.settings,Einstellungen,Settings
+mp.seats_room,Raum mit %d Plätzen,Room for %d players
+mp.map_zoom,Tipp auf die Karte zeigt sie bildschirmfüllend.,Tap the map to see it full screen.
+mp.map_big,Karte groß,Enlarge map
+mp.map_hint_lobby,Den Startpunkt wählt jeder in der Lobby.,Everyone picks their start point in the lobby.
+mp.change_map,Karte wechseln,Change map
+mp.visibility,Sichtbarkeit: %s,Visibility: %s
+mp.public,Öffentlich,Public
+mp.private,Privat,Private
+mp.public_hint,Der Raum steht unter Beitreten in der Liste — jeder kann ihn per Tipp betreten.,The room is listed under Join — anyone can tap it to enter.
+mp.private_hint,"Der Raum steht in keiner Liste; nur wer den Spielcode kennt, kommt hinein.","The room is not listed; only players who know the game code can enter."
+mp.visibility_public,Öffentlicher Raum,Public room
+mp.visibility_private,Privater Raum,Private room
+mp.public_rooms,Öffentliche Räume,Public rooms
+mp.public_rooms_hint,Tipp auf eine Zeile tritt bei.,Tap a row to join.
+mp.no_public_rooms,Gerade keine öffentlichen Räume,No public rooms right now
+mp.room_seats,%d/%d Plätze,%d/%d slots
+mp.room_lobby,Lobby,Lobby
+mp.room_running,läuft,in progress
+mp.reconnecting,Verbinde neu …,Reconnecting …
+mp.absent,weg,away
+mp.notify_join,%s ist dem Raum beigetreten,%s joined the room
+mp.notify_start,Die Partie beginnt,The match is starting
+mp.notify_room,Raum %s — verbunden,Room %s — connected
+chat.placeholder,Nachricht …,Message …
+chat.send,Senden,Send
+chat.scope_all,An alle,To all
+chat.scope_team,An Team,To team
+chat.team,Team,Team
+chat.quick.attack,Angriff!,Attack!
+chat.quick.help,Hilfe!,Help!
+chat.quick.yes,Ja,Yes
+chat.quick.no,Nein,No
+chat.quick.wait,Warte,Wait
+chat.quick.gg,Gut gespielt,Good game
+cmd.chat.label,Chat,Chat
+cmd.chat.tip,Nachricht an alle oder an das Team,Message to all or to your team
+help.btn.chat,"Öffnet die Chatzeile. Kurzrufe darüber gehen mit einem Tipp raus; der Umschalter links wählt zwischen allen Mitspielern und dem eigenen Team. Solange die Zeile offen ist, bewegt ein Tipp die Karte nicht.","Opens the chat line. The quick calls above send with one tap; the switch on the left chooses between everyone and your own team. While the line is open, tapping does not move the map."
+cmd.mic.label,Sprechfunk,Voice
+cmd.mic.tip,Tipp: Mikrofon an das Team — lang drücken: offener Kanal an alle,Tap: mic to your team — hold: open channel to everyone
+help.btn.mic,"Sprechfunk im Mehrspieler. Ein Tipp schaltet das Mikrofon an dein Team (grün), ein langer Druck öffnet den offenen Kanal an alle Mitspieler — auch an die Gegner (orange). Ein weiterer Tipp bzw. langer Druck schaltet wieder aus. Gesendet wird nur, solange du wirklich redest. Lautstärke und Abschalten stehen in den Optionen; einzelne Mitspieler lassen sich in der Spielerliste stumm schalten.","Voice chat in multiplayer. A tap opens the mic to your team (green), a long press opens the channel to everyone in the room — enemies included (orange). Tapping or long-pressing again turns it off. Audio is only sent while you actually speak. Volume and the on/off switch are in the options; individual players can be muted in the player list."
+mp.voice_team,Team,Team
+mp.voice_all,An alle,To all
+mp.voice_all_mark, (an alle), (to all)
+mp.voice_speaking,spricht:,speaking:
+mp.voice_mute_title,Sprechfunk: Mitspieler stumm schalten,Voice: mute players
+mp.voice_muted_mark,stumm,muted
+mp.voice_intro_title,Sprechfunk,Voice chat
+mp.voice_intro_tap,"[b]Tippen[/b] auf das Mikrofon: Sprechfunk an das eigene Team — das Symbol wird grün.","[b]Tap[/b] the microphone: voice chat to your own team — the icon turns green."
+mp.voice_intro_hold,"[b]Lang drücken[/b]: offener Kanal an alle im Raum, auch an die Gegner — das Symbol wird orange.","[b]Long press[/b]: open channel to everyone in the room, enemies included — the icon turns orange."
+mp.voice_intro_more,"Nochmal tippen bzw. lang drücken schaltet wieder aus. Gesendet wird nur, solange du wirklich redest. Lautstärke und Aus-Schalter stehen in den Optionen.","Tap or long-press again to switch it off. Audio is only sent while you actually speak. Volume and the off switch are in the options."
+mp.voice_intro_again,Sprechfunk erklären,Explain voice chat
+menu.options.mic_probe,Mikrofonprobe,Microphone test
+menu.options.mic_start,Starten,Start
+menu.options.mic_stop,Stoppen,Stop
+menu.options.mic_hint,"Nimmt auf und zeigt den Pegel — gesendet wird dabei nichts.","Records and shows the level — nothing is sent."
+mp.mic_opens,Sendet,Sending
+mp.mic_silent,Zu leise zum Senden,Too quiet to send
+mp.mic_level,Pegel,Level
+mp.mic_threshold,Schwelle,Threshold
+mp.mic_no_input,Keine Aufnahme — der Eingang liefert nichts.,No recording — the input delivers nothing.
+mp.mic_no_permission,"Kein Mikrofonsignal — die Freigabe fehlt. Android: App-Berechtigungen → Mikrofon. macOS: Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon.","No microphone signal — the permission is missing. Android: app permissions → Microphone. macOS: System Settings → Privacy & Security → Microphone."
+mp.mic_no_signal,"Freigabe steht, der Eingang bleibt trotzdem stumm. Erst die App einmal vollständig schließen und neu starten. Hilft das nicht, kann dieses Gerät den Sprechfunk nur empfangen — Mithören geht weiter, Sprechen nicht.","Permission is granted but the input stays silent. First close the app completely and start it again. If that does not help, this device can only receive voice chat — you still hear the others, but they cannot hear you."
+"mp.mic_no_signal_ios","Kein Mikrofonsignal. Auf dem iPhone/iPad meldet das System eine verweigerte Freigabe nicht, es liefert Stille: Einstellungen → PocketRA → Mikrofon einschalten. Steht sie schon, hilft nur, die App einmal ganz zu schließen und neu zu starten.","No microphone signal. On iPhone/iPad the system does not report a denied permission, it delivers silence: turn on Settings → PocketRA → Microphone. If it is already on, the only thing that helps is closing the app completely and starting it again."
+toast.mic_no_input,Sprechfunk: keine Aufnahme — der Eingang liefert nichts.,Voice chat: no recording — the input delivers nothing.
+toast.mic_no_permission,Sprechfunk: kein Mikrofonsignal — bitte die Mikrofonfreigabe erteilen.,Voice chat: no microphone signal — please grant the microphone permission.
+toast.mic_no_signal,"Sprechfunk: Freigabe steht, der Eingang bleibt stumm. App einmal neu starten; hilft das nicht, kann dieses Gerät nur empfangen.","Voice chat: permission granted but the input stays silent. Restart the app once; if that does not help, this device can only receive."
+"toast.mic_no_signal_ios","Sprechfunk: kein Mikrofonsignal. Einstellungen → PocketRA → Mikrofon prüfen; steht die Freigabe, App einmal neu starten.","Voice chat: no microphone signal. Check Settings → PocketRA → Microphone; if the permission is on, restart the app once."
+toast.mic_too_quiet,Mikrofon zu leise — Sprechfunk sendet nicht.,Microphone too quiet — voice chat is not sending.
+menu.options.radio,Sprechfunk,Voice chat
+menu.options.voice_chat,Sprechfunk benutzen,Use voice chat
+menu.options.notify,Benachrichtigungen,Notifications
+menu.options.notify_hint,"Meldet, was im Raum passiert, während die App im Hintergrund ist — und hält den Raum so lange offen.","Reports what happens in the room while the app is in the background — and keeps the room open meanwhile."
+menu.options.notify_join,Beitritt,Joins
+menu.options.notify_chat,Chat,Chat
+menu.options.notify_start,Spielstart,Match start
+menu.options.notify_perm,Android hat Benachrichtigungen noch nicht erlaubt.,Android has not allowed notifications yet.
+menu.options.notify_allow,Erlauben,Allow
+toast.voice_team,Mikrofon an — nur dein Team hört mit,Mic on — only your team hears you
+toast.voice_all,"Offener Kanal — alle hören mit, auch die Gegner","Open channel — everyone hears you, enemies too"
+toast.voice_off,Mikrofon aus,Mic off
+toast.voice_off_setting,Sprechfunk ist in den Optionen abgeschaltet.,Voice chat is switched off in the options.
+toast.voice_no_permission,Ohne Mikrofonfreigabe kein Sprechfunk.,No voice chat without microphone permission.
+pause.players,Spieler,Players
+pause.players_hint,"Farbe, Team und Verhältnis wie in der Lobby; die Zahl nennt die verbliebenen Einheiten und Gebäude.","Colour, team and relationship as in the lobby; the number is the remaining units and buildings."
+pause.players_none,Keine Spielerangaben vorhanden.,No player information available.
+pause.rel_self,ich,you
+pause.rel_allied,verbündet,allied
+pause.rel_enemy,feindlich,enemy
+pause.state_alive,im Spiel (%d),in play (%d)
+pause.state_defeated,besiegt,defeated
+pause.state_gone,Verbindung weg,disconnected
+pause.state_stalled,keine Antwort,not responding
+mp.voice_audible,hörbar,audible

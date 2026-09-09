@@ -1,0 +1,106 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+
+config_version=5
+
+[autoload]
+
+; MUSS ganz oben stehen: hängt das Aktualisierungspaket (user://update/current.pck) ein, bevor
+; irgendein anderes Autoload oder die Hauptszene geladen wird — siehe scripts/update/update_boot.gd.
+UpdateBoot="*res://scripts/update/update_boot.gd"
+; App-Protokoll (Ringpuffer + user://logs/app.log). Direkt hinter UpdateBoot, damit auch
+; Lang/Names/MusicPlayer und die Aktualisierung hineinschreiben können — s. scripts/app_log.gd.
+AppLog="*res://scripts/app_log.gd"
+Lang="*res://scripts/i18n/lang.gd"
+Names="*res://scripts/i18n/names.gd"
+MusicPlayer="*res://scripts/music.gd"
+; Mehrspieler (docs/MULTIPLAYER.md §5): haelt Verbindung, Lobby, Chat und Gleichschritt-Sitzung
+; ueber den Szenenwechsel Menue -> Spielfeld. Zugriff im Code IMMER ueber NetHub.hub(), nie ueber
+; den Bezeichner `Net` — ein Aktualisierungspaket ersetzt project.godot nicht (s. app_logger.gd).
+Net="*res://scripts/net/net_hub.gd"
+
+[editor_plugins]
+
+; Android-Benachrichtigungen ohne FCM (docs/MULTIPLAYER.md §10): das Addon haengt beim Export die
+; AAR aus game/addons/pocketra_plugin/bin/ in den Gradle-Bau der APK. Es wirkt NUR beim Export
+; (EditorExportPlugin), nicht zur Laufzeit; fehlt die AAR, warnt es und haengt nichts ein.
+enabled=PackedStringArray("res://addons/pocketra_plugin/plugin.cfg")
+
+[application]
+
+; Anzeigename der App (Toms Umbenennung 2026-09-09): "PocketRA" in beiden Sprachen — der
+; name_localized-Eintrag bleibt nur deshalb stehen, damit Android nicht auf einen alten
+; deutschen Namen aus einer frueheren Installation zurueckfaellt.
+config/name="PocketRA"
+config/name_localized={
+"de": "PocketRA"
+}
+config/use_custom_user_dir=true
+config/custom_user_dir_name="Godot/app_userdata/pocketra"
+; App-Version (nur mit einer neuen APK änderbar) — dieselbe Zahl steht in export_presets.cfg als
+; version/name und landet über tools/update_pack.sh als apk_version in version.json.
+; UpdateConfig.app_version() liest sie; min_supported in version.json vergleicht dagegen.
+config/version="0.17"
+run/main_scene="res://scenes/intro.tscn"
+config/features=PackedStringArray("4.7", "Mobile")
+; Android-Zurücktaste beendet nicht die App — sie wird in proto_main/main_menu behandelt (Audit 09, N3)
+config/quit_on_go_back=false
+config/icon="res://icons/icon.png"
+boot_splash/bg_color=Color(0.03, 0.03, 0.03, 1)
+boot_splash/image="res://icons/splash.png"
+boot_splash/fullsize=true
+boot_splash/use_filter=true
+
+[internationalization]
+
+locale/translations=PackedStringArray("res://i18n/strings.de.translation", "res://i18n/strings.en.translation")
+locale/fallback="en"
+
+[audio]
+
+; Mikrofon-Eingang fuer den Sprechfunk im Mehrspieler (docs/MULTIPLAYER.md §10). Godot oeffnet den
+; Eingang erst, wenn ein AudioStreamMicrophone spielt (voice_chat.gd) — ohne diesen Schalter meldet
+; AudioDriver::input_start() nur "Need to enable Project settings > Audio > Enable Audio Input".
+; Auf Android braucht es zusaetzlich android.permission.RECORD_AUDIO (export_presets.cfg).
+driver/enable_input=true
+
+; iOS: die AVAudioSession-Kategorie. OHNE DIESE ZEILE NIMMT DAS IPHONE/IPAD NICHT AUF.
+; Beleg im Godot-Quelltext (Zweig 4.7):
+;   core/config/project_settings.cpp:1760
+;     GLOBAL_DEF(PropertyInfo(Variant::INT, "audio/general/ios/session_category",
+;         PROPERTY_HINT_ENUM, "Ambient,Multi Route,Play and Record,Playback,Record,Solo Ambient"), 0);
+;   drivers/apple_embedded/app_delegate_service.mm:100 ff.
+;     AVAudioSessionCategory category = AVAudioSessionCategoryAmbient;   // Vorgabe 0
+;     ... else if (sessionCategorySetting == SESSION_CATEGORY_PLAY_AND_RECORD) {
+;             category = AVAudioSessionCategoryPlayAndRecord;
+;             options |= AVAudioSessionCategoryOptionDefaultToSpeaker;   // Ton bleibt am Lautsprecher
+;             options |= AVAudioSessionCategoryOptionAllowBluetoothA2DP;
+;             options |= AVAudioSessionCategoryOptionAllowAirPlay; }
+;     [[AVAudioSession sharedInstance] setCategory:category withOptions:options error:nil];
+; Vorgabe 0 = "Ambient" erlaubt nur Wiedergabe; 2 = "Play and Record" ist die einzige Kategorie, die
+; zu unserem Fall passt (gleichzeitig hoeren und sprechen). Godot setzt dazu von selbst
+; DefaultToSpeaker, der Ton geht also nicht auf den Hoerer. Auf Android, Mac, Windows und Linux liest
+; diese Einstellung niemand — sie steht nur im iOS-App-Delegate.
+; Diese Zeile steckt in project.godot und damit in der IPA: ein Aktualisierungspaket kann sie NICHT
+; nachtragen (s. Kopf von scripts/update/update_boot.gd).
+general/ios/session_category=2
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/handheld/orientation=4
+window/stretch/mode="disabled"
+window/size/mode.windows=3
+window/size/mode.macos=3
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true
+textures/canvas_textures/default_texture_filter=0

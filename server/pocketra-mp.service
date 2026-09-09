@@ -1,0 +1,57 @@
+# Mehrspieler-Vermittler fuer "PocketRA" (docs/MULTIPLAYER.md §4).
+# Wird von tools/mp_deploy.sh nach /etc/systemd/system/pocketra-mp.service kopiert.
+# Logs: journalctl -u pocketra-mp -f
+
+[Unit]
+Description=PocketRA — Mehrspieler-Vermittler (WebSocket, Gleichschritt)
+Documentation=https://pocketra.net/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pocketra-mp
+Group=pocketra-mp
+WorkingDirectory=/opt/pocketra-mp
+ExecStart=/opt/pocketra-mp/venv/bin/python /opt/pocketra-mp/mp_server.py --host 127.0.0.1 --port 8787
+Restart=always
+RestartSec=2
+TimeoutStopSec=10
+KillSignal=SIGINT
+
+# Ausgabe geht nach journald (eine Zeile je Ereignis)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pocketra-mp
+Environment=PYTHONUNBUFFERED=1
+
+# --- Haertung: der Vermittler haelt keinen Zustand auf Platte ---------------
+MemoryMax=256M
+TasksMax=256
+LimitNOFILE=4096
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
