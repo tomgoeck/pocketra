@@ -6,6 +6,9 @@ extends Control
 
 const NetOrders := preload("res://scripts/net/net_orders.gd")
 
+
+const Desktop := preload("res://scripts/desktop.gd")
+
 signal build_requested(type_id: int)
 signal cancel_requested(kind: int, type_id: int)
 signal place_requested(type_id: int)
@@ -233,6 +236,13 @@ func select_queue(q: int) -> void:
 		_select_kind(k)
 
 
+func select_tab(i: int) -> bool:
+	if i < 0 or i >= _tabs.size() or not _tabs[i].visible:
+		return false
+	_select_kind(i)
+	return true
+
+
 func slot_rect_for(type_name: String) -> Rect2:
 	if not visible or not world.type_ids.has(type_name):
 		return Rect2()
@@ -287,12 +297,26 @@ func _gui_input(e: InputEvent) -> void:
 	elif e is InputEventScreenDrag:
 		pos = e.position
 		drag = true
+	elif e is InputEventPanGesture:
+
+
+		_set_scroll(_scroll + e.delta.y * Desktop.Scroller.PAN_SPEED)
+		accept_event()
+		return
 	elif e is InputEventMouseButton:
 
 
 		if e.button_index == MOUSE_BUTTON_WHEEL_UP or e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_set_scroll(_scroll + (Dp.px(30) if e.button_index == MOUSE_BUTTON_WHEEL_DOWN else -Dp.px(30)))
+
+
+			var step := Dp.px(SLOT_H_DP + MARGIN_DP)
+			_set_scroll(_scroll + (step if e.button_index == MOUSE_BUTTON_WHEEL_DOWN else -step))
 			accept_event()
+		elif e.button_index == MOUSE_BUTTON_RIGHT and e.pressed:
+			accept_event()
+			var idx := _slot_index_at(e.position)
+			if idx >= 0 and idx < _slots.size():
+				_on_right_click(_slots[idx])
 		return
 	else:
 		return
@@ -321,6 +345,36 @@ func _gui_input(e: InputEvent) -> void:
 			_on_hold(s)
 		else:
 			_on_tap(s)
+
+
+func scroll_value() -> float:
+	return _scroll
+
+
+func scroll_room() -> float:
+	return maxf(_content_h - (_area.size.y if _area != null else 0.0), 0.0)
+
+
+func slot_count(type_name: String) -> int:
+	if not world.type_ids.has(type_name):
+		return 0
+	var tid: int = world.type_ids[type_name]
+	for s in _slots:
+		var slot: BuildSlot = s
+		if slot.type_id == tid and slot.visible:
+			return slot.count
+	return 0
+
+
+func slot_paused(type_name: String) -> bool:
+	if not world.type_ids.has(type_name):
+		return false
+	var tid: int = world.type_ids[type_name]
+	for s in _slots:
+		var slot: BuildSlot = s
+		if slot.type_id == tid and slot.visible:
+			return slot.paused
+	return false
 
 
 func _set_scroll(v: float) -> void:
@@ -619,6 +673,13 @@ func mark_ready_offered() -> void:
 func _on_tap(s: BuildSlot) -> void:
 	if s.type_id < 0:
 		return
+
+
+	if s.paused:
+		world.sfx.play_ui("ramenu1")
+		world.issue(NetOrders.make(NetOrders.OP_PAUSE_BUILD, kind, 0))
+		_refresh = 1.0
+		return
 	if not s.available:
 
 		var missing := _missing_text(s.type_id)
@@ -645,6 +706,21 @@ func _on_tap(s: BuildSlot) -> void:
 		place_requested.emit(s.type_id)
 	else:
 		build_requested.emit(s.type_id)
+	_refresh = 1.0
+
+
+func _on_right_click(s: BuildSlot) -> void:
+	if s.type_id < 0 or world == null or world.sim == null or s.count <= 0:
+		return
+	world.sfx.play_ui("ramenu1")
+	var started: bool = s.progress > 0.0 and not s.done
+	if started and not s.paused and world.sim.has_method("pause_build"):
+		world.issue(NetOrders.make(NetOrders.OP_PAUSE_BUILD, kind, 1))
+
+		world.eva("onhold1")
+	else:
+		cancel_requested.emit(kind, s.type_id)
+	_close_popup()
 	_refresh = 1.0
 
 

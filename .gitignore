@@ -40,6 +40,7 @@ __pycache__/
 # Android-Plugin (Kotlin) — Bauergebnisse wie game/bin/*.so
 android/pocketra_plugin/build/
 android/pocketra_plugin/.gradle/
+android/pocketra_plugin/.kotlin/
 android/pocketra_plugin/local.properties
 game/addons/pocketra_plugin/bin/*.aar
 

@@ -3,6 +3,9 @@
 class_name TouchList
 extends ScrollContainer
 
+
+const Desktop := preload("res://scripts/desktop.gd")
+
 const DEADZONE_DP := 8.0
 
 var _press_pos := Vector2.ZERO
@@ -36,6 +39,12 @@ func _gui_input(e: InputEvent) -> void:
 	elif e is InputEventScreenDrag:
 		pos = e.position
 		drag = true
+	elif e is InputEventPanGesture:
+
+
+		scroll_vertical = int(roundf(scroll_vertical + e.delta.y * Desktop.Scroller.PAN_SPEED))
+		accept_event()
+		return
 	elif e is InputEventMouseButton or e is InputEventMouseMotion:
 
 

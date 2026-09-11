@@ -76,6 +76,7 @@ var _test_heal := false
 var _test_iron := false
 var _test_water := false
 var _test_voice := false
+var _test_duck := false
 var _test_players := false
 var _test_mic := false
 var _test_mic_secs := 8.0
@@ -89,6 +90,17 @@ var _test_lobby_tap := false
 
 var _test_toasts := false
 var _test_toasts_until := 6000
+
+
+var _test_harvest := false
+var _test_harvest_until := 6000
+var _harv_ids: Array[int] = []
+var _harv_last_cell := {}
+var _harv_stall := {}
+var _harv_worst := {}
+var _harv_last_tick := -1
+var _harv_parked := false
+var _harv_resumed := false
 
 var _test_eva := false
 var _eva_step := 0
@@ -158,6 +170,8 @@ func _ready() -> void:
 		call_deferred("_run_test_keys")
 	if args.has("--test-desktop-scroll"):
 		call_deferred("_run_test_desktop_scroll")
+	if args.has("--test-desktop-input"):
+		call_deferred("_run_test_desktop_input")
 	_test_defeat = args.has("--test-defeat")
 	_test_victory = args.has("--test-victory")
 	_test_motion = args.has("--test-motion")
@@ -195,6 +209,12 @@ func _ready() -> void:
 	_test_voice = args.has("--test-sprechfunk")
 	if _test_voice and not args.has("--test-mikrofon"):
 		call_deferred("_run_test_sprechfunk")
+
+
+	_test_duck = args.has("--test-voice-duck")
+	if _test_duck:
+		_test_voice = true
+		call_deferred("_run_test_voice_duck")
 	_test_players = args.has("--test-spielerliste")
 	if _test_players:
 		call_deferred("_run_test_spielerliste")
@@ -224,9 +244,14 @@ func _ready() -> void:
 	if trk >= 0:
 		_test_ready = args[trk + 1] if (trk + 1 < args.size() and not args[trk + 1].begins_with("--")) else "zu"
 		_test_ui = true
+	_test_tap_orders = args.has("--test-tap-orders")
 	_test_lobby_tap = args.has("--test-lobby")
 	_test_toasts = args.has("--test-toasts")
 	_test_eva = args.has("--test-eva")
+	_test_harvest = args.has("--test-harvest")
+	var thu := args.find("--test-harvest-until")
+	if thu >= 0 and thu + 1 < args.size():
+		_test_harvest_until = int(args[thu + 1])
 	var ttu := args.find("--test-toasts-until")
 	if ttu >= 0 and ttu + 1 < args.size():
 		_test_toasts_until = int(args[ttu + 1])
@@ -799,17 +824,12 @@ func _on_tap(p: Vector2) -> void:
 		return
 
 
+	if _tap_order_on_friendly(hit):
+		return
+
+
 	if hit != null and hit.player == world.local_player and world.selectable(hit):
-		world.select_only(hit)
-		_show_selection_info()
-
-		var kind := world.producer_kind(hit)
-		if kind >= 0:
-			build_bar.select_queue(kind)
-			build_bar.visible = true
-
-
-			build_bar.mark_ready_offered()
+		_select_tapped(hit)
 	elif world.selected_building() != null:
 
 
@@ -846,6 +866,117 @@ func _on_tap(p: Vector2) -> void:
 			_last_gesture = "Bewegen (%d)" % world.selection.size()
 	else:
 		_last_gesture = "Tippen ins Leere"
+
+
+func _select_tapped(hit: ProtoWorld.Unit) -> void:
+	world.select_only(hit)
+	_show_selection_info()
+	var kind := world.producer_kind(hit)
+	if kind >= 0:
+		build_bar.select_queue(kind)
+		build_bar.visible = true
+		build_bar.mark_ready_offered()
+
+
+func _tap_order_on_friendly(hit: ProtoWorld.Unit) -> bool:
+	if hit == null or world.selection.is_empty() or world.selected_building() != null:
+		return false
+
+
+	if hit.player != world.local_player:
+		if hit.player == ProtoWorld.PLAYER_NEUTRAL or hit.player == ProtoWorld.PLAYER_CREEPS \
+				or world.hostile(world.local_player, hit.player):
+			return false
+
+	if not world.selectable(hit):
+		return false
+
+
+	if hit.selected:
+		return false
+
+
+	if world.types[hit.type].get("building", false):
+		world.order_move(hit.pos)
+		_toast(tr("toast.move_next_to") % _type_label(hit.type))
+		_last_gesture = "Bewegen neben Gebäude (%d)" % world.selection.size()
+		return true
+	if world.order_guard(hit):
+		_toast(tr("toast.guarding") % _type_label(hit.type))
+		_last_gesture = "Bewachen (%d)" % world.selection.size()
+		return true
+	world.order_move(hit.pos)
+	_last_gesture = "Bewegen (%d)" % world.selection.size()
+	return true
+
+
+var _hud_tap_from := Vector2.ZERO
+var _hud_tap_live := false
+
+
+func _input(e: InputEvent) -> void:
+	if not (e is InputEventScreenTouch):
+		return
+	var t: InputEventScreenTouch = e
+	if t.index != 0:
+		return
+	if t.pressed:
+		_hud_tap_from = t.position
+		_hud_tap_live = true
+		return
+	if not _hud_tap_live:
+		return
+	_hud_tap_live = false
+
+	if t.position.distance_to(_hud_tap_from) > Dp.px(gestures.tap_slop_dp):
+		return
+	_attack_under_hud(t.position)
+
+
+func _attack_under_hud(p: Vector2) -> bool:
+	if world == null or world.sim == null or _scroll_blocked():
+		return false
+
+
+	if world.placing_type >= 0 or _order_mode != "" or _click_mode != "":
+		return false
+
+
+	if world.selection.is_empty() or not world.selection_armed():
+		return false
+	if not _hud_button_at(p):
+		return false
+	var wp := world.screen_to_world(p)
+	var hit := world.pick_unit(wp, Dp.px(HIT_RADIUS_DP) / world.zoom)
+	if hit == null or not hit.alive or not world.hostile(world.local_player, hit.player):
+		return false
+	if not world.order_attack(hit):
+		return false
+	_toast(tr("toast.attacking") % [_type_label(hit.type), world.selection.size()])
+	_last_gesture = "Angriff unter Knopf (%d)" % world.selection.size()
+	return true
+
+
+func _hud_button_at(p: Vector2) -> bool:
+	if groups != null and groups.is_visible_in_tree() and groups.get_global_rect().has_point(p):
+		return true
+	return _hud_button_under($UI, p)
+
+
+func _hud_button_under(n: Node, p: Vector2) -> bool:
+	if n is Control and not (n as Control).is_visible_in_tree():
+		return false
+	if n == build_bar or (_menu_panel != null and n == _menu_panel) \
+			or (_info_card != null and n == _info_card) or n.is_in_group("modal"):
+		return false
+	if n is Button:
+		var b: Button = n
+		if b.mouse_filter != Control.MOUSE_FILTER_IGNORE and b.get_global_rect().has_point(p):
+			return true
+	for c in n.get_children():
+		if _hud_button_under(c, p):
+			return true
+	return false
 
 
 func _apply_click_mode(hit: ProtoWorld.Unit) -> bool:
@@ -923,10 +1054,14 @@ func _edge_scroll(delta: float) -> void:
 func _on_double_tap(p: Vector2) -> void:
 	var wp := world.screen_to_world(p)
 	var hit := world.pick_unit(wp, Dp.px(HIT_RADIUS_DP) / world.zoom)
-	if hit != null and hit.player == world.local_player:
-		world.select_same_type_visible(hit)
-		_show_selection_info()
-		_last_gesture = "Alle sichtbaren %s: %d" % [hit.type, world.selection.size()]
+	if hit != null and hit.player == world.local_player and world.selectable(hit):
+		if world.types[hit.type].get("building", false):
+			_select_tapped(hit)
+			_last_gesture = "Gebäude gewählt: %s" % hit.type
+		else:
+			world.select_same_type_visible(hit)
+			_show_selection_info()
+			_last_gesture = "Alle sichtbaren %s: %d" % [hit.type, world.selection.size()]
 
 
 func _on_long_press(p: Vector2) -> void:
@@ -1302,6 +1437,9 @@ const CMD_ICONS := {
 	"clear": "res://icons/ui/btn_leer_1.png", "base": "res://icons/ui/btn_basis_1.png",
 	"event": "res://icons/ui/btn_alarm_1.png", "sel": "res://icons/ui/btn_ausw_2.png",
 	"zoom_in": "res://icons/ui/btn_zoomplus_1.png", "zoom_out": "res://icons/ui/btn_zoomminus_1.png",
+
+
+	"harv": "res://icons/ui/btn_erzsammler_1.png",
 }
 
 var _cmd_buttons := {}
@@ -1309,7 +1447,25 @@ var _mode_frame: Panel
 var _mode_frame_col := Color(0, 0, 0, 0)
 
 
-const CMD_ORDER := ["sell", "repair", "add", "all", "clear", "base", "event", "sel", "zoom_in", "zoom_out"]
+const CMD_ORDER := ["sell", "repair", "add", "all", "harv", "base", "event", "sel", "zoom_in", "zoom_out"]
+
+
+const BOTTOM_ROW_VISIBLE := false
+
+
+const CMD_BOTTOM_ROW := ["base", "event", "sel", "zoom_in", "zoom_out"]
+
+
+const CMD_HIDDEN := ["clear"]
+
+
+static func visible_cmd_order() -> Array:
+	var out: Array = []
+	for id in CMD_ORDER:
+		if id in CMD_HIDDEN or (not BOTTOM_ROW_VISIBLE and id in CMD_BOTTOM_ROW):
+			continue
+		out.append(id)
+	return out
 
 
 var _cmd_order: Array = CMD_ORDER.duplicate()
@@ -1357,6 +1513,9 @@ func _build_command_bar() -> void:
 		_end_click_mode()
 		_toast(tr("toast.all_units_count") % world.select_all_units())
 		_show_selection_info())
+
+
+	_cmd_button("harv", tr("cmd.harv.label"), tr("cmd.harv.tip"), false, _on_harvester_button)
 	_cmd_button("clear", tr("cmd.clear.label"), tr("cmd.clear.tip"), false, func():
 		_end_click_mode()
 		world.additive_select = false
@@ -1387,6 +1546,12 @@ func _build_command_bar() -> void:
 
 		_mp_mic_btn = _cmd_button("mic", tr("cmd.mic.label"), tr("cmd.mic.tip"), false,
 				func(): _toggle_mic(false), func(): _toggle_mic(true))
+
+
+	for id in CMD_HIDDEN + ([] if BOTTOM_ROW_VISIBLE else CMD_BOTTOM_ROW):
+		if _cmd_buttons.has(id):
+			_cmd_buttons[id].visible = false
+		_cmd_order.erase(id)
 
 	_mode_frame = Panel.new()
 	_mode_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1516,6 +1681,36 @@ func _end_click_mode() -> void:
 		_cmd_buttons[id].button_pressed = false
 	_update_mode_frame()
 	_toast(tr("toast.mode_off"))
+
+
+const HARVESTER_DOUBLE_MS := 400
+
+
+const HARVESTER_NEVER := -1000000
+var _harv_last_tap := HARVESTER_NEVER
+
+var _last_harv_cmd := ""
+
+
+func _on_harvester_button() -> void:
+	var now := Time.get_ticks_msec()
+	var double_tap := now - _harv_last_tap <= HARVESTER_DOUBLE_MS
+
+	_harv_last_tap = HARVESTER_NEVER if double_tap else now
+	var count := world.own_harvester_count()
+	if count == 0:
+		_toast(tr("toast.no_harvester_owned"))
+		return
+	if double_tap:
+		world.order_harvesters_resume()
+		_toast(tr("toast.harv_resume") % count)
+		world.sfx.play_harvester_voice("harv_resume")
+		_last_harv_cmd = "resume"
+	else:
+		world.order_harvesters_return()
+		_toast(tr("toast.harv_return") % count)
+		world.sfx.play_harvester_voice("harv_return")
+		_last_harv_cmd = "return"
 
 
 func _zoom_step(factor: float) -> void:
@@ -3371,6 +3566,154 @@ func _run_test_lobby_tap() -> void:
 	get_tree().quit()
 
 
+var _test_tap_orders := false
+var _tap_o := {}
+
+
+func _tap_o_name(u) -> String:
+	return "—" if u == null else str(u.type)
+
+
+func _run_test_tap_orders() -> void:
+	var sim = world.sim
+	var tick: int = sim.tick()
+	if _test_step == 0 and tick >= 10:
+		var origin := _place_test_fact()
+		_test_origin = origin
+		sim.give_credits(0, 20000)
+		sim.set_enemy(0, 1, true)
+		sim.set_enemy(1, 0, true)
+		_tap_o["cmd"] = world.spawn_unit("2tnk", 0, origin + Vector2i(6, 2))
+		_tap_o["mate"] = world.spawn_unit("e1", 0, origin + Vector2i(9, 2))
+		_tap_o["bld"] = world.call("_add_building", "powr", 0, origin + Vector2i(6, 6))
+
+		var foe_cell := origin + Vector2i(0, -9)
+		_tap_o["foe"] = world.call("_add_building", "barr", 1, foe_cell)
+		if _tap_o["foe"] == null:
+			_tap_o["foe"] = world.spawn_unit("e1", 1, foe_cell)
+		sim.reveal(0, foe_cell.x, foe_cell.y, 8)
+		_test_step = 1
+		_test_tick = tick
+		return
+	if _test_step == 1 and tick >= _test_tick + 20:
+		var cmd = _tap_o.get("cmd")
+		var mate = _tap_o.get("mate")
+		var bld = _tap_o.get("bld")
+		var foe = _tap_o.get("foe")
+		if cmd == null or mate == null or bld == null or foe == null:
+			print("T --test-tap-orders: Aufbau unvollständig (Panzer=%s Kamerad=%s Gebäude=%s Gegner=%s) FEHLER" % [
+					_tap_o_name(cmd), _tap_o_name(mate), _tap_o_name(bld), _tap_o_name(foe)])
+			get_tree().quit()
+			return
+		var fails := 0
+
+
+		world.clear_selection()
+		world.center_on(cmd.pos)
+		_on_tap(world.world_to_screen(cmd.pos))
+		var ok1: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
+		fails += 0 if ok1 else 1
+		print("T --test-tap-orders: 1 Tipp ohne Auswahl auf %s → gewählt=%s (%s) %s" % [
+				cmd.type, ok1, _last_gesture, "OK" if ok1 else "FEHLER: keine Auswahl"])
+
+
+		world.select_only(cmd)
+		world.center_on(mate.pos)
+		_on_tap(world.world_to_screen(mate.pos))
+		var keeps2: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
+
+
+		var guard2: bool = keeps2 and cmd.goal_kind == 1
+		fails += 0 if (keeps2 and guard2) else 1
+		print("T --test-tap-orders: 2 Tipp mit Auswahl auf eigene %s → Befehlsart=%d (1=Bewachen), Meldung \"%s\", Auswahl bleibt=%s %s" % [
+				mate.type, cmd.goal_kind, _last_gesture, keeps2,
+				"OK" if keeps2 and guard2 else "FEHLER: Neuauswahl statt Befehl"])
+
+
+		world.select_only(cmd)
+		var bar_before: bool = build_bar.visible
+		world.center_on(bld.pos)
+		_on_tap(world.world_to_screen(bld.pos))
+		var keeps3: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
+		var move3: bool = keeps3 and cmd.goal_kind == 0
+
+		var near3: float = cmd.goal.distance_to(bld.pos) / ProtoWorld.CELL
+		fails += 0 if (keeps3 and move3) else 1
+		print("T --test-tap-orders: 3 Tipp mit Auswahl auf eigenes %s → Befehlsart=%d (0=Bewegen), Ziel %.1f Zellen vom Gebäude, Meldung \"%s\", Auswahl bleibt=%s, Bauleiste %s→%s %s" % [
+				bld.type, cmd.goal_kind, near3, _last_gesture, keeps3, bar_before, build_bar.visible,
+				"OK" if keeps3 and move3 else "FEHLER: Neuauswahl statt Befehl"])
+
+
+		world.select_only(cmd)
+		world.center_on(mate.pos)
+		_on_double_tap(world.world_to_screen(mate.pos))
+		var sel4: bool = world.selection.size() >= 1 and not world.selection.has(cmd) and world.selection[0].type == mate.type
+		fails += 0 if sel4 else 1
+		print("T --test-tap-orders: 4 Doppeltipp auf eigene %s → Auswahl=%d × %s %s" % [
+				mate.type, world.selection.size(),
+				"—" if world.selection.is_empty() else world.selection[0].type,
+				"OK" if sel4 else "FEHLER: keine Neuauswahl"])
+
+
+		world.select_only(cmd)
+		world.center_on(foe.pos)
+		_on_tap(world.world_to_screen(foe.pos))
+		var atk5: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id and cmd.goal_kind == 2
+		fails += 0 if atk5 else 1
+		print("T --test-tap-orders: 5 Tipp auf gegnerisches %s → Befehlsart=%d (2=Angriff), Meldung \"%s\" %s" % [
+				foe.type, cmd.goal_kind, _last_gesture, "OK" if atk5 else "FEHLER: kein Angriff"])
+
+		_tap_o["fails"] = fails
+		_test_step = 2
+		_test_tick = tick
+		return
+
+
+	if (_test_step == 2 or _test_step == 3) and tick >= _test_tick + 4:
+		var foe2 = _tap_o.get("foe")
+		var sp := _tap_slot_point()
+		world.center_on(world.visible_world_rect().get_center() + (foe2.pos - world.screen_to_world(sp)))
+		_test_step += 1
+		_test_tick = tick
+		return
+	if _test_step == 4 and tick >= _test_tick + 4:
+		var foe3 = _tap_o.get("foe")
+		var cmd3 = _tap_o.get("cmd")
+		var sp2 := _tap_slot_point()
+		var under = world.pick_unit(world.screen_to_world(sp2), Dp.px(HIT_RADIUS_DP) / world.zoom)
+		var aligned: bool = under != null and under.id == foe3.id
+
+		world.select_only(cmd3)
+		groups.assign(0)
+		world.clear_selection()
+		world.select_only(cmd3)
+		cmd3.goal_kind = -1
+		_last_gesture = ""
+		var before_sel: int = world.selection.size()
+		for pressed in [true, false]:
+			var ev := InputEventScreenTouch.new()
+			ev.index = 0
+			ev.position = sp2
+			ev.pressed = pressed
+			get_viewport().push_input(ev)
+		groups._press_slot = -1
+		var attacked: bool = cmd3.goal_kind == 2
+		var grouped: bool = world.selection.size() == 1 and world.selection[0].id == cmd3.id
+		var fails2: int = int(_tap_o.get("fails", 0))
+		if not aligned or not attacked or not grouped:
+			fails2 += 1
+		print("T --test-tap-orders: 6 Tipp auf Gruppenknopf 1 über gegnerischem %s bei %s → darunter=%s, Befehlsart=%d (2=Angriff), Meldung \"%s\", Gruppe danach gewählt=%s (vorher %d) %s" % [
+				foe3.type, sp2, _tap_o_name(under), cmd3.goal_kind,
+				_last_gesture if _last_gesture != "" else "kein Befehl", grouped, before_sel,
+				"OK" if aligned and attacked and grouped else "FEHLER"])
+		print("T --test-tap-orders: fertig — %d Fehlschläge" % fails2)
+		get_tree().quit()
+
+
+func _tap_slot_point() -> Vector2:
+	return groups.global_position + Vector2(groups.size.x / 2.0, groups.step / 2.0)
+
+
 var _tesla_shot_frames := -1
 
 
@@ -3379,6 +3722,158 @@ func _tesla_zap_now() -> bool:
 		if u.alive and u.type == "tsla" and u.firing:
 			return true
 	return false
+
+
+func _run_test_voice_duck() -> void:
+	while world.sim == null or world.sim.tick() < 60:
+		await get_tree().process_frame
+	var hub := NetHub.hub()
+	var v = hub.ensure_voice()
+	v.test_tone = true
+	var fehler := 0
+	print("T --test-voice-duck: Start — %s" % AudioMix.state_line())
+
+
+	for fall in [{"headset": 0, "name": "ohne Headset", "soll": AudioMix.DUCK_SILENT_DB},
+			{"headset": 1, "name": "mit Headset", "soll": AudioMix.DUCK_HEADSET_DB}]:
+		AudioMix.set_test_headset(int(fall["headset"]))
+		v.set_mode(VoiceChat.Mode.TEAM)
+		AudioMix.settle()
+		await get_tree().process_frame
+		print("T --test-voice-duck: %s AN — %s" % [fall["name"], AudioMix.state_line()])
+		fehler += _duck_check(str(fall["name"]), float(fall["soll"]))
+		v.set_mode(VoiceChat.Mode.OFF)
+		AudioMix.settle()
+		await get_tree().process_frame
+		print("T --test-voice-duck: %s AUS — %s" % [fall["name"], AudioMix.state_line()])
+		fehler += _duck_check(str(fall["name"]) + " aus", 0.0)
+
+
+	AudioMix.set_test_headset(1)
+	var origin := Vector2i(20, 20)
+	for u in world.units:
+		if u.alive and u.player == 0:
+			origin = Vector2i(u.pos / ProtoWorld.CELL)
+			break
+
+	v.set_mode(VoiceChat.Mode.TEAM)
+	_update_voice_power()
+	if int(v.mode) == int(VoiceChat.Mode.OFF):
+		print("T --test-voice-duck: FEHLER — Sprechfunk ging vor dem Stromausfall gar nicht an")
+		fehler += 1
+
+
+	if world.type_ids.has("tsla"):
+		world.call("_add_building", "tsla", 0, origin + Vector2i(-6, -6))
+	for _i in 30:
+		await get_tree().process_frame
+	print("T --test-voice-duck: Strom %d/%d, low_power=%s" % [
+			world.sim.power_provided(0), world.sim.power_drained(0), world.low_power()])
+	if not world.low_power():
+		print("T --test-voice-duck: FEHLER — Niedrigstrom ließ sich nicht herstellen (Rest des Strom-Blocks übersprungen)")
+		fehler += 1
+	else:
+		if int(v.mode) != int(VoiceChat.Mode.OFF):
+			print("T --test-voice-duck: FEHLER — Sprechfunk lief bei Niedrigstrom weiter (Modus %d)" % int(v.mode))
+			fehler += 1
+		if not bool(v.receive_muted):
+			print("T --test-voice-duck: FEHLER — Empfang war bei Niedrigstrom nicht dicht")
+			fehler += 1
+
+		_toggle_mic(false)
+		if int(v.mode) != int(VoiceChat.Mode.OFF):
+			print("T --test-voice-duck: FEHLER — Einschalten trotz Niedrigstrom möglich")
+			fehler += 1
+		else:
+			print("T --test-voice-duck: Einschalten bei Niedrigstrom abgelehnt — OK (Hinweis „%s\")"
+					% tr("toast.voice_no_power"))
+
+		for k in 3:
+			if world.type_ids.has("powr"):
+				world.call("_add_building", "powr", 0, origin + Vector2i(-10 + k * 3, -10))
+		for _i in 30:
+			await get_tree().process_frame
+		print("T --test-voice-duck: Strom zurück %d/%d, low_power=%s, Modus %d" % [
+				world.sim.power_provided(0), world.sim.power_drained(0), world.low_power(), int(v.mode)])
+		if world.low_power():
+			print("T --test-voice-duck: FEHLER — Strom kam nicht zurück")
+			fehler += 1
+		elif int(v.mode) != int(VoiceChat.Mode.TEAM):
+			print("T --test-voice-duck: FEHLER — Sprechfunk kam nicht von selbst zurück (Modus %d)" % int(v.mode))
+			fehler += 1
+		if bool(v.receive_muted):
+			print("T --test-voice-duck: FEHLER — Empfang blieb nach der Stromrückkehr dicht")
+			fehler += 1
+
+
+	var tesla_ids: Array = world.sfx.tesla_sounds.keys()
+	print("T --test-voice-duck: Tesla-Sounds %s (erwartet 1 Kennung für tesla1)" % str(tesla_ids))
+	if tesla_ids.is_empty():
+		print("T --test-voice-duck: FEHLER — keine Tesla-Waffe erkannt (zap_duration/report_sound)")
+		fehler += 1
+	else:
+		var tid := int(tesla_ids[0])
+		var mitte: Vector2 = world.visible_world_rect().get_center()
+		var weit: Vector2 = world.visible_world_rect().position - Vector2(4000, 4000)
+		v.set_mode(VoiceChat.Mode.TEAM)
+		AudioMix.settle()
+		AudioMix.crackles_played = 0
+		AudioMix._last_crackle = -1000.0
+		world.sfx.play_events(PackedInt32Array([tid, int(mitte.x), int(mitte.y)]))
+		var nach_erst := AudioMix.crackles_played
+		world.sfx.play_events(PackedInt32Array([tid, int(mitte.x), int(mitte.y)]))
+		var nach_zweit := AudioMix.crackles_played
+		AudioMix._last_crackle = -1000.0
+		world.sfx.play_events(PackedInt32Array([tid, int(weit.x), int(weit.y)]))
+		var nach_weit := AudioMix.crackles_played
+		v.set_mode(VoiceChat.Mode.OFF)
+		AudioMix._last_crackle = -1000.0
+		world.sfx.play_events(PackedInt32Array([tid, int(mitte.x), int(mitte.y)]))
+		var nach_aus := AudioMix.crackles_played
+		print("T --test-voice-duck: Knacken im Bild=%d, sofort nochmal=%d, ausserhalb=%d, Funk aus=%d"
+				% [nach_erst, nach_zweit, nach_weit, nach_aus])
+		if nach_erst != 1:
+			print("T --test-voice-duck: FEHLER — Tesla im Bild gab kein Knacken")
+			fehler += 1
+		if nach_zweit != 1:
+			print("T --test-voice-duck: FEHLER — zweites Knacken vor Ablauf der %.0f s" % AudioMix.CRACKLE_GAP)
+			fehler += 1
+		if nach_weit != 1:
+			print("T --test-voice-duck: FEHLER — Tesla ausserhalb des Bildes gab ein Knacken")
+			fehler += 1
+		if nach_aus != 1:
+			print("T --test-voice-duck: FEHLER — Knacken bei ausgeschaltetem Sprechfunk")
+			fehler += 1
+
+	AudioMix.set_test_headset(-1)
+	AudioMix.settle()
+	print("T --test-voice-duck: Ende — %s" % AudioMix.state_line())
+	print("T --test-voice-duck: %d Befund(e) (Sollwert 0)" % fehler)
+	get_tree().quit()
+
+
+func _duck_check(fall: String, soll_offset: float) -> int:
+	var fehler := 0
+	for key in AudioMix.DUCK_KEYS:
+		var idx := AudioServer.get_bus_index(AudioMix.BUSES[key])
+		if idx < 0:
+			continue
+		var basis := linear_to_db(maxf(AudioMix.volume(key), 0.0001))
+		var ist := AudioServer.get_bus_volume_db(idx)
+		if absf(ist - (basis + soll_offset)) > 0.2:
+			print("T --test-voice-duck: FEHLER (%s) %s = %+.1f dB, erwartet %+.1f dB" % [
+					fall, AudioMix.BUSES[key], ist, basis + soll_offset])
+			fehler += 1
+
+	var ridx := AudioServer.get_bus_index(AudioMix.BUSES[AudioMix.RADIO_KEY])
+	if ridx >= 0:
+		var rbasis := linear_to_db(maxf(AudioMix.volume(AudioMix.RADIO_KEY), 0.0001))
+		var rsoll: float = maxf(0.0, rbasis) if soll_offset < 0.0 else rbasis
+		var rist := AudioServer.get_bus_volume_db(ridx)
+		if absf(rist - rsoll) > 0.2:
+			print("T --test-voice-duck: FEHLER (%s) Funk = %+.1f dB, erwartet %+.1f dB" % [fall, rist, rsoll])
+			fehler += 1
+	return fehler
 
 
 func _run_test_spy() -> void:
@@ -7148,6 +7643,26 @@ func _run_test_ui() -> void:
 				"pause": _toggle_menu(true)
 				"save": _toggle_menu(true); _show_slots(true)
 				"load": _toggle_menu(true); _show_slots(false)
+				"sammler", "sammler-doppelt":
+
+
+					for u in world.units:
+						if u.alive and u.player == 0 and world.types[u.type].get("refinery", false):
+							world.spawn_unit("harv", 0, Vector2i(u.pos / ProtoWorld.CELL) + Vector2i(4, 3))
+							break
+					var hb: Button = _cmd_buttons["harv"]
+					hb.button_down.emit()
+					hb.pressed.emit()
+					var erster := _last_harv_cmd
+					if args2[mk + 1] == "sammler-doppelt":
+						hb.button_down.emit()
+						hb.pressed.emit()
+					print("T: Sammler-Knopf sichtbar=%s in der Leiste=%s, eigene Sammler=%d, erster Tipp='%s', zuletzt='%s' (Sim kennt die Befehle: %s/%s)" % [
+						hb.visible, "harv" in _cmd_order, world.own_harvester_count(), erster, _last_harv_cmd,
+						world.sim.has_method("order_harvesters_return_to_base"),
+						world.sim.has_method("order_harvesters_resume")])
+					print("T: untere Reihe ausgeblendet=%s, sichtbare Knopffolge=%s" % [
+						not BOTTOM_ROW_VISIBLE, _cmd_order])
 				"deliver":
 
 					var harv: ProtoWorld.Unit = null
@@ -8528,8 +9043,10 @@ func _run_test_desktop_scroll() -> void:
 		ev.pressed = down
 		Input.parse_input_event(ev)
 		await get_tree().process_frame
+
+
 	for fall3 in [[KEY_RIGHT, "Pfeil rechts", Vector2(1, 0)], [KEY_UP, "Pfeil hoch", Vector2(0, -1)],
-			[KEY_A, "Taste A", Vector2(-1, 0)], [KEY_S, "Taste S", Vector2(0, 1)]]:
+			[KEY_LEFT, "Pfeil links", Vector2(-1, 0)], [KEY_DOWN, "Pfeil runter", Vector2(0, 1)]]:
 		await reset.call()
 		a0 = cam.call()
 		await taste.call(fall3[0], true)
@@ -8545,13 +9062,13 @@ func _run_test_desktop_scroll() -> void:
 	zeile.grab_focus()
 	await get_tree().process_frame
 	a0 = cam.call()
-	await taste.call(KEY_D, true)
+	await taste.call(KEY_RIGHT, true)
 	for _n in 12:
 		await get_tree().process_frame
-	await taste.call(KEY_D, false)
+	await taste.call(KEY_RIGHT, false)
 	var chat_ok: bool = cam.call().distance_to(a0) < 1.0
 	fehler += 0 if chat_ok else 1
-	print("T: --test-desktop-scroll Eingabezeile im Fokus - Taste D bewegt die Karte nicht: %s - %s" % [
+	print("T: --test-desktop-scroll Eingabezeile im Fokus - Pfeil rechts bewegt die Karte nicht: %s - %s" % [
 		chat_ok, "OK" if chat_ok else "FEHLER"])
 	zeile.queue_free()
 	await get_tree().process_frame
@@ -8586,6 +9103,221 @@ func _run_test_desktop_scroll() -> void:
 		links_oben.round(), soll_ecke.round(), "OK" if geklemmt else "FEHLER"])
 
 	print("T: --test-desktop-scroll Ende: %d Fehler" % fehler)
+	get_tree().quit()
+
+
+func _run_test_desktop_input() -> void:
+	while world.sim == null:
+		await get_tree().process_frame
+	for _n in 30:
+		await get_tree().process_frame
+	var fehler := 0
+	var sagen := func(name: String, ok: bool, mehr: String = "") -> void:
+		print("T: --test-desktop-input %s%s - %s" % [name, mehr, "OK" if ok else "FEHLER"])
+	var taste := func(code: int) -> void:
+		for pressed in [true, false]:
+			var ev := InputEventKey.new()
+			ev.keycode = code
+			ev.physical_keycode = code
+			ev.pressed = pressed
+			Input.parse_input_event(ev)
+			await get_tree().process_frame
+			await get_tree().process_frame
+
+
+	var belegt := {}
+	var doppelt: Array = []
+	for row in Desktop.KEYS:
+		for code in row["keys"]:
+			if belegt.has(code):
+				doppelt.append("%s/%s" % [belegt[code], row["id"]])
+			belegt[code] = row["id"]
+	var tabelle_ok: bool = doppelt.is_empty() and belegt.size() > 0
+	fehler += 0 if tabelle_ok else 1
+	sagen.call("Tabelle", tabelle_ok, " - %d Tasten, %d Zeilen, Doppelbelegung: %s" % [
+		belegt.size(), Desktop.KEYS.size(), "keine" if doppelt.is_empty() else ", ".join(doppelt)])
+
+	var ohne_text: Array = []
+	for r in Desktop.key_rows():
+		if String(r[1]).begins_with("keys."):
+			ohne_text.append(r[1])
+	fehler += 0 if ohne_text.is_empty() else 1
+	sagen.call("Hilfetexte", ohne_text.is_empty(), " - ohne Uebersetzung: %s" % [
+		"keine" if ohne_text.is_empty() else ", ".join(ohne_text)])
+
+
+	for fall in [[KEY_R, "repair", "R"], [KEY_S, "sell", "S"]]:
+		await taste.call(fall[0])
+		var an: bool = _click_mode == fall[1] and _cmd_buttons[fall[1]].button_pressed
+		await taste.call(fall[0])
+		var aus: bool = _click_mode == ""
+		fehler += 0 if (an and aus) else 1
+		sagen.call("Taste %s" % fall[2], an and aus, " - Modus '%s' an %s, wieder aus %s" % [fall[1], an, aus])
+
+
+	world.clear_selection()
+	await taste.call(KEY_A)
+	var leer_ok: bool = _order_mode == ""
+	fehler += 0 if leer_ok else 1
+	sagen.call("Taste A ohne Auswahl", leer_ok, " - kein Zielwahl-Modus: %s" % leer_ok)
+	var n_all := world.select_all_units()
+	for fall2 in [[KEY_A, "attack_move", "A"], [KEY_D, "guard", "D"]]:
+		await taste.call(fall2[0])
+		var gesetzt: bool = _order_mode == fall2[1]
+		await taste.call(KEY_ESCAPE)
+		var weg: bool = _order_mode == ""
+		fehler += 0 if (gesetzt and weg) else 1
+		sagen.call("Taste %s" % fall2[2], gesetzt and weg, " - Zielwahl '%s' an %s, Escape raeumt auf %s" % [
+			fall2[1], gesetzt, weg])
+
+	for code2 in [KEY_E, KEY_X, KEY_F]:
+		await taste.call(code2)
+	var sofort_ok: bool = _order_mode == "" and _confirm_mode == ""
+	fehler += 0 if sofort_ok else 1
+	sagen.call("Tasten E/X/F", sofort_ok, " - kein Modus haengengeblieben: %s" % sofort_ok)
+
+
+	world.clear_selection()
+	await taste.call(KEY_Q)
+	var q_ok: bool = world.selection.size() == n_all and n_all > 0
+	fehler += 0 if q_ok else 1
+	sagen.call("Taste Q", q_ok, " - %d von %d Einheiten gewaehlt" % [world.selection.size(), n_all])
+	await taste.call(KEY_ESCAPE)
+	var esc_ok: bool = world.selection.is_empty() and not _menu_panel.visible
+	fehler += 0 if esc_ok else 1
+	sagen.call("Escape mit Auswahl", esc_ok, " - Auswahl leer %s, Pausenmenue zu %s" % [
+		world.selection.is_empty(), not _menu_panel.visible])
+
+
+	var z0 := world.zoom
+	await taste.call(KEY_PLUS)
+	var naeher: bool = world.zoom > z0 + 0.001
+	await taste.call(KEY_MINUS)
+	await taste.call(KEY_MINUS)
+	var weiter: bool = world.zoom < z0 - 0.001
+	await taste.call(KEY_PERIOD)
+	var zurueck: bool = absf(world.zoom - 3.0) < 0.01
+	fehler += 0 if (naeher and weiter and zurueck) else 1
+	sagen.call("Zoom + / − / .", naeher and weiter and zurueck,
+		" - naeher %s, weiter %s, zurueck auf %.2f %s" % [naeher, weiter, world.zoom, zurueck])
+
+
+	var p_vorher := world.paused
+	await taste.call(KEY_P)
+	var p_an: bool = world.paused != p_vorher
+	await taste.call(KEY_P)
+	var p_aus: bool = world.paused == p_vorher
+	fehler += 0 if (p_an and p_aus) else 1
+	sagen.call("Taste P", p_an and p_aus, " - Pause an %s, wieder aus %s" % [p_an, p_aus])
+
+
+	_place_test_fact()
+	for _n in 20:
+		await get_tree().process_frame
+
+
+	var b_vorher := build_bar.visible
+	await taste.call(KEY_B)
+	var b_um: bool = build_bar.visible != b_vorher
+	await taste.call(KEY_B)
+	var b_zurueck: bool = build_bar.visible == b_vorher
+	fehler += 0 if (b_um and b_zurueck) else 1
+	sagen.call("Taste B", b_um and b_zurueck, " - Bauleiste umgeschaltet %s, zurueck %s" % [b_um, b_zurueck])
+	build_bar.visible = true
+	await get_tree().process_frame
+
+
+	var reiter: Array = []
+	for i in 6:
+		await taste.call(KEY_F1 + i)
+		reiter.append("%d:%d" % [i + 1, build_bar.kind])
+	var f1_ok: bool = build_bar.kind >= 0
+	await taste.call(KEY_F1)
+	f1_ok = f1_ok and build_bar.kind == BuildBar.KIND_QUEUES[0]
+	fehler += 0 if f1_ok else 1
+	sagen.call("Tasten F1-F6", f1_ok, " - Reiter nach jedem Druck: %s, F1 landet auf Queue %d" % [
+		", ".join(reiter), build_bar.kind])
+
+
+	world.select_all_units()
+	var vs := get_viewport().get_visible_rect().size
+	var rechts := func(at: Vector2) -> void:
+		for pressed in [true, false]:
+			var mb := InputEventMouseButton.new()
+			mb.button_index = MOUSE_BUTTON_RIGHT
+			mb.pressed = pressed
+			mb.position = at
+			mb.global_position = at
+			Input.parse_input_event(mb)
+			await get_tree().process_frame
+	await rechts.call(vs * 0.5)
+	var rechts_ok: bool = world.selection.is_empty() and not _menu_panel.visible
+	fehler += 0 if rechts_ok else 1
+	sagen.call("Rechtsklick auf die Karte", rechts_ok, " - Auswahl leer %s, Pausenmenue zu %s" % [
+		world.selection.is_empty(), not _menu_panel.visible])
+
+
+	var bar_mitte := build_bar.get_global_rect().get_center()
+	var kamera_vorher := world.visible_world_rect().get_center()
+	var rollbar: bool = build_bar.scroll_room() > 1.0
+	var scroll0 := build_bar.scroll_value()
+	for _n in 4:
+		var pg := InputEventPanGesture.new()
+		pg.position = bar_mitte
+		pg.delta = Vector2(0.0, 30.0)
+		get_viewport().push_input(pg)
+		await get_tree().process_frame
+	var gerollt: bool = build_bar.scroll_value() > scroll0 + 0.5
+	var karte_ruhig: bool = world.visible_world_rect().get_center().distance_to(kamera_vorher) < 1.0
+	var wisch_ok: bool = karte_ruhig and (gerollt or not rollbar)
+	fehler += 0 if wisch_ok else 1
+	sagen.call("Bauleiste: Touchpad-Wisch", wisch_ok, " - Rollweg %.0f px, gerollt %s (rollbar %s), Karte ruhig %s" % [
+		build_bar.scroll_room(), gerollt, rollbar, karte_ruhig])
+	var scroll1 := build_bar.scroll_value()
+	var rad := func(btn: int, at: Vector2) -> void:
+		for pressed in [true, false]:
+			var mb2 := InputEventMouseButton.new()
+			mb2.button_index = btn
+			mb2.pressed = pressed
+			mb2.factor = 1.0
+			mb2.position = at
+			mb2.global_position = at
+			Input.parse_input_event(mb2)
+			await get_tree().process_frame
+	await rad.call(MOUSE_BUTTON_WHEEL_UP, bar_mitte)
+	var rad_ok: bool = build_bar.scroll_value() < scroll1 - 0.5 or not rollbar
+	fehler += 0 if rad_ok else 1
+	sagen.call("Bauleiste: Mausrad", rad_ok, " - %.0f -> %.0f" % [scroll1, build_bar.scroll_value()])
+
+
+	var powr: int = world.type_ids.get("powr", -1)
+	if powr < 0:
+		print("T: --test-desktop-input Bauleisten-Rechtsklick - kein 'powr' in den Regeln, uebersprungen")
+	else:
+		build_bar.select_queue(0)
+		world.queue_build(powr)
+		world.queue_build(powr)
+		for _n in 60:
+			await get_tree().process_frame
+		var r_slot := build_bar.slot_rect_for("powr")
+		if r_slot.size.x <= 0.0:
+			print("T: --test-desktop-input Bauleisten-Rechtsklick - Cameo nicht sichtbar, uebersprungen")
+		else:
+			var anzahl0 := build_bar.slot_count("powr")
+			await rechts.call(r_slot.get_center())
+			for _n in 10:
+				await get_tree().process_frame
+			var haelt: bool = build_bar.slot_paused("powr")
+			await rechts.call(r_slot.get_center())
+			for _n in 10:
+				await get_tree().process_frame
+			var anzahl1 := build_bar.slot_count("powr")
+			var weniger: bool = anzahl1 < anzahl0
+			fehler += 0 if (haelt and weniger) else 1
+			sagen.call("Bauleiste: Rechtsklick", haelt and weniger,
+				" - 1. Klick haelt an %s, 2. Klick bricht ab (%d -> %d Auftraege)" % [haelt, anzahl0, anzahl1])
+
+	print("T: --test-desktop-input Ende: %d Fehler" % fehler)
 	get_tree().quit()
 
 
@@ -9284,6 +10016,133 @@ func _ai_audit(tag: String) -> int:
 	return found
 
 
+func _ai_strategy_of(pl: int) -> String:
+	for e in world.player_roster:
+		if int(e.get("sim", -1)) == pl:
+			var st := str(e.get("strategy", ""))
+			if st != "":
+				return st
+	return "?"
+
+
+func _ai_level_of(pl: int) -> String:
+	for e in world.player_roster:
+		if int(e.get("sim", -1)) == pl:
+			return str(e.get("level", "?"))
+	return "?"
+
+
+func _ai_plan_name(pl: int) -> String:
+	const NAMES := ["wirtschaft", "druck", "luftschlag", "belagerung", "igel"]
+	if world.sim == null or not world.sim.has_method("bot_plan"):
+		return "?"
+	var i: int = world.sim.bot_plan(pl)
+	return NAMES[i] if i >= 0 and i < NAMES.size() else "?"
+
+
+func _print_tournament_rows(tick: int) -> void:
+	var sim = world.sim
+	if sim == null:
+		return
+	var ws: int = world.win_state()
+	for e in world.player_roster:
+		if str(e.get("kind", "human")) != "bot":
+			continue
+		var pl := int(e.get("sim", -1))
+		if pl < 0:
+			continue
+		var built: int = sim.bot_stat(pl, 0) if sim.has_method("bot_stat") else -1
+		var sp: int = sim.bot_stat(pl, 1) if sim.has_method("bot_stat") else -1
+		var squads: int = sim.bot_stat(pl, 2) if sim.has_method("bot_stat") else -1
+		var first: int = sim.bot_stat(pl, 3) if sim.has_method("bot_stat") else -1
+		print("TURNIER tick=%d pl=%d strategie=%s staerke=%s plan=%s gebaut=%d superwaffen=%d trupps=%d erster_angriff=%d lebend=%d ertrag=%d credits=%d spieler_lebend=%d ausgang=%d" % [
+			tick, pl, _ai_strategy_of(pl), _ai_level_of(pl), _ai_plan_name(pl),
+			built, sp, squads, first, sim.alive_count(pl), sim.earned(pl), sim.credits(pl),
+			sim.alive_count(0), ws])
+
+
+func _run_test_harvest() -> void:
+	var sim = world.sim
+	var tick: int = sim.tick()
+	if _test_step == 0 and tick >= 10:
+		var origin := Vector2i(-1, -1)
+		for u in world.units:
+			if u.alive and u.player == 0:
+				if u.type == "fact":
+					origin = Vector2i(u.pos / ProtoWorld.CELL)
+					break
+				if origin.x < 0:
+					origin = Vector2i(u.pos / ProtoWorld.CELL)
+		if origin.x < 0:
+			origin = Vector2i(20, 20)
+		sim.give_credits(0, 20000)
+		world.call("_add_building", "proc", 0, origin + Vector2i(6, 0))
+
+
+		for k in 6:
+			world.call("_add_building", "silo", 0, origin + Vector2i(-4 + k, -4))
+		for k in 6:
+			var u: ProtoWorld.Unit = world.spawn_unit("harv", 0, origin + Vector2i(3 + k, 5))
+			if u != null:
+				_harv_ids.append(u.id)
+				_harv_last_cell[u.id] = Vector2i(u.pos / ProtoWorld.CELL)
+				_harv_stall[u.id] = 0
+				_harv_worst[u.id] = 0
+		world.center_on(Vector2(origin + Vector2i(5, 3)) * ProtoWorld.CELL)
+		print("T%d --test-harvest: %d Ernteeinheiten, 1 Raffinerie bei %s" % [tick, _harv_ids.size(), origin + Vector2i(6, 0)])
+		_test_step = 1
+		_test_tick = tick
+		_harv_last_tick = tick
+		return
+	if _test_step != 1:
+		return
+
+	var dt: int = maxi(1, tick - _harv_last_tick)
+	_harv_last_tick = tick
+	for id in _harv_ids:
+		var u: ProtoWorld.Unit = world.unit_by_id(id) if world.has_method("unit_by_id") else null
+		var cell := Vector2i(-1, -1)
+		if u != null and u.alive:
+			cell = Vector2i(u.pos / ProtoWorld.CELL)
+		if cell == _harv_last_cell.get(id, Vector2i(-1, -1)):
+			_harv_stall[id] = int(_harv_stall.get(id, 0)) + dt
+			if int(_harv_stall[id]) > int(_harv_worst.get(id, 0)):
+				_harv_worst[id] = int(_harv_stall[id])
+		else:
+			_harv_stall[id] = 0
+		_harv_last_cell[id] = cell
+	if tick >= _test_tick + 500:
+		_test_tick = tick
+		var lines: Array[String] = []
+		for id in _harv_ids:
+			var st: int = sim.harvest_state(id) if sim.has_method("harvest_state") else -1
+			var bl: int = sim.harvest_bales(id) if sim.has_method("harvest_bales") else -1
+			lines.append("%d:%s z%d b%d/steht %d" % [id, _harv_last_cell.get(id, Vector2i(-1, -1)),
+				st, bl, int(_harv_stall.get(id, 0))])
+		print("T%d --test-harvest: Ertrag %d, Guthaben %d | %s" % [tick, sim.earned(0), sim.credits(0), ", ".join(lines)])
+
+
+	if not _harv_parked and tick >= _test_harvest_until / 2:
+		_harv_parked = true
+		var ok: bool = bool(sim.apply_order(0, PackedInt32Array([25, 0, 0, 0, 0, 0])))
+		print("T%d --test-harvest: Befehl „zur Basis“ (op 25) angenommen: %s" % [tick, "ja" if ok else "NEIN"])
+	if not _harv_resumed and tick >= _test_harvest_until * 3 / 4:
+		_harv_resumed = true
+		var states: Array[int] = []
+		for id in _harv_ids:
+			states.append(int(sim.harvest_state(id)))
+		var ok2: bool = bool(sim.apply_order(0, PackedInt32Array([26, 0, 0, 0, 0, 0])))
+		print("T%d --test-harvest: Zustände beim Parken %s, Befehl „weitersammeln“ (op 26): %s" % [
+			tick, states, "ja" if ok2 else "NEIN"])
+	if tick >= _test_harvest_until:
+		var worst := 0
+		for id in _harv_ids:
+			worst = maxi(worst, int(_harv_worst.get(id, 0)))
+		print("T%d --test-harvest Ende: Ertrag %d, Guthaben %d, längster Stillstand %d Ticks" % [
+			tick, sim.earned(0), sim.credits(0), worst])
+		get_tree().quit()
+
+
 func _run_test_ai() -> void:
 	var sim = world.sim
 	var tick: int = sim.tick()
@@ -9310,7 +10169,19 @@ func _run_test_ai() -> void:
 					per[u.player] = {}
 				per[u.player][u.type] = per[u.player].get(u.type, 0) + 1
 		for pl in per:
-			print("T%d KI%d: %s credits=%d ertrag=%d squads=%d" % [tick, pl, per[pl], sim.credits(pl), sim.earned(pl), sim.bot_squad_count(pl)])
+
+
+			var air_names: Array = []
+			if sim.has_method("buildable"):
+				for ti in sim.buildable(pl, ProtoWorld.Queue.AIRCRAFT):
+					for nm in world.type_ids:
+						if int(world.type_ids[nm]) == int(ti):
+							air_names.append(str(nm))
+							break
+			var air_buildable: String = ",".join(PackedStringArray(air_names)) if not air_names.is_empty() else "-"
+			print("T%d KI%d [%s] luftbaubar=%s: %s credits=%d ertrag=%d squads=%d plan=%s" % [tick, pl, _ai_strategy_of(pl), air_buildable,
+				per[pl], sim.credits(pl), sim.earned(pl), sim.bot_squad_count(pl),
+				_ai_plan_name(pl)])
 		print("T%d Spieler: %d | %d µs/Tick, %d Actors, %d Kisten" % [tick, sim.alive_count(0), sim.last_step_usec(), sim.actor_count(), sim.crate_count()])
 
 
@@ -9340,6 +10211,7 @@ func _run_test_ai() -> void:
 			print("T%d Ende: %s | Angriff erlebt: %s | eigene %d, Gegner %d" % [tick,
 				["offen", "Sieg", "Niederlage"][clampi(ws, 0, 2)], "ja" if _ai_attacked else "nein",
 				sim.alive_count(0), sim.alive_count(1)])
+			_print_tournament_rows(tick)
 			if _test_ai_audit:
 				_ai_audit("T%d" % tick)
 				print("AUDIT Ende: %d Befund(e), %d Hinweis(e)" % [_audit_errors, _audit_notes])
@@ -9961,6 +10833,11 @@ func _show_options() -> void:
 					if i == 0 and vc != null:
 						vc.set_mode(VoiceChat.Mode.OFF)
 					_update_mic_button(), self))
+
+
+		box.add_child(HudTheme.choice_row(tr("menu.options.headset"),
+				[tr("word.auto"), tr("word.on"), tr("word.off")], AudioMix.headset_mode(),
+				func(i: int): AudioMix.set_headset_mode(i), self))
 		var vp := _mp_voice()
 		if vp != null:
 			box.add_child(HudTheme.mic_probe_row(vp, self))
@@ -10105,11 +10982,17 @@ func _hud_highlight_target() -> Control:
 			"tab_vehicle": build_bar._tabs[3] if build_bar._tabs.size() > 3 else null,
 			"btn_all": _cmd_buttons.get("all"), "cmd_sell": _cmd_buttons.get("sell"),
 			"cmd_repair": _cmd_buttons.get("repair"), "cmd_add": _cmd_buttons.get("add"),
-			"cmd_clear": _cmd_buttons.get("clear"), "cmd_base": _cmd_buttons.get("base"),
+			"cmd_clear": _cmd_buttons.get("clear"), "cmd_harv": _cmd_buttons.get("harv"),
+			"cmd_base": _cmd_buttons.get("base"),
 			"cmd_event": _cmd_buttons.get("event"), "cmd_sel": _cmd_buttons.get("sel"),
 			"cmd_zoom_in": _cmd_buttons.get("zoom_in"), "cmd_zoom_out": _cmd_buttons.get("zoom_out"),
 		}
-	return _hud_highlight_targets.get(_mission_highlight_id, null)
+	var target: Control = _hud_highlight_targets.get(_mission_highlight_id, null)
+
+
+	if target != null and not target.is_visible_in_tree():
+		return null
+	return target
 
 
 const _HUD_HIGHLIGHT_MAP_IDS := {"deploy_mcv": "PlayerMCV", "radial_attack": "EnemyYard"}
@@ -10211,26 +11094,150 @@ func _unhandled_input(e: InputEvent) -> void:
 	if Desktop.handle_fullscreen_key(e):
 		get_viewport().set_input_as_handled()
 		return
-	if not Desktop.is_desktop() or not (e is InputEventKey) or not e.pressed or e.echo:
+	if not Desktop.has_keyboard():
+		return
+	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_RIGHT and e.pressed:
+		_on_right_click_map()
+		get_viewport().set_input_as_handled()
+		return
+	if not (e is InputEventKey) or not e.pressed or e.echo:
+		return
+
+
+	if get_viewport().gui_get_focus_owner() is LineEdit:
 		return
 	var k: InputEventKey = e
 	if k.keycode == KEY_ESCAPE:
-		_go_back()
+		_escape_key()
 		get_viewport().set_input_as_handled()
 		return
 	var slot := int(k.keycode) - int(KEY_1)
-	if slot < 0 or slot >= ControlGroups.SLOTS:
+	if slot >= 0 and slot < ControlGroups.SLOTS:
+		if k.ctrl_pressed or k.meta_pressed:
+			groups.assign(slot)
+		elif slot == _key_group_last and Time.get_ticks_msec() / 1000.0 - _key_group_time < ControlGroups.DOUBLE_TAP:
+			_key_group_last = -1
+			groups.focus(slot)
+		else:
+			_key_group_last = slot
+			_key_group_time = Time.get_ticks_msec() / 1000.0
+			groups.select(slot)
+		get_viewport().set_input_as_handled()
 		return
-	if k.ctrl_pressed or k.meta_pressed:
-		groups.assign(slot)
-	elif slot == _key_group_last and Time.get_ticks_msec() / 1000.0 - _key_group_time < ControlGroups.DOUBLE_TAP:
-		_key_group_last = -1
-		groups.focus(slot)
-	else:
-		_key_group_last = slot
-		_key_group_time = Time.get_ticks_msec() / 1000.0
-		groups.select(slot)
-	get_viewport().set_input_as_handled()
+	var act: Dictionary = Desktop.key_action(e)
+	if act["id"] != "" and _do_key_action(act["id"], act["index"]):
+		get_viewport().set_input_as_handled()
+
+
+func _ui_layer_open() -> bool:
+	if world == null:
+		return true
+	return (is_instance_valid(_movie) and _movie.is_inside_tree()) \
+		or (_mp_chat_panel != null and _mp_chat_panel.visible) \
+		or _info_card != null or radial.visible \
+		or world.placing_type >= 0 or _confirm_mode != "" or _order_mode != "" \
+		or _click_mode != "" or (_menu_panel != null and _menu_panel.visible)
+
+
+func _escape_key() -> void:
+	if not _ui_layer_open() and not world.selection.is_empty():
+		_clear_selection_toast()
+		return
+	_go_back()
+
+
+func _on_right_click_map() -> void:
+	if world == null:
+		return
+	if _menu_panel != null and _menu_panel.visible:
+		return
+	if _ui_layer_open():
+		_go_back()
+		return
+	if not world.selection.is_empty():
+		_clear_selection_toast()
+
+
+func _clear_selection_toast() -> void:
+	world.clear_selection()
+	_show_selection_info()
+	_toast(tr("toast.selection_cleared"))
+
+
+const KEYS_WHILE_BUSY := ["zoom_in", "zoom_out", "zoom_reset", "base", "last_event", "to_selection", "pause", "music"]
+
+
+func _do_key_action(id: String, index: int) -> bool:
+
+
+	if _scroll_blocked():
+		return false
+
+
+	if (world.placing_type >= 0 or _confirm_mode != "" or _order_mode != "") and not KEYS_WHILE_BUSY.has(id):
+		return false
+	match id:
+		"repair", "sell":
+			_set_click_mode(id)
+		"attack_move", "guard", "stop", "scatter":
+			if world.selection.is_empty():
+				_toast(tr("toast.nothing_selected"))
+				return true
+			_on_radial(id)
+		"deploy":
+			if world.selection.is_empty():
+				_toast(tr("toast.nothing_selected"))
+				return true
+
+
+			var u = world.selection[0]
+			if world.has_deploy_action(u.type):
+				_do_deploy_action(world.deploy_action(u.type))
+			else:
+				_on_radial("deploy")
+		"all_units":
+			_end_click_mode()
+			_toast(tr("toast.all_units_count") % world.select_all_units())
+			_show_selection_info()
+		"base":
+			_jump_to_base()
+		"last_event":
+			if _has_event:
+				world.center_on(_last_event_pos)
+			else:
+				_toast(tr("toast.no_event"))
+		"to_selection":
+			if world.selection.is_empty():
+				_toast(tr("toast.nothing_selected"))
+			else:
+				world.center_on(world.selection_center())
+		"zoom_in":
+			_zoom_step(1.25)
+		"zoom_out":
+			_zoom_step(0.8)
+		"zoom_reset":
+
+			_zoom_step(3.0 / maxf(world.zoom, 0.001))
+		"build_bar":
+			build_bar.visible = not build_bar.visible
+		"tabs":
+			return build_bar.select_tab(index)
+		"pause":
+			return _toggle_pause_key()
+		"music":
+			_toggle_music()
+		_:
+			return false
+	return true
+
+
+func _toggle_pause_key() -> bool:
+	if _mp_active():
+		_toast(tr("toast.no_pause_mp"))
+		return true
+	world.paused = not world.paused
+	_toast(tr("toast.paused") if world.paused else tr("toast.resumed"))
+	return true
 
 
 func _check_game_over() -> void:
@@ -10316,6 +11323,7 @@ func _process(delta: float) -> void:
 		_cmd_buttons["add"].button_pressed = world.additive_select
 		_update_mode_frame()
 	_update_mp_hud(delta)
+	_update_voice_power()
 	_check_game_over()
 	_update_mission_ui()
 	_update_toasts()
@@ -10351,6 +11359,8 @@ func _process(delta: float) -> void:
 		_run_test_ui()
 	if _test_ai and world.sim != null:
 		_run_test_ai()
+	if _test_harvest and world.sim != null:
+		_run_test_harvest()
 	if _test_motion and world.sim != null:
 		_run_test_motion()
 	if _test_projectile and world.sim != null:
@@ -10426,6 +11436,8 @@ func _process(delta: float) -> void:
 	if _test_placement_cancel and world.sim != null and _test_step == 0 and world.sim.tick() >= 10:
 		_test_step = 1
 		_run_test_placement_cancel()
+	if _test_tap_orders and world.sim != null:
+		_run_test_tap_orders()
 	if _test_lobby_tap and world.sim != null:
 		_run_test_lobby_tap()
 	_autosave_tick()
@@ -10490,7 +11502,7 @@ func _process(delta: float) -> void:
 		debug_label.text = "Geste: %s\nAuswahl: %d   Zoom: %.1f   FPS: %d\n%s" % [
 			_last_gesture, world.selection.size(), world.zoom, Engine.get_frames_per_second(), world.sim_text]
 
-	if _screenshot_path == "" or _test_voice or _test_players or _test_water or _test_ai or _test_ui or _test_defense or _test_defense_fire or _test_buildings or _test_tesla or _test_ttnk or _test_nuke \
+	if _screenshot_path == "" or _test_voice or _test_players or _test_water or _test_ai or _test_harvest or _test_ui or _test_defense or _test_defense_fire or _test_buildings or _test_tesla or _test_ttnk or _test_nuke \
 			or _test_superwaffen or _test_projectile or _test_barrels or _test_autotarget or _test_husk or _test_kaserne or _test_gap or _test_gps or _test_nebel or _test_jammer or _test_mech or _test_muzzle or _test_rotor or _test_air or _test_air_player or _test_cargo or _test_placement or _test_naval or _test_msub or _test_lst or _test_armaments or _test_turret or _test_make:
 		return
 	var f := Engine.get_process_frames()
@@ -10652,6 +11664,10 @@ var _mp_chat_btn: Button
 var _mp_mic_btn: Button
 var _mp_mic_label: Label
 var _mp_speak_label: RichTextLabel
+
+
+var _voice_power_was := false
+var _voice_power_hold := 0
 var _mp_chat_panel = null
 var _mp_wait_since := -1.0
 var _mp_over := ""
@@ -10844,6 +11860,12 @@ func _toggle_mic(open_channel: bool) -> void:
 	if not VoiceChat.enabled():
 		_toast(tr("toast.voice_off_setting"))
 		return
+
+
+	if _voice_power_blocked() and int(v.mode) == int(VoiceChat.Mode.OFF):
+		_toast(tr("toast.voice_no_power"))
+		_update_mic_button()
+		return
 	var m: int = v.toggle_all() if open_channel else v.toggle_team()
 	_update_mic_button()
 	if m == VoiceChat.Mode.ALL:
@@ -10871,6 +11893,38 @@ func _voice_intro_due() -> bool:
 	return not VoiceChat.intro_seen()
 
 
+func _voice_power_blocked() -> bool:
+	return world != null and world.sim != null and world.low_power()
+
+
+func _update_voice_power() -> void:
+	if _mp_mic_btn == null:
+		return
+	var v := _mp_voice()
+	if v == null:
+		return
+	var blocked := _voice_power_blocked()
+	if blocked == _voice_power_was:
+		return
+	_voice_power_was = blocked
+	if blocked:
+
+
+		v.mute_receive(true)
+		if int(v.mode) != int(VoiceChat.Mode.OFF):
+			_voice_power_hold = int(v.mode)
+			v.set_mode(VoiceChat.Mode.OFF)
+			AudioMix.radio_dropout()
+			_toast(tr("toast.voice_no_power"))
+	else:
+		v.mute_receive(false)
+		if _voice_power_hold != int(VoiceChat.Mode.OFF):
+			v.set_mode(_voice_power_hold)
+			_voice_power_hold = int(VoiceChat.Mode.OFF)
+			_toast(tr("toast.voice_power_back"))
+	_update_mic_button()
+
+
 func _update_mic_button() -> void:
 	if _mp_mic_btn == null:
 		return
@@ -10884,12 +11938,19 @@ func _update_mic_button() -> void:
 	elif m == VoiceChat.Mode.ALL:
 		col = HudTheme.VOICE_ALL
 		text = tr("mp.voice_all")
+
+
+	var blocked := _voice_power_blocked()
+	if blocked:
+		col = HudTheme.VOICE_BLOCKED
+		text = tr("status.power")
 	for state in ["icon_normal_color", "icon_hover_color", "icon_focus_color"]:
 		_mp_mic_btn.add_theme_color_override(state, col)
 	_mp_mic_btn.add_theme_color_override("icon_pressed_color", col.darkened(0.3))
 
 
-	_mp_mic_btn.modulate = Color(1, 1, 1, 1.0 if m != VoiceChat.Mode.OFF else HudTheme.ICON_BUTTON_ALPHA)
+	_mp_mic_btn.modulate = Color(1, 1, 1, 1.0 if m != VoiceChat.Mode.OFF and not blocked
+			else HudTheme.ICON_BUTTON_ALPHA)
 	if _mp_mic_label != null:
 		_mp_mic_label.text = text
 		_mp_mic_label.add_theme_color_override("font_color", col)
@@ -11167,7 +12228,16 @@ func _roster_name(e: Dictionary) -> String:
 			lvl_text = lvl
 		var no := int(e.get("bot_no", 0))
 		var base: String = (tr("lobby.ai") % no) if no > 0 else tr("mp.bot")
-		return "%s (%s)" % [base, lvl_text]
+
+
+		var strat := str(e.get("strategy", ""))
+		if strat == "":
+			return "%s (%s)" % [base, lvl_text]
+		var skey := "menu.skirmish.strat_" + strat
+		var stext := tr(skey)
+		if stext == skey:
+			stext = strat
+		return "%s (%s, %s)" % [base, lvl_text, stext]
 	var n := str(e.get("name", ""))
 	if n == "":
 
@@ -11570,9 +12640,12 @@ func _run_test_sprechfunk() -> void:
 	_layout_ui()
 	await get_tree().process_frame
 	var mp_rects := {}
-	for id in CMD_ORDER:
+
+
+	var soll_folge: Array = visible_cmd_order()
+	for id in soll_folge:
 		mp_rects[id] = HudTheme.visible_rect(_cmd_buttons[id])
-	var gleiche_folge: bool = _cmd_order == CMD_ORDER
+	var gleiche_folge: bool = _cmd_order == soll_folge
 	for b in [_mp_chat_btn, _mp_mic_btn]:
 		if b != null:
 			_cmd_buttons.erase("chat" if b == _mp_chat_btn else "mic")
@@ -11584,7 +12657,7 @@ func _run_test_sprechfunk() -> void:
 	_layout_ui()
 	await get_tree().process_frame
 	var gleich := 0
-	for id in CMD_ORDER:
+	for id in soll_folge:
 		var r_sp: Rect2 = HudTheme.visible_rect(_cmd_buttons[id])
 		var r_mp: Rect2 = mp_rects[id]
 		if r_sp.position.is_equal_approx(r_mp.position) and r_sp.size.is_equal_approx(r_mp.size):
@@ -11592,10 +12665,10 @@ func _run_test_sprechfunk() -> void:
 		else:
 			print("T --test-sprechfunk: FEHLER Knopf %s — Mehrspieler %s, Einzelspieler %s" % [id, r_mp, r_sp])
 	print("T --test-sprechfunk: untere Leiste — Reihenfolge gleich %s, %d von %d Knöpfen deckungsgleich (Sollwert %d)" % [
-			gleiche_folge, gleich, CMD_ORDER.size(), CMD_ORDER.size()])
+			gleiche_folge, gleich, soll_folge.size(), soll_folge.size()])
 	print("T --test-sprechfunk: erster Knopf %s, letzter Knopf %s" % [
-			mp_rects[CMD_ORDER[0]], mp_rects[CMD_ORDER[CMD_ORDER.size() - 1]]])
-	fehler += (0 if gleiche_folge else 1) + (CMD_ORDER.size() - gleich)
+			mp_rects[soll_folge[0]], mp_rects[soll_folge[soll_folge.size() - 1]]])
+	fehler += (0 if gleiche_folge else 1) + (soll_folge.size() - gleich)
 	print("T --test-sprechfunk: %d Befund(e) (Sollwert 0)" % fehler)
 	get_tree().quit()
 

@@ -145,6 +145,15 @@ public:
 
 
     bool order_deliver(const PackedInt32Array& ids, int refinery_id);
+
+
+    void order_harvesters_return_to_base(int owner);
+
+    void order_harvesters_resume(int owner);
+
+
+    int harvest_state(int id) const;
+    int harvest_bales(int id) const;
     void order_stop(const PackedInt32Array& ids);
     void order_scatter(const PackedInt32Array& ids);
     void order_guard(const PackedInt32Array& ids, int target_id, bool queued = false);
@@ -183,6 +192,11 @@ public:
     void set_crate_spawner(const Dictionary& params);
     int crate_count() const;
     int bot_squad_count(int owner) const;
+
+    int pick_bot_personality();
+    int bot_personality(int owner) const;
+    int bot_plan(int owner) const;
+    int bot_stat(int owner, int which) const;
     void order_repair(const PackedInt32Array& ids, int depot_id);
     int win_state(int owner) const;
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import re
@@ -1453,10 +1454,27 @@ def main() -> int:
                     del out[table][name]
 
 
-        for name in ("mslo", "hpad", "afld", "syrd", "spen"):
+        for name in ("syrd", "spen"):
             out["building_fractions"].pop(name, None)
         for name in ("ss", "msub", "dd", "ca", "pt", "lst"):
             out["units_to_build"].pop(name, None)
+
+
+    air_bot = copy.deepcopy(ai_bots["normal"])
+    for name in ("hpad", "afld", "afld.ukraine"):
+        if name in air_bot["building_fractions"]:
+            air_bot["building_fractions"][name] = 12
+        if name in air_bot["building_limits"]:
+            air_bot["building_limits"][name] = 6
+    for name in ("heli", "mh60", "mig", "yak"):
+        if name in air_bot["units_to_build"]:
+            air_bot["units_to_build"][name] = 60
+
+
+    air_bot["building_delays"]["dome"] = 3000
+    air_bot["building_fractions"]["dome"] = 10
+    ai_bots["air"] = air_bot
+
     ai: dict = {k: v for k, v in ai_bots["normal"].items() if k != "params"}
     ai["bots"] = ai_bots
 

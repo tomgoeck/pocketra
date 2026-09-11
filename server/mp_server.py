@@ -295,6 +295,9 @@ class Room:
         self.seats[seat] = {
             "kind": "bot", "seat": seat,
             "level": clean_text(data.get("level"), 16) or "normal",
+
+
+            "strategy": clean_text(data.get("strategy"), 16) or "normal",
             "name": "KI %d" % (seat + 1),
             "faction": clean_text(data.get("faction"), FACTION_MAX) or "allies",
             "team": clamp_int(data.get("team"), 0, TEAM_MAX, 0),
@@ -327,6 +330,7 @@ class Room:
                    "spawn": e["spawn"], "ready": e["ready"], "ping": 0}
             if e["kind"] == "bot":
                 row["level"] = e["level"]
+                row["strategy"] = e.get("strategy", "normal")
             elif e["client"] is None:
 
                 row["absent"] = True
@@ -921,6 +925,8 @@ class Hub:
             e["team"] = clamp_int(data.get("team"), 0, TEAM_MAX, e["team"])
         if "color" in data:
             e["color"] = clamp_int(data.get("color"), 0, COLOR_MAX, e["color"])
+        if "strategy" in data and e["kind"] == "bot":
+            e["strategy"] = clean_text(data.get("strategy"), 16) or e.get("strategy", "normal")
         if "spawn" in data:
             want = clamp_int(data.get("spawn"), -1, SPAWN_MAX, e["spawn"])
             if want != e["spawn"] and room.spawn_taken(want, seat):

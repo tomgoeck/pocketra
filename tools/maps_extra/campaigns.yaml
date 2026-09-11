@@ -1,5 +1,2 @@
-## Eigene Kampagnen (nicht Teil von OpenRA) im missions.yaml-Format (mods/ra/missions.yaml):
-## Gruppenname → eingerückte Kartenliste. tools/mapconvert.py stellt diese Gruppen VOR die
-## OpenRA-Kampagnen aus missions.yaml, damit sie oben in der Missionsliste stehen.
 Tutorial:
 	tutorial

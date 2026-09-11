@@ -82,6 +82,10 @@ bool World::apply_order(int32_t player, const int32_t* cmd, size_t n) {
         case 24: for (size_t k = 0; k < ni; ++k) set_stance(ids[k], a); break;
 
 
+        case 25: order_harvesters_return_to_base(player); break;
+        case 26: order_harvesters_resume(player); break;
+
+
         case 30: queue_build(player, a); break;
         case 31: cancel_build(player, a, b); break;
         case 32: pause_build(player, a, b != 0); break;

@@ -172,6 +172,10 @@ void RaSim::_bind_methods() {
     ClassDB::bind_method(D_METHOD("has_move_order", "id"), &RaSim::has_move_order);
     ClassDB::bind_method(D_METHOD("order_harvest", "ids", "cell_x", "cell_y"), &RaSim::order_harvest);
     ClassDB::bind_method(D_METHOD("order_deliver", "ids", "refinery_id"), &RaSim::order_deliver);
+    ClassDB::bind_method(D_METHOD("order_harvesters_return_to_base", "owner"), &RaSim::order_harvesters_return_to_base);
+    ClassDB::bind_method(D_METHOD("order_harvesters_resume", "owner"), &RaSim::order_harvesters_resume);
+    ClassDB::bind_method(D_METHOD("harvest_state", "id"), &RaSim::harvest_state);
+    ClassDB::bind_method(D_METHOD("harvest_bales", "id"), &RaSim::harvest_bales);
     ClassDB::bind_method(D_METHOD("order_stop", "ids"), &RaSim::order_stop);
     ClassDB::bind_method(D_METHOD("order_scatter", "ids"), &RaSim::order_scatter);
     ClassDB::bind_method(D_METHOD("order_guard", "ids", "target_id", "queued"), &RaSim::order_guard, DEFVAL(false));
@@ -197,6 +201,10 @@ void RaSim::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_rally", "id", "cell_x", "cell_y"), &RaSim::set_rally);
     ClassDB::bind_method(D_METHOD("set_primary", "id"), &RaSim::set_primary);
     ClassDB::bind_method(D_METHOD("enable_bot", "owner", "params"), &RaSim::enable_bot);
+    ClassDB::bind_method(D_METHOD("pick_bot_personality"), &RaSim::pick_bot_personality);
+    ClassDB::bind_method(D_METHOD("bot_personality", "owner"), &RaSim::bot_personality);
+    ClassDB::bind_method(D_METHOD("bot_plan", "owner"), &RaSim::bot_plan);
+    ClassDB::bind_method(D_METHOD("bot_stat", "owner", "which"), &RaSim::bot_stat);
     ClassDB::bind_method(D_METHOD("set_handicap", "owner", "percent"), &RaSim::set_handicap);
     ClassDB::bind_method(D_METHOD("handicap", "owner"), &RaSim::handicap);
     ClassDB::bind_method(D_METHOD("set_crate_spawner", "params"), &RaSim::set_crate_spawner);
@@ -1134,6 +1142,26 @@ void RaSim::order_harvest(const PackedInt32Array& ids, int cell_x, int cell_y) {
 bool RaSim::order_deliver(const PackedInt32Array& ids, int refinery_id) {
     return world_.order_deliver(ids.ptr(), ids.size(), refinery_id);
 }
+
+void RaSim::order_harvesters_return_to_base(int owner) {
+    world_.order_harvesters_return_to_base(owner);
+}
+
+void RaSim::order_harvesters_resume(int owner) {
+    world_.order_harvesters_resume(owner);
+}
+
+int RaSim::harvest_state(int id) const {
+    const int i = world_.index_of(id);
+    if (i < 0) return -1;
+    return int(world_.harvest(size_t(i)).state);
+}
+
+int RaSim::harvest_bales(int id) const {
+    const int i = world_.index_of(id);
+    if (i < 0) return -1;
+    return world_.harvest(size_t(i)).bales;
+}
 void RaSim::order_stop(const PackedInt32Array& ids) { world_.order_stop(ids.ptr(), ids.size()); }
 void RaSim::order_scatter(const PackedInt32Array& ids) { world_.order_scatter(ids.ptr(), ids.size()); }
 void RaSim::order_guard(const PackedInt32Array& ids, int target_id, bool queued) {
@@ -1169,6 +1197,22 @@ bool RaSim::set_primary(int id) { return world_.set_primary(id); }
 
 void RaSim::enable_bot(int owner, const Dictionary& params) {
     ra::BotParams p;
+
+
+    ra::World::bot_apply_personality(p, int(params.get("personality", int(ra::BOT_P_NORMAL))));
+    p.strategy_interval = int(params.get("strategy_interval", p.strategy_interval));
+    p.threat_map_interval = int(params.get("threat_map_interval", p.threat_map_interval));
+    p.threat_map_side = int(params.get("threat_map_side", p.threat_map_side));
+    p.target_value_weight = int(params.get("target_value_weight", p.target_value_weight));
+    p.target_threat_weight = int(params.get("target_threat_weight", p.target_threat_weight));
+    p.sp_scan_interval = int(params.get("sp_scan_interval", p.sp_scan_interval));
+    p.nuke_min_attractiveness = int(params.get("nuke_min_attractiveness", p.nuke_min_attractiveness));
+    p.iron_min_attractiveness = int(params.get("iron_min_attractiveness", p.iron_min_attractiveness));
+    p.chrono_min_attractiveness = int(params.get("chrono_min_attractiveness", p.chrono_min_attractiveness));
+    p.air_squad_size = int(params.get("air_squad_size", p.air_squad_size));
+    p.raid_squad_size = int(params.get("raid_squad_size", p.raid_squad_size));
+    p.raid_interval = int(params.get("raid_interval", p.raid_interval));
+    p.first_attack_tick = int(params.get("first_attack_tick", p.first_attack_tick));
     p.squad_size = int(params.get("squad_size", p.squad_size));
     p.squad_size_random_bonus = int(params.get("squad_size_random_bonus", p.squad_size_random_bonus));
     p.rush_interval = int(params.get("rush_interval", p.rush_interval));
@@ -1198,6 +1242,12 @@ void RaSim::enable_bot(int owner, const Dictionary& params) {
 void RaSim::set_handicap(int owner, int percent) { world_.set_handicap(owner, percent); }
 int RaSim::handicap(int owner) const { return world_.handicap(owner); }
 int RaSim::bot_squad_count(int owner) const { return int(world_.bot_squad_count(owner)); }
+
+int RaSim::pick_bot_personality() { return int(world_.bot_pick_personality()); }
+int RaSim::bot_personality(int owner) const { return int(world_.bot_personality(owner)); }
+int RaSim::bot_plan(int owner) const { return int(world_.bot_plan(owner)); }
+
+int RaSim::bot_stat(int owner, int which) const { return int(world_.bot_stat(owner, which)); }
 
 
 void RaSim::set_crate_spawner(const Dictionary& params) {

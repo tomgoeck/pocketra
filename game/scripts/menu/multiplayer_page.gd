@@ -12,6 +12,10 @@ signal lobby_entered()
 const CODE_LEN := 6
 const CODE_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const AI_LEVELS := ["easy", "normal", "hard"]
+
+const AI_STRATEGY_KEYS := {"normal": "menu.skirmish.strat_normal", "rush": "menu.skirmish.strat_rush",
+		"turtle": "menu.skirmish.strat_turtle", "air": "menu.skirmish.strat_air",
+		"naval": "menu.skirmish.strat_naval", "random": "menu.skirmish.strat_random"}
 const AI_LEVEL_KEYS := {"easy": "menu.skirmish.ai_easy", "normal": "menu.skirmish.ai_normal",
 		"hard": "menu.skirmish.ai_hard"}
 const UNIT_KEYS := {"none": "menu.skirmish.units_none", "light": "menu.skirmish.units_light",
@@ -30,6 +34,7 @@ var _crates := true
 var _explored := false
 var _fog := true
 var _ai_level := "normal"
+var _ai_strategy := "normal"
 var _code_fields: Array = []
 var _name_edit: LineEdit
 var _preview: Control = null
@@ -328,6 +333,10 @@ func _build_create() -> void:
 	st.add_child(_button(tr("menu.skirmish.ai_difficulty") % tr(AI_LEVEL_KEYS.get(_ai_level, "menu.skirmish.ai_normal")), func():
 		_ai_level = AI_LEVELS[(AI_LEVELS.find(_ai_level) + 1) % AI_LEVELS.size()]
 		_build(), 260, 36))
+	st.add_child(_button(tr("menu.skirmish.ai_strategy") % tr(AI_STRATEGY_KEYS.get(_ai_strategy, "menu.skirmish.strat_normal")), func():
+		var lst: Array = ProtoWorld.AI_STRATEGIES
+		_ai_strategy = str(lst[(lst.find(_ai_strategy) + 1) % lst.size()])
+		_build(), 260, 36))
 
 
 	st.add_child(_button(tr("mp.visibility") % tr("mp.public" if _public else "mp.private"), func():
@@ -381,7 +390,7 @@ func _do_create() -> void:
 	var seats: Array = NetHub.map_seats(slug)
 	_hub.map_slug = slug
 	_hub.settings = {"credits": _credits, "starting_units": _starting_units, "crates": _crates,
-			"explored_map": _explored, "fog": _fog, "ai_level": _ai_level}
+			"explored_map": _explored, "fog": _fog, "ai_level": _ai_level, "ai_strategy": _ai_strategy}
 	_hub.connect_server("", NetClient.configured_name())
 	var public := _public
 	var map_name := _map_title(slug)

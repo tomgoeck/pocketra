@@ -1,14 +1,4 @@
 #!/bin/sh
-# APK (oder andere Dateien) als GitHub-Release-Anhang hochladen — Release TAG anlegen, falls es fehlt,
-# gleichnamige Anhänge ersetzen. Die Website verlinkt IMMER
-#   https://github.com/tomgoeck/pocketra/releases/latest/download/pocketra-dist.apk
-# darum: Anhang immer als pocketra-dist.apk (--as), Release nie als Pre-Release (sonst zählt es
-# nicht als "latest"), und die Notizen in kurzen englischen Sätzen — die Seite zeigt sie unter
-# "What's new" an.
-#   tools/gh_release.sh [--notes "Text" | --notes-file DATEI] [--as NAME] TAG DATEI [DATEI…]
-#   tools/gh_release.sh --notes-file build/update/notes.en.md --as pocketra-dist.apk v0.15 build/redalert-dist.apk
-# Token: Umgebungsvariable GITHUB_TOKEN oder Datei build/github_token (gitignored, nur dieses Repo,
-# Contents: Read and write).
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 REPO="tomgoeck/pocketra"

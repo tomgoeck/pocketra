@@ -24,6 +24,7 @@ const MODE_ADD := Color(1.00, 0.85, 0.15)
 const VOICE_OFF := Color(0.74, 0.72, 0.66)
 const VOICE_TEAM := Color(0.30, 0.88, 0.45)
 const VOICE_ALL := Color(1.00, 0.45, 0.10)
+const VOICE_BLOCKED := Color(0.90, 0.25, 0.22)
 
 
 static var log_overlays := false
@@ -152,9 +153,11 @@ static func volume_row(key: String, label: String, host: Node = null) -> Control
 	style_slider(slider)
 	value.text = "%d %%" % int(round(slider.value * 100.0))
 	slider.value_changed.connect(func(v):
-		var idx := AudioServer.get_bus_index(Sfx.BUSES.get(key, ""))
+
+
+		var idx := AudioServer.get_bus_index(AudioMix.BUSES.get(key, ""))
 		if idx >= 0:
-			AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(v, 0.0001)))
+			AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(v, 0.0001)) + AudioMix.duck_db(key))
 		value.text = "%d %%" % int(round(v * 100.0)))
 	slider.drag_ended.connect(func(_changed): Sfx.set_volume(key, slider.value))
 	row.add_child(name)

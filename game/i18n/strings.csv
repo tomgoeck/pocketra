@@ -22,6 +22,7 @@ toast.attack_move_count,Angriffszug (%d Einheiten),Attack move (%d units)
 toast.no_harvester,Kein Harvester in der Auswahl,No harvester selected
 toast.force_fire_impossible,Zwangsfeuer nicht möglich,Force fire not possible
 toast.guarding,Bewacht: %s,Guarding: %s
+toast.move_next_to,Bewegen neben %s,Moving next to %s
 toast.no_guard_target,Kein Ziel zum Bewachen,No target to guard
 toast.tap_again_to_build,Nochmal tippen zum Bauen,Tap again to build
 toast.sale_cancelled,Verkauf abgebrochen,Sale cancelled
@@ -75,6 +76,8 @@ cmd.all.label,Alle,All
 cmd.all.tip,Alle eigenen Einheiten wählen,Select all own units
 cmd.clear.label,Leer,Clear
 cmd.clear.tip,Auswahl aufheben,Clear selection
+cmd.harv.label,Sammler,Harvest
+cmd.harv.tip,Tipp: Erzsammler zur Basis — doppelt tippen: weitersammeln,Tap: harvesters to base — double tap: back to harvesting
 cmd.base.label,Basis,Base
 cmd.base.tip,Kamera zur Basis,Camera to base
 cmd.event.label,Alarm,Alert
@@ -93,6 +96,7 @@ help.btn.repair,"Reparatur: Gebäude antippen, um die Reparatur ein- oder auszus
 help.btn.add,"Mehr+: die nächste Auswahl zur bestehenden hinzufügen, statt sie zu ersetzen. Solange der Modus läuft, ist der Bildschirmrand gelb.","More+: add the next selection instead of replacing it. While the mode is on, the screen border is yellow."
 help.btn.all,Alle: alle eigenen Einheiten auswählen.,All: select every unit you own.
 help.btn.clear,Leer: Auswahl aufheben.,Clear: deselect everything.
+help.btn.harv,"Erzsammler: Ein Tipp holt alle deine Erzsammler zum nächsten eigenen Bauhof zurück, wo sie daneben warten — gut, wenn ein Erzfeld unter Beschuss liegt. Zweimal kurz hintereinander tippen schickt sie wieder los und sie sammeln weiter.","Harvesters: one tap sends every harvester you own back to your nearest construction yard, where they wait beside it — useful when an ore field is under fire. Tap twice in quick succession to send them out again and resume harvesting."
 help.btn.base,Basis: Kamera zur eigenen Basis springen lassen.,Base: jump the camera to your base.
 help.btn.event,Alarm: Kamera zum letzten Angriff springen lassen.,Alert: jump the camera to the last attack.
 help.btn.sel,Ausw.: Kamera zur aktuellen Auswahl springen lassen.,Sel.: jump the camera to the current selection.
@@ -112,6 +116,7 @@ help.btn.sp_more,"Weitere Superwaffen: gezeigt wird die, die als Nächstes ferti
 toast.add_select,Auswahl erweitern: %s,Add to selection: %s
 word.on,an,on
 word.off,aus,off
+word.auto,Automatisch,Automatic
 toast.all_units_count,Alle Einheiten: %d,All units: %d
 toast.selection_cleared,Auswahl aufgehoben,Selection cleared
 toast.no_event,Kein Ereignis,No event
@@ -121,6 +126,9 @@ word.sell_verb,Verkaufen,Sell
 word.repair_verb,Reparieren,Repair
 toast.mode_off,Modus aus,Mode off
 toast.no_base,Keine Basis,No base
+toast.harv_return,Erzsammler fahren zur Basis: %d,Harvesters returning to base: %d
+toast.harv_resume,Erzsammler sammeln weiter: %d,Harvesters back to harvesting: %d
+toast.no_harvester_owned,Du hast keinen Erzsammler,You have no harvester
 notify.building,Bau begonnen,Building
 notify.building_in_progress,Bau läuft bereits,Unable to comply. Building in progress.
 notify.construction_complete,Gebäude fertig,Construction complete.
@@ -219,6 +227,13 @@ menu.skirmish.ai_difficulty,KI-Stärke: %s,AI strength: %s
 menu.skirmish.ai_easy,Leicht,Easy
 menu.skirmish.ai_normal,Mittel,Normal
 menu.skirmish.ai_hard,Schwer,Hard
+menu.skirmish.ai_strategy,Spielweise: %s,AI style: %s
+menu.skirmish.strat_normal,Normal,Balanced
+menu.skirmish.strat_rush,Ansturm,Rush
+menu.skirmish.strat_turtle,Igel,Turtle
+menu.skirmish.strat_air,Luft,Air
+menu.skirmish.strat_naval,Marine,Navy
+menu.skirmish.strat_random,Zufall,Random
 menu.skirmish.credits,Startgeld: %d,Starting cash: %d
 menu.skirmish.map_info,"%s
 %d Spieler · %s · %d×%d Zellen","%s
@@ -299,10 +314,14 @@ status.power,Strom,Power
 status.power_detail,Bedarf %d · Strom %d,Drain %d · Power %d
 gesture.one_finger.label,Ein Finger,One finger
 gesture.one_finger.desc,gehört immer den Einheiten — nie der Kamera,always controls units — never the camera
-gesture.tap_own.label,Tippen auf eigene Einheit,Tap own unit
+gesture.tap_own.label,Tippen auf eigene Einheit (ohne Auswahl),Tap own unit (nothing selected)
 gesture.tap_own.desc,auswählen,select
+gesture.tap_friendly.label,Tippen auf eigene Einheit (mit Auswahl),Tap own unit (with selection)
+gesture.tap_friendly.desc,"Befehl statt Neuauswahl: einsteigen, reparieren, abladen — sonst bewachen/folgen","order instead of re-select: board, repair, deliver — otherwise guard/follow"
+gesture.tap_own_building.label,Tippen auf eigenes Gebäude (mit Auswahl),Tap own building (with selection)
+gesture.tap_own_building.desc,daneben hinbewegen,move next to it
 gesture.double_tap.label,Doppeltippen,Double-tap
-gesture.double_tap.desc,alle sichtbaren Einheiten desselben Typs,all visible units of the same type
+gesture.double_tap.desc,"Neuauswahl: alle sichtbaren Einheiten desselben Typs, bei einem Gebäude nur dieses","re-select: all visible units of the same type, or just that one building"
 gesture.drag_empty.label,Ziehen auf leerem Boden,Drag on empty ground
 gesture.drag_empty.desc,Auswahlrahmen; am Bildschirmrand schwenkt die Karte mit,selection box; panning at the screen edge scrolls the map
 gesture.tap_ground.label,Tippen auf Boden,Tap ground
@@ -320,7 +339,7 @@ gesture.long_press_empty.desc,Name und Zustand des Objekts darunter,name and sta
 gesture.two_finger_drag.label,Zwei Finger ziehen,Two-finger drag
 gesture.two_finger_drag.desc,Karte schwenken,pan the map
 gesture.three_finger_spread.label,Drei Finger spreizen,Three-finger spread
-gesture.three_finger_spread.desc,zoomen — oder die Knöpfe Zoom + / Zoom - unten links,zoom — or the Zoom + / Zoom - buttons bottom left
+gesture.three_finger_spread.desc,zoomen,zoom in and out
 gesture.minimap.label,Minimap,Minimap
 gesture.minimap.desc,"Tippen springt dorthin, Doppeltippen zur eigenen Basis","tap to jump there, double-tap for your own base"
 gesture.build_bar.label,Bauleiste,Build bar
@@ -329,8 +348,10 @@ gesture.place_building.label,Gebäude setzen,Place building
 gesture.place_building.desc,"Icon tippen, Stelle tippen, dieselbe Stelle nochmal = bauen","tap the icon, tap the spot, tap the same spot again to build"
 gesture.group_column.label,"Gruppenspalte links","Group column, left"
 gesture.group_column.desc,"Tippen wählt, Doppeltippen springt hin, langes Drücken weist zu","tap to select, double-tap to jump there, long press to assign"
+gesture.button_over_enemy.label,Knopf über einem Gegner,Button on top of an enemy
+gesture.button_over_enemy.desc,"erst greift die Auswahl an, danach macht der Knopf sein Eigenes","the selection attacks first, then the button does its own job"
 gesture.bottom_buttons.label,"Knöpfe unten links","Buttons, bottom left"
-gesture.bottom_buttons.desc,"Verkaufen, Reparieren, Auswahl erweitern, alle Einheiten, Basis, Alarm","Sell, repair, add to selection, all units, base, alert"
+gesture.bottom_buttons.desc,"Verkaufen, Reparieren, Auswahl erweitern, alle Einheiten, Erzsammler","Sell, repair, add to selection, all units, harvesters"
 test.build_bar_run,Testlauf: Bauleiste,Test run: build bar
 sp.ironcurtain,Eiserner Vorhang,Iron Curtain
 sp.chronoshift,Chronosphäre,Chronosphere
@@ -618,6 +639,8 @@ mp.voice_intro_tap,"[b]Tippen[/b] auf das Mikrofon: Sprechfunk an das eigene Tea
 mp.voice_intro_hold,"[b]Lang drücken[/b]: offener Kanal an alle im Raum, auch an die Gegner — das Symbol wird orange.","[b]Long press[/b]: open channel to everyone in the room, enemies included — the icon turns orange."
 mp.voice_intro_more,"Nochmal tippen bzw. lang drücken schaltet wieder aus. Gesendet wird nur, solange du wirklich redest. Lautstärke und Aus-Schalter stehen in den Optionen.","Tap or long-press again to switch it off. Audio is only sent while you actually speak. Volume and the off switch are in the options."
 mp.voice_intro_again,Sprechfunk erklären,Explain voice chat
+mp.voice_lobby_hint,Sprechfunk: Tippen = Team · lang drücken = alle,Voice: tap = team · long press = everyone
+mp.voice_mute_seat,Stumm,Mute
 menu.options.mic_probe,Mikrofonprobe,Microphone test
 menu.options.mic_start,Starten,Start
 menu.options.mic_stop,Stoppen,Stop
@@ -637,6 +660,7 @@ toast.mic_no_signal,"Sprechfunk: Freigabe steht, der Eingang bleibt stumm. App e
 toast.mic_too_quiet,Mikrofon zu leise — Sprechfunk sendet nicht.,Microphone too quiet — voice chat is not sending.
 menu.options.radio,Sprechfunk,Voice chat
 menu.options.voice_chat,Sprechfunk benutzen,Use voice chat
+menu.options.headset,Headset angeschlossen,Headset connected
 menu.options.notify,Benachrichtigungen,Notifications
 menu.options.notify_hint,"Meldet, was im Raum passiert, während die App im Hintergrund ist — und hält den Raum so lange offen.","Reports what happens in the room while the app is in the background — and keeps the room open meanwhile."
 menu.options.notify_join,Beitritt,Joins
@@ -649,6 +673,8 @@ toast.voice_all,"Offener Kanal — alle hören mit, auch die Gegner","Open chann
 toast.voice_off,Mikrofon aus,Mic off
 toast.voice_off_setting,Sprechfunk ist in den Optionen abgeschaltet.,Voice chat is switched off in the options.
 toast.voice_no_permission,Ohne Mikrofonfreigabe kein Sprechfunk.,No voice chat without microphone permission.
+toast.voice_no_power,Sprechfunk braucht Strom — Kraftwerk bauen,Radio needs power — build a power plant
+toast.voice_power_back,Sprechfunk wieder da,Radio is back
 pause.players,Spieler,Players
 pause.players_hint,"Farbe, Team und Verhältnis wie in der Lobby; die Zahl nennt die verbliebenen Einheiten und Gebäude.","Colour, team and relationship as in the lobby; the number is the remaining units and buildings."
 pause.players_none,Keine Spielerangaben vorhanden.,No player information available.
@@ -660,3 +686,32 @@ pause.state_defeated,besiegt,defeated
 pause.state_gone,Verbindung weg,disconnected
 pause.state_stalled,keine Antwort,not responding
 mp.voice_audible,hörbar,audible
+toast.paused,Pause,Paused
+toast.resumed,Weiter,Resumed
+toast.no_pause_mp,Im Mehrspieler nicht möglich,Not possible in multiplayer
+keys.title,Tastatur und Maus (PC),Keyboard and mouse (PC)
+keys.rmb,Rechtsklick,Right-click
+keys.attack_move,Angriffsbewegung,Attack move
+keys.guard,Bewachen,Guard
+keys.stop,Anhalten,Stop
+keys.deploy,Entfalten,Deploy
+keys.scatter,Zerstreuen,Scatter
+keys.repair,Reparatur-Modus,Repair mode
+keys.sell,Verkaufs-Modus,Sell mode
+keys.all_units,Alle Einheiten wählen,Select all units
+keys.base,Zum Bauhof / zur Basis,Cycle base
+keys.last_event,Zum letzten Ereignis,To last event
+keys.to_selection,Zur Auswahl,To selection
+keys.groups,"Kontrollgruppe wählen, mit Strg zuweisen","Select control group, assign with Ctrl"
+keys.escape,"Modus verlassen, Auswahl aufheben, Pausenmenü","Leave mode, clear selection, pause menu"
+keys.scroll,Karte schieben,Scroll the map
+keys.zoom_in,Näher heran,Zoom in
+keys.zoom_out,Weiter weg,Zoom out
+keys.zoom_reset,Zoom zurücksetzen,Reset zoom
+keys.fullscreen,Vollbild,Fullscreen
+keys.build_bar,Bauleiste auf/zu,Toggle build bar
+keys.tabs,Bauleisten-Reiter,Build bar tabs
+keys.pause,Pause,Pause
+keys.music,Musik an/aus,Toggle music
+keys.right_click,"Auf der Karte: Auswahl aufheben, Modus verlassen","On the map: clear selection, leave mode"
+keys.right_click_build,"In der Bauleiste: anhalten, nochmal abbrechen","In the build bar: hold, again to cancel"

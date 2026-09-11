@@ -1,58 +1,9 @@
-# Bewusste Balance-Abweichungen von OpenRA (Toms Handtest 2026-09-04, docs/ARCHITEKTUR.md §3a).
-# Von tools/rules2json.py NACH der Extraktion aus reference/OpenRA angewandt (apply_balance_overrides
-# in rules2json.py) — die Originalregeln bleiben in reference/OpenRA unangetastet. Format wie
-# OpenRA-MiniYAML (Tabs), Werte wie dort: WDist als "5c512" (5 Zellen + 512/1024), sonst Ganzzahl.
-# Reichweitenkreis und Infokarte lesen rules.json, ziehen die Abweichung also automatisch.
 weapons:
-	# 155mm (ARTY): OpenRA erbt Range 12c0 von ^Artillery (ballistics.yaml:94), MinRange bleibt 4c0
-	# (ballistics.yaml:117). Um ~0,5 Zellen gesenkt — v2rl (Weapon v2rocket) bewusst NICHT angefasst.
 	155mm:
 		Range: 11c512
-	# atomic (Superwaffe Atombombe, superweapons.yaml): OpenRA-exakt nachgerechnet — fünf
-	# SpreadDamage-Sprengköpfe (Spread 1c0…5c0, Delay 0/5/10/15/20), Falloff 1000/368/135/50/18/7/0
-	# (die 1000 ist ein Faktor 10, kein Tippfehler) und Versus je Ring. Im Zentrum sind das 390 000
-	# Rohschaden gegen einen Gegner ohne Rüstung, sim/tests/test_sim.cpp test_nuke_falloff_rings()
-	# prüft jeden Ring gegen die Formel. Tom fand das am Gerät „einen Ticken zu krass" (Handtest
-	# 2026-09-04, nachdem eine frühere Fassung nur den ersten Sprengkopf gezählt hatte und deutlich zu
-	# schwach war) — deshalb hier bewusst 15 % weniger auf allen fünf Sprengköpfen. Die Form der Kurve
-	# bleibt dieselbe, nur die Höhe sinkt.
 	atomic:
 		DamagePercent: 85
-# Schalter, die eine ganze Actor-Gruppe betreffen (apply_actor_balance in rules2json.py, wird auch
-# von mapconvert.py je Karten-Delta aufgerufen).
 rules:
-	# Tanya und Volkov (Demolition, infantry.yaml:424-426) sprengen bei uns auch Fahrzeuge, nicht
-	# nur Gebäude: jedes ^Vehicle bekommt `Demolishable`. Das ist keine Erfindung — OpenRA schaltet
-	# genau das in mods/ra/rules/campaign-rules.yaml:73-74 („^Vehicle: Demolishable:") für **alle**
-	# Kampagnenkarten frei; nur im Gefecht bleibt es aus, weil defaults.yaml:724/759 `Demolishable`
-	# allein an ^BasicBuilding/^Building hängt. Toms Handtest 2026-09-06: „Wenn ich mit Tanya auf
-	# einen Panzer tippe … das brauchen Tanya und Volkov zum Sprengen." Ohne den Schalter bleibt der
-	# Tipp auf einen Gegnerpanzer ein Angriffsbefehl mit der Colt45, deren ValidTargets
-	# (smallcaliber.yaml:305 „Ground, Infantry, Barrel") ein Fahrzeug gar nicht treffen — Tanya
-	# rennt hinterher und schießt nie. Flugzeuge (^Aircraft) und Schiffe bleiben außen vor.
 	c4_vehicles: true
-	# Brücken (BRIDGE1/2, BR1-BR3, SBRIDGE1-4) bekommen `Demolishable`, damit Tanya und Volkov
-	# einen Brückenabschnitt sprengen können. In OpenRA trägt nicht die Spanne den C4-Zieltyp,
-	# sondern die **Brückenhütte** am Ufer (civilian.yaml:760-782 BRIDGEHUT mit
-	# `LegacyBridgeHut:` und `TargetTypes: BridgeHut, C4`); sie entsteht dort als FreeActor@north/
-	# @south der Brücke, und LegacyBridgeHut.Demolish (LegacyBridgeHut.cs:57-72) reicht den
-	# Auftrag an alle Spannen zwischen zwei Hütten weiter. Unsere Brückenschicht
-	# (proto_world.gd _build_bridges) erzeugt die Actors aus den Kartenkacheln und kennt keine
-	# Hütten — deshalb ist die Spanne selbst das Ziel. Damit ein gewöhnlicher Marschbefehl über
-	# die Brücke sie nicht sprengt (OpenRA: `^Bridge` hat `RequiresForceFire: true`, und der
-	# Targeter beachtet ForceMove), geht der Befehl allein über den Langdruck-Ring. Toms Frage
-	# 2026-09-07: „Kann man mit Einheiten Brücken zerstören? Tanya sollte das ja auch können."
 	c4_bridges: true
-	# Chronopanzer (ctnk): Sprungweite unbegrenzt statt PortableChrono.MaxDistance 12 Zellen. Das ist
-	# kein neues Feld, sondern OpenRAs eigener Schalter `PortableChrono.HasDistanceLimit`
-	# (OpenRA.Mods.Cnc/Traits/PortableChrono.cs:30) auf false: ResolveOrder (:137) gibt dann
-	# `maxDistance = null` weiter — kein MoveWithinRange-Anlauf, Teleport.ChooseBestDestinationCell
-	# (Teleport.cs:117-125) klemmt nicht mehr auf den Kreis, RenderAnnotations (:264) zeichnet keinen
-	# Reichweitenkreis. Umgesetzt als `portable_chrono.max_distance: 0` in rules.json; die Sim
-	# behandelt 0 als „ohne Begrenzung" (sim/src/actors/deploy.cpp order_chrono).
-	# Grund (Toms Handtest 2026-09-07: „Chronopanzer springt nur kurze Distanzen. Konnte der nicht
-	# übers ganze Spielfeld springen?"): im Originalspiel Red Alert / Aftermath sprang der
-	# Chronopanzer ohne Reichweitenbegrenzung, gebremst allein durch die Abklingzeit. Die bleibt
-	# unverändert bei ChargeDelay 250 Ticks. Die Zielzelle muss weiter begehbar sein — sonst nimmt
-	# die Sim wie OpenRA die nächste freie Zelle, und findet sich gar keine, entfällt der Sprung.
 	chrono_unlimited: true

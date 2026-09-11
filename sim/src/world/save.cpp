@@ -26,7 +26,7 @@ namespace {
 constexpr uint32_t SAVE_MAGIC = 0x5653'4152u;
 
 
-constexpr uint32_t SAVE_VERSION = 7;
+constexpr uint32_t SAVE_VERSION = 8;
 
 
 enum Section : uint32_t {
@@ -321,6 +321,10 @@ template <class V> void visit_fields(V& v, Harvest& h) {
     v(h.state); v(h.automated); v(h.bales); v(h.bale_value); v(h.target); v(h.claim);
     v(h.has_last); v(h.last_cell); v(h.has_order); v(h.order_cell);
     v(h.proc); v(h.linked_proc); v(h.timer); v(h.anim);
+
+
+    v(h.dock_held); v(h.park); v(h.queue_tick); v(h.wait_cell); v(h.has_wait);
+    v(h.avoid_cell); v(h.has_avoid); v(h.fails); v(h.blind);
 }
 
 template <class V> void visit_fields(V& v, QueuedOrder& o) {
@@ -382,6 +386,15 @@ template <class V> void visit_fields(V& v, BotParams& p) {
     v(p.protect_unit_scan_radius); v(p.idle_scan_radius); v(p.danger_scan_radius); v(p.attack_scan_radius);
     v(p.protection_scan_radius);
     v(p.building_fraction); v(p.building_limit); v(p.building_delay); v(p.unit_share); v(p.unit_limit);
+
+
+    v(p.personality); v(p.strategy_interval); v(p.plan_weight);
+    v(p.threat_map_interval); v(p.threat_map_side);
+    v(p.target_value_weight); v(p.target_distance_bias); v(p.target_threat_weight);
+    v(p.sp_scan_interval); v(p.sp_coarse_step); v(p.sp_fine_step); v(p.sp_check_radius); v(p.sp_own_penalty);
+    v(p.nuke_min_attractiveness); v(p.iron_min_attractiveness); v(p.chrono_min_attractiveness);
+    v(p.air_squad_size); v(p.air_danger_radius); v(p.aa_per_unit);
+    v(p.raid_squad_size); v(p.raid_interval); v(p.siege_range_percent); v(p.first_attack_tick);
 }
 
 template <class V> void visit_fields(V& v, BotSquad& s) {
@@ -420,6 +433,14 @@ template <class V> void visit_fields(V& v, BotState& b) {
     v(b.resource_conyard_center); v(b.best_resource_ticks); v(b.sell_refinery_ticks);
     v(b.requested_refineries); v(b.repair_all_tick); v(b.defense_center);
     v(b.harv_respond_cooldown); v(b.mcv_respond_cooldown); v(b.rally_ticks);
+
+
+    v(b.personality); v(b.plan); v(b.plan_score);
+    v(b.strategy_ticks); v(b.raid_ticks); v(b.threat_ticks);
+    v(b.sp_wait);
+    v(b.threat_enemy); v(b.threat_friendly);
+    v(b.tm_cols); v(b.tm_rows); v(b.tm_side);
+    v(b.stat_units_built); v(b.stat_sp_fired); v(b.stat_squads_sent); v(b.stat_first_attack);
 }
 
 template <class V> void visit_fields(V& v, PlayerState& p) {
@@ -928,6 +949,9 @@ bool World::load(const std::vector<uint8_t>& in) {
     cell_slots_.resize(cells * CELL_SLOTS, -1);
     bib_owner_.resize(cells, -1);
     claims_.resize(cells, -1);
+
+
+    rebuild_res_blocks();
     for (auto& vis : vis_) vis.resize(cells, 0);
 
     for (auto& seen : explored_) if (!seen.empty()) seen.resize(cells, 0);

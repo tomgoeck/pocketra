@@ -212,15 +212,19 @@ func change_map(map_slug: String, map_sha: String, seats: int, settings: Diction
 	send(m)
 
 
-func set_slot(faction: String, team: int, color: int, spawn: int, seat: int = -1) -> void:
+func set_slot(faction: String, team: int, color: int, spawn: int, seat: int = -1, strategy: String = "") -> void:
 	var m := {"t": "slot", "faction": faction, "team": team, "color": color, "spawn": spawn}
 	if seat >= 0:
 		m["seat"] = seat
+
+
+	if strategy != "":
+		m["strategy"] = strategy
 	send(m)
 
 
-func add_bot(level: String, faction: String, team: int) -> void:
-	send({"t": "bot", "op": "add", "level": level, "faction": faction, "team": team})
+func add_bot(level: String, faction: String, team: int, strategy: String = "normal") -> void:
+	send({"t": "bot", "op": "add", "level": level, "faction": faction, "team": team, "strategy": strategy})
 
 
 func remove_bot(seat: int) -> void:

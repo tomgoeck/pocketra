@@ -31,6 +31,13 @@ void World::enable_bot(int32_t owner, const BotParams& p) {
     b = BotState();
     b.enabled = true;
     b.p = p;
+
+
+    b.personality = p.personality;
+    if (b.personality < 0 || b.personality >= BOT_P_RANDOM) {
+        b.personality = int32_t(rand() % uint32_t(BOT_P_RANDOM));
+        bot_apply_personality(b.p, b.personality);
+    }
     b.min_excess_power = p.min_excess_power;
     b.rush_ticks = p.rush_interval - p.rush_interval / 20 + int32_t(rand() % uint32_t(std::max(1, p.rush_interval / 10)));
     b.assign_roles_ticks = int32_t(rand() % uint32_t(std::max(1, p.assign_roles_interval)));
@@ -44,6 +51,11 @@ void World::enable_bot(int32_t owner, const BotParams& p) {
     b.rmap_ticks = int32_t(rand() % uint32_t(std::max(1, p.update_resource_map_interval)));
     b.mcv_scan_ticks = p.mcv_scan_interval + int32_t(rand() % uint32_t(std::max(1, p.mcv_scan_interval)));
     b.mcv_ticks = p.build_mcv_interval + int32_t(rand() % uint32_t(std::max(1, p.build_mcv_interval)));
+
+
+    b.strategy_ticks = 1 + int32_t(rand() % uint32_t(std::max(1, b.p.strategy_interval)));
+    b.threat_ticks = 1 + int32_t(rand() % uint32_t(std::max(1, b.p.threat_map_interval)));
+    b.raid_ticks = b.p.raid_interval > 0 ? 1 + int32_t(rand() % uint32_t(std::max(1, b.p.raid_interval))) : 1;
 
     for (size_t i = 0; i < actors_.size(); ++i) {
         if (actors_[i].owner == owner) combats_[i].stance = STANCE_ATTACK_ANYTHING;
@@ -648,7 +660,13 @@ void World::bot_tick(int32_t owner) {
     bot_unit_builder(owner);
     bot_harvesters(owner);
     bot_low_effect_harvesters(owner);
+
+
+    bot_threat_map(owner);
+    bot_strategy(owner);
+    bot_support_powers(owner);
     bot_squads(owner);
+    bot_raid_squads(owner);
 }
 
 
@@ -1064,7 +1082,9 @@ void World::bot_unit_builder(int32_t owner) {
     if (credits(owner) < p.unit_min_cash || refineries < p.initial_min_refineries) return;
     if (++b.unit_ticks % std::max(1, p.unit_feedback_time) != 0) return;
 
-    static const int32_t UNIT_QUEUES[] = {QUEUE_VEHICLE, QUEUE_INFANTRY};
+
+    static const int32_t UNIT_QUEUES[] = {QUEUE_VEHICLE, QUEUE_INFANTRY, QUEUE_AIRCRAFT};
+    constexpr int NUM_UNIT_QUEUES = 3;
 
     if (!b.build_requests.empty()) {
         const int32_t type = b.build_requests.front();
@@ -1072,13 +1092,15 @@ void World::bot_unit_builder(int32_t owner) {
         const int32_t kind = types_[type].queue_kind;
         if (kind >= 0 && players_[owner].queues[kind].empty()) queue_build(owner, type);
     }
-    for (int i = 0; i < 2; ++i) {
-        b.queue_index = (b.queue_index + 1) % 2;
+
+
+    for (int i = 0; i < NUM_UNIT_QUEUES; ++i) {
+        b.queue_index = (b.queue_index + 1) % NUM_UNIT_QUEUES;
         const int32_t kind = UNIT_QUEUES[b.queue_index];
         if (find_producer(owner, kind) < 0) continue;
-        if (!players_[owner].queues[kind].empty()) break;
+        if (!players_[owner].queues[kind].empty()) continue;
         const int32_t unit = bot_choose_unit(owner, kind);
-        if (unit >= 0) queue_build(owner, unit);
+        if (unit >= 0 && queue_build(owner, unit)) ++b.stat_units_built;
         break;
     }
 }
@@ -1411,7 +1433,11 @@ void World::bot_squads(int32_t owner) {
     if (--b.attack_force_ticks <= 0) {
         b.attack_force_ticks = p.attack_force_interval;
         for (size_t i = 0; i < b.squads.size(); ++i) {
-            if (!b.squads[i].units.empty()) bot_update_squad(owner, b.squads[i]);
+            if (b.squads[i].units.empty()) continue;
+
+            if (b.squads[i].type == BotSquad::AIR) bot_update_air_squad(owner, b.squads[i]);
+            else if (b.squads[i].type == BotSquad::RAID) bot_update_raid_squad(owner, b.squads[i]);
+            else bot_update_squad(owner, b.squads[i]);
         }
         b.squads.erase(std::remove_if(b.squads.begin(), b.squads.end(), [](const BotSquad& s) { return s.dead || s.units.empty(); }), b.squads.end());
     }
@@ -1419,12 +1445,16 @@ void World::bot_squads(int32_t owner) {
 
     if (--b.assign_roles_ticks <= 0) {
         b.assign_roles_ticks = p.assign_roles_interval;
+
+
+        bot_air_squads(owner);
         for (const Actor& a : actors_) {
             if (!a.alive || a.owner != owner) continue;
             const UnitType& t = types_[a.type];
 
 
             if (t.building || t.harvester || t.transforms_into >= 0 || t.exclude_from_squads || t.husk) continue;
+            if (t.aircraft) continue;
             if (std::find(b.active_units.begin(), b.active_units.end(), a.id) != b.active_units.end()) continue;
             b.idle_base_units.push_back(a.id);
             b.active_units.push_back(a.id);
@@ -1434,13 +1464,16 @@ void World::bot_squads(int32_t owner) {
 
     if (--b.min_attack_force_delay_ticks <= 0) {
         b.min_attack_force_delay_ticks = p.min_attack_force_delay;
-        const size_t randomized = size_t(p.squad_size) + (p.squad_size_random_bonus > 0 ? rand() % uint32_t(p.squad_size_random_bonus) : 0);
-        if (b.idle_base_units.size() >= randomized) {
+        const size_t randomized = size_t(bot_plan_squad_size(owner)) +
+            (p.squad_size_random_bonus > 0 ? rand() % uint32_t(p.squad_size_random_bonus) : 0);
+        if (b.idle_base_units.size() >= randomized && int32_t(tick_) >= p.first_attack_tick) {
             BotSquad ns;
             ns.type = BotSquad::ASSAULT;
             ns.units = b.idle_base_units;
             b.idle_base_units.clear();
             b.squads.push_back(ns);
+            ++b.stat_squads_sent;
+            if (b.stat_first_attack == 0) b.stat_first_attack = tick_;
         }
     }
 
@@ -1507,15 +1540,9 @@ void World::bot_update_squad(int32_t owner, BotSquad& s) {
     const int li = index_of(s.leader);
     if (li < 0) return;
 
+
     auto closest_enemy = [&](WVec from, int64_t radius) -> int32_t {
-        int32_t best_id = -1;
-        int64_t best = radius > 0 ? radius : INT64_MAX;
-        for (size_t i = 0; i < actors_.size(); ++i) {
-            if (!is_enemy(int(i))) continue;
-            const int64_t d = length(actors_[i].pos - from);
-            if (d <= best) { best = d; best_id = actors_[i].id; }
-        }
-        return best_id;
+        return bot_pick_target(owner, from, radius, true);
     };
     auto enemies_near = [&](WVec at, int32_t radius_cells, bool armed_only) {
         std::vector<int32_t> out;
@@ -1653,6 +1680,9 @@ void World::bot_update_squad(int32_t owner, BotSquad& s) {
                 attack_move_all(target_cell());
             }
         }
+
+
+        bot_squad_siege(owner, s);
         if (should_flee()) flee();
         break;
     }
@@ -1671,6 +1701,7 @@ void World::bot_update_squad(int32_t owner, BotSquad& s) {
             if (i >= 0 && combats_[i].target < 0) free_units.push_back(id);
         }
         if (!free_units.empty()) order_attack_move(free_units.data(), free_units.size(), target_cell());
+        bot_squad_siege(owner, s);
         if (should_flee()) flee();
         break;
     }

@@ -12,7 +12,7 @@ tutorial-obj-infantry,Bilde 3 Schützen (E1) in der Kaserne aus.
 tutorial-obj-group-assign,"Wähle deine drei Schützen (Rahmen um sie ziehen) und halte dann die 1 lange gedrückt, um sie als Gruppe zu speichern."
 tutorial-obj-group-select,"Tippe kurz auf die 1, um die gespeicherte Gruppe wieder auszuwählen."
 tutorial-obj-turret,Baue einen Bunker zur Verteidigung.
-tutorial-ui-cmdbar-intro,Die Knopfleiste neben der Minimap hat zehn schnelle Befehle — probiere sie aus.
+tutorial-ui-cmdbar-intro,Die Knopfleiste neben der Minimap hat fünf schnelle Befehle — probiere sie aus.
 tutorial-ui-cmd-sell,"Verkaufe NUR den Bunker: Verkauf antippen, dann den Bunker antippen."
 tutorial-ui-cmd-repair,"Der Bunker ist beschädigt. Tippe Reparatur an, dann den Bunker, um ihn automatisch heilen zu lassen."
 tutorial-ui-cmd-clear,"Tippe Leer an, um die ganze Auswahl aufzuheben."
@@ -22,7 +22,7 @@ tutorial-ui-cmd-all,"Tippe Alle an — das wählt alle Kampfeinheiten, Sammler b
 tutorial-ui-cmd-base,"Tippe Basis an, um mit der Kamera zu deinem Bauhof zu springen."
 tutorial-ui-cmd-event,"Alarm springt zum letzten Ereignis, das deine Aufmerksamkeit brauchte."
 tutorial-ui-cmd-sel,"Tippe Ausw. an, um mit der Kamera zu deiner aktuellen Auswahl zu springen."
-tutorial-ui-cmd-zoom,Zoome mit drei auseinandergezogenen Fingern oder den Zoomknöpfen +/− — ändere jetzt die Ansicht.
+tutorial-ui-cmd-zoom,Zoome mit drei auseinandergezogenen Fingern — ändere jetzt die Ansicht.
 tutorial-obj-warfactory,Baue eine Waffenfabrik.
 tutorial-obj-tanks,Baue 2 leichte Panzer (1TNK).
 tutorial-ui-superweapons,"Hier würde ein Superwaffen-Panel erscheinen, sobald du eine baust — in diesem Tutorial keine."

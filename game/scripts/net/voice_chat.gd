@@ -27,6 +27,7 @@ const OPEN_FACTOR := 2.5
 const OPEN_MIN := 0.0030
 const OPEN_MAX := 0.0150
 const CLOSE_RATIO := 0.6
+const OPEN_NO_HEADSET := 1.6
 const GATE_HANG := 0.45
 
 
@@ -69,6 +70,9 @@ var test_tone := false
 
 var probe := false
 var muted_seats := {}
+
+
+var receive_muted := false
 
 
 var stat_frames := 0
@@ -203,7 +207,7 @@ func _on_permission_result(permission: String, granted: bool) -> void:
 			_start_capture()
 	else:
 		mode = Mode.OFF
-		mode_changed.emit(mode)
+		_announce_mode()
 		permission_denied.emit()
 
 
@@ -222,16 +226,22 @@ func set_mode(new_mode: int) -> int:
 		return mode
 	if new_mode != Mode.OFF and not test_tone and not request_permission():
 
+
 		mode = new_mode
-		mode_changed.emit(mode)
+		_announce_mode()
 		return mode
 	mode = new_mode
 	if mode == Mode.OFF:
 		_stop_capture()
 	else:
 		_start_capture()
-	mode_changed.emit(mode)
+	_announce_mode()
 	return mode
+
+
+func _announce_mode() -> void:
+	AudioMix.set_voice_active(mode != Mode.OFF)
+	mode_changed.emit(mode)
 
 
 func scope() -> String:
@@ -255,7 +265,8 @@ func noise_floor() -> float:
 
 
 func open_threshold() -> float:
-	return clampf(_noise * OPEN_FACTOR, OPEN_MIN, OPEN_MAX)
+	var f := OPEN_FACTOR * (1.0 if AudioMix.headset() else OPEN_NO_HEADSET)
+	return clampf(_noise * f, OPEN_MIN * (1.0 if AudioMix.headset() else OPEN_NO_HEADSET), OPEN_MAX)
 
 
 func close_threshold() -> float:
@@ -371,6 +382,15 @@ func set_muted(seat: int, on: bool) -> void:
 
 func is_muted(seat: int) -> bool:
 	return muted_seats.has(seat)
+
+
+func mute_receive(on: bool) -> void:
+	if on == receive_muted:
+		return
+	receive_muted = on
+	if on:
+		for seat in _voices.keys():
+			_drop_voice(int(seat))
 
 
 func _ensure_record_bus() -> int:
@@ -798,7 +818,7 @@ static func test_packet(freq: float = 300.0) -> String:
 
 
 func on_packet(line: Dictionary) -> void:
-	if not enabled():
+	if not enabled() or receive_muted:
 		return
 	var seat := int(line.get("seat", -1))
 	if seat < 0 or muted_seats.has(seat):
@@ -893,6 +913,7 @@ func _drop_voice(seat: int) -> void:
 
 func shutdown() -> void:
 	set_mode(Mode.OFF)
+	mute_receive(false)
 	for seat in _voices.keys():
 		_drop_voice(int(seat))
 	_speaking.clear()

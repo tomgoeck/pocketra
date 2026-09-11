@@ -29,6 +29,10 @@ const OP_LAND := 22
 const OP_PARADROP := 23
 const OP_SET_STANCE := 24
 
+
+const OP_HARVESTERS_RETURN := 25
+const OP_HARVESTERS_RESUME := 26
+
 const OP_QUEUE_BUILD := 30
 const OP_CANCEL_BUILD := 31
 const OP_PAUSE_BUILD := 32
@@ -50,7 +54,8 @@ const NAMES := {
 	6: "guard", 7: "harvest", 8: "deliver", 9: "deploy", 10: "enter", 11: "capture",
 	12: "demolish", 13: "infiltrate", 14: "disguise", 15: "enter_transport", 16: "unload",
 	17: "lay_mine", 18: "detonate", 19: "chrono", 20: "repair", 21: "resupply", 22: "land",
-	23: "paradrop", 24: "set_stance", 30: "queue_build", 31: "cancel_build", 32: "pause_build",
+	23: "paradrop", 24: "set_stance", 25: "harvesters_return", 26: "harvesters_resume",
+	30: "queue_build", 31: "cancel_build", 32: "pause_build",
 	33: "place_building", 34: "sell", 35: "toggle_repair", 36: "set_rally", 37: "set_primary",
 	40: "support_power", 50: "surrender",
 }
@@ -113,6 +118,15 @@ static func apply(sim, player: int, cmd: PackedInt32Array):
 	if sim.has_method("apply_order"):
 		return sim.apply_order(player, cmd)
 	return _apply_legacy(sim, player, cmd)
+
+
+static func _apply_harvesters(sim, player: int, op: int) -> bool:
+	var name := "order_harvesters_return_to_base" if op == OP_HARVESTERS_RETURN else "order_harvesters_resume"
+	if not sim.has_method(name):
+		print("NetOrders: %s fehlt in der Sim — Befehl verworfen (Spieler %d)" % [name, player])
+		return false
+	sim.call(name, player)
+	return true
 
 
 static func _apply_legacy(sim, player: int, cmd: PackedInt32Array):
@@ -199,6 +213,10 @@ static func _apply_legacy(sim, player: int, cmd: PackedInt32Array):
 		OP_SET_STANCE:
 			if one >= 0:
 				sim.set_stance(one, a)
+		OP_HARVESTERS_RETURN, OP_HARVESTERS_RESUME:
+
+
+			return _apply_harvesters(sim, player, op)
 		OP_QUEUE_BUILD:
 			return sim.queue_build(player, a)
 		OP_CANCEL_BUILD:

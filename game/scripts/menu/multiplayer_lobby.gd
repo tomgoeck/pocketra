@@ -5,6 +5,7 @@ extends VBoxContainer
 const NetHub := preload("res://scripts/net/net_hub.gd")
 const ChatPanel := preload("res://scripts/ui/chat_panel.gd")
 const MapPreview := preload("res://scripts/ui/map_preview.gd")
+const VoiceChat := preload("res://scripts/net/voice_chat.gd")
 
 signal leave_pressed()
 
@@ -25,6 +26,11 @@ var _chat = null
 var _my_ready := false
 
 
+var _mic_btn: Button = null
+var _mic_lbl: Label = null
+var _speak_lbl: RichTextLabel = null
+
+
 func _ready() -> void:
 	add_theme_constant_override("separation", int(Dp.px(6)))
 	_hub = NetHub.hub()
@@ -33,7 +39,25 @@ func _ready() -> void:
 			_hub.lobby_changed.connect(_on_lobby)
 		if not _hub.state_changed.is_connected(_on_state):
 			_hub.state_changed.connect(_on_state)
+		var v := _voice()
+		if v != null:
+			if not v.speaking_changed.is_connected(_on_speaking):
+				v.speaking_changed.connect(_on_speaking)
+			if not v.mode_changed.is_connected(_on_voice_mode):
+				v.mode_changed.connect(_on_voice_mode)
 	_build()
+
+
+func _exit_tree() -> void:
+
+
+	var v = _hub.voice if _hub != null else null
+	if v == null:
+		return
+	if v.speaking_changed.is_connected(_on_speaking):
+		v.speaking_changed.disconnect(_on_speaking)
+	if v.mode_changed.is_connected(_on_voice_mode):
+		v.mode_changed.disconnect(_on_voice_mode)
 
 
 func _card(head_text: String, parent: Node) -> VBoxContainer:
@@ -132,6 +156,7 @@ func _build() -> void:
 	split.add_child(left)
 
 	var chatbox := _card(tr("mp.chat_log"), split)
+	chatbox.add_child(_voice_row())
 	_chat = ChatPanel.new()
 	_chat.history_rows = 6
 	_chat.draw_background = false
@@ -168,6 +193,106 @@ func _btn(text: String, cb: Callable, w: float, h: float) -> Button:
 	b.pressed.connect(func(): Sfx.click(self))
 	b.pressed.connect(cb)
 	return b
+
+
+func _voice() -> Node:
+	return _hub.ensure_voice() if _hub != null else null
+
+
+func _voice_row() -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", int(Dp.px(6)))
+	_mic_btn = Button.new()
+	_mic_btn.icon = HudTheme.mic_icon()
+	_mic_btn.expand_icon = true
+	_mic_btn.custom_minimum_size = Vector2(Dp.px(38), Dp.px(38))
+	_mic_btn.tooltip_text = tr("cmd.mic.tip")
+	HudTheme.style_icon_button(_mic_btn)
+	HudTheme.wire_tap_hold(_mic_btn, func(): _toggle_mic(false), func(): _toggle_mic(true))
+	row.add_child(_mic_btn)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 0)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_mic_lbl = Label.new()
+	_mic_lbl.text = tr("mp.voice_lobby_hint")
+	_mic_lbl.add_theme_font_size_override("font_size", int(Dp.px(10)))
+	_mic_lbl.add_theme_color_override("font_color", HudTheme.TEXT_DIM)
+	_mic_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(_mic_lbl)
+	_speak_lbl = RichTextLabel.new()
+	_speak_lbl.bbcode_enabled = true
+	_speak_lbl.fit_content = true
+	_speak_lbl.scroll_active = false
+	_speak_lbl.visible = false
+	_speak_lbl.add_theme_font_size_override("normal_font_size", int(Dp.px(11)))
+	col.add_child(_speak_lbl)
+	row.add_child(col)
+	_update_mic_button()
+	return row
+
+
+func _toggle_mic(open_channel: bool) -> void:
+	var v := _voice()
+	if v == null:
+		return
+	Sfx.click(self)
+	if not VoiceChat.enabled():
+		_hint.text = tr("toast.voice_off_setting")
+		return
+	if open_channel:
+		v.toggle_all()
+	else:
+		v.toggle_team()
+	_update_mic_button()
+
+
+func _on_voice_mode(_mode: int) -> void:
+	_update_mic_button()
+
+
+func _update_mic_button() -> void:
+	if _mic_btn == null:
+		return
+	var v := _voice()
+	var m: int = int(v.mode) if v != null else int(VoiceChat.Mode.OFF)
+	var col := HudTheme.VOICE_OFF
+	var text := tr("mp.voice_lobby_hint")
+	if m == VoiceChat.Mode.TEAM:
+		col = HudTheme.VOICE_TEAM
+		text = tr("mp.voice_team")
+	elif m == VoiceChat.Mode.ALL:
+		col = HudTheme.VOICE_ALL
+		text = tr("mp.voice_all")
+	for state in ["icon_normal_color", "icon_hover_color", "icon_focus_color"]:
+		_mic_btn.add_theme_color_override(state, col)
+	_mic_btn.add_theme_color_override("icon_pressed_color", col.darkened(0.3))
+	_mic_btn.modulate = Color(1, 1, 1, 1.0 if m != VoiceChat.Mode.OFF else HudTheme.ICON_BUTTON_ALPHA)
+	if _mic_lbl != null:
+		_mic_lbl.text = text
+		_mic_lbl.add_theme_color_override("font_color",
+				col if m != VoiceChat.Mode.OFF else HudTheme.TEXT_DIM)
+
+
+func _on_speaking(_seat: int, _on: bool) -> void:
+	_refresh_speakers()
+
+
+func _refresh_speakers() -> void:
+	if _speak_lbl == null:
+		return
+	var v := _voice()
+	if v == null:
+		_speak_lbl.visible = false
+		return
+	var out: Array = []
+	for seat in v.speaking_seats():
+		var info: Dictionary = v.speaker_info(int(seat))
+		var col: Color = ChatPanel.player_color(int(info.get("color", 0)))
+		var mark := tr("mp.voice_all_mark") if str(info.get("scope", "team")) == "all" else ""
+		out.append("[color=#%s]%s %s%s[/color]" % [col.to_html(false), tr("mp.voice_speaking"),
+				str(info.get("name", "?")), mark])
+	_speak_lbl.text = "\n".join(PackedStringArray(out))
+	_speak_lbl.visible = not out.is_empty()
 
 
 func _toggle_visibility() -> void:
@@ -221,8 +346,9 @@ func refresh() -> void:
 			all_ready = false
 	if _hub.host and clients.size() < usable:
 		var level: String = str(_hub.settings.get("ai_level", "normal"))
+		var strat: String = str(_hub.settings.get("ai_strategy", "normal"))
 		var add := _btn(tr("mp.add_bot"), func():
-			_hub.client.add_bot(level, "random", 0), 160, 34)
+			_hub.client.add_bot(level, "random", 0, strat), 160, 34)
 		_rows.add_child(add)
 
 
@@ -430,7 +556,8 @@ func _seat_row(c: Dictionary) -> Control:
 					edit_seat)))
 		row.add_child(_cycle(team_text, true, func():
 			_hub.client.set_slot(str(c.get("faction", "random")), (team + 1) % 5,
-					int(c.get("color", 0)), int(c.get("spawn", -1)), edit_seat)))
+					int(c.get("color", 0)), int(c.get("spawn", -1)), edit_seat,
+					str(c.get("strategy", "")) if is_bot else "")))
 	else:
 		row.add_child(_value(faction_text, 92.0, HudTheme.TEXT))
 		row.add_child(_value(team_text, 92.0, HudTheme.GOLD if team > 0 else HudTheme.TEXT_DIM))
@@ -438,6 +565,24 @@ func _seat_row(c: Dictionary) -> Control:
 
 	if mine:
 		row.add_child(_cycle(spawn_text, true, _zoom_map, 116.0))
+	elif is_bot:
+
+
+		var cur := str(c.get("strategy", "normal"))
+		var cur_key := "menu.skirmish.strat_" + cur
+		var cur_txt := tr(cur_key)
+		if cur_txt == cur_key:
+			cur_txt = cur
+		if _hub.host:
+
+			var next_strategy := func():
+				var lst: Array = ProtoWorld.AI_STRATEGIES
+				var nxt: String = str(lst[(lst.find(cur) + 1) % lst.size()])
+				_hub.client.set_slot(str(c.get("faction", "random")), int(c.get("team", 0)),
+						int(c.get("color", 0)), int(c.get("spawn", -1)), seat, nxt)
+			row.add_child(_cycle(cur_txt, true, next_strategy, 116.0))
+		else:
+			row.add_child(_value(cur_txt, 116.0, HudTheme.TEXT))
 	else:
 		row.add_child(_value(spawn_text, 116.0, HudTheme.TEXT if spawn >= 0 else HudTheme.TEXT_DIM))
 	var ready_lbl := Label.new()
@@ -455,6 +600,26 @@ func _seat_row(c: Dictionary) -> Control:
 	ping_lbl.add_theme_font_size_override("font_size", int(Dp.px(11)))
 	ping_lbl.add_theme_color_override("font_color", HudTheme.TEXT_DIM)
 	row.add_child(ping_lbl)
+
+
+	var v_mute := _voice()
+	if v_mute != null and not mine and not is_bot:
+		var muted: bool = bool(v_mute.is_muted(seat))
+		var mute_btn := Button.new()
+		mute_btn.text = "🔇" if muted else "🔊"
+		mute_btn.tooltip_text = tr("mp.voice_mute_seat")
+		mute_btn.custom_minimum_size = Vector2(Dp.px(34), Dp.px(30))
+		HudTheme.plate_button_style(mute_btn, 12.0, 6.0)
+		mute_btn.add_theme_color_override("font_color",
+				HudTheme.VOICE_BLOCKED if muted else HudTheme.TEXT)
+		mute_btn.pressed.connect(func():
+			Sfx.click(self)
+			var vv := _voice()
+			if vv == null:
+				return
+			vv.set_muted(seat, not bool(vv.is_muted(seat)))
+			refresh())
+		row.add_child(mute_btn)
 	if _hub.host and not mine:
 		var kick := Button.new()
 		kick.text = "✕"

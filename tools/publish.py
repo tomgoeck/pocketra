@@ -17,15 +17,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 EXTRA_EXCLUDE_PREFIXES = (
     ("project-docs",),
-    ("docs", "research"),
+    ("docs",),
+    ("design",),
+    ("website",),
 )
+EXTRA_EXCLUDE_FILES = {"CLAUDE.md", ".gitmodules", "README.md", "tools/worktree.sh", "tools/apk_build.sh"}
 
 STRIP_EXTENSIONS = {".gd", ".cpp", ".h", ".hpp", ".gdshader"}
 STRIP_PY_EXTENSIONS = {".py"}
 STRIP_PY_FILENAMES = {"SConstruct"}
+STRIP_LINE_COMMENT_EXTENSIONS = {".sh", ".yaml", ".yml"}
+
+ALWAYS_INCLUDE = ("LICENSE", "NOTICE")
 
 
-ALWAYS_INCLUDE = ("README.md", "docs/ARCHITEKTUR.md", "CLAUDE.md", "LICENSE")
+SUBMODULES = {"gdext/godot-cpp": "https://github.com/godotengine/godot-cpp.git"}
 
 
 def _line_offsets(text: str) -> list[int]:
@@ -395,9 +401,22 @@ def _is_extra_excluded(rel: Path) -> bool:
     return False
 
 
+def _strip_line_comments(source: str) -> str:
+    out = []
+    for i, line in enumerate(source.splitlines()):
+        s = line.lstrip()
+        if s.startswith("#") and not (i == 0 and s.startswith("#!")):
+            continue
+        out.append(line.rstrip())
+    text = "\n".join(out)
+    while "\n\n\n" in text:
+        text = text.replace("\n\n\n", "\n\n")
+    return text.strip("\n") + "\n"
+
+
 def list_source_files(root: Path) -> list[Path]:
     proc = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+        ["git", "ls-files", "--cached"],
         cwd=root, capture_output=True, text=True, check=True,
     )
     seen: set[Path] = set()
@@ -406,7 +425,7 @@ def list_source_files(root: Path) -> list[Path]:
         if not line:
             continue
         rel = Path(line)
-        if _is_extra_excluded(rel):
+        if _is_extra_excluded(rel) or str(rel) in EXTRA_EXCLUDE_FILES:
             continue
         if not (root / rel).is_file():
             continue
@@ -430,30 +449,145 @@ def _strip_for(rel: Path, text: str) -> str | None:
         return strip_gdshader_source(text)
     if suffix in {".cpp", ".h", ".hpp"}:
         return strip_c_family_source(text)
+    if suffix in STRIP_LINE_COMMENT_EXTENSIONS:
+        return _strip_line_comments(text)
     return None
 
 
-NOTICE_HEADER = """\
-## Lizenz und Herkunft
+README_PUBLIC = """\
+<p align="center">
+  <img src="https://pocketra.net/img/mission-soviet-01.png" alt="PocketRA gameplay: a Soviet mission with a radar dome and defenses in the snow" width="640">
+</p>
 
-Der Code in diesem Repository steht unter der GNU General Public License v3.0
-(Volltext in [`LICENSE`](LICENSE)). Die Spielregeln und die Missionslogik sind von
-[OpenRA](https://github.com/OpenRA/OpenRA) (ebenfalls GPLv3) abgeleitet bzw. eng
-daran angelehnt; Abweichungen sind im Code kommentiert. Die Original-Grafiken, -Sounds
-und -Videos gehören Westwood Studios/Electronic Arts und liegen diesem Repository
-nicht bei — wer selbst bauen will, bezieht sie über das EA-Freeware-Paket
-(`ra-quickinstall.zip`, siehe Abschnitt „Setup" unten). Dieser Kommentar-freie Stand
-ist eine automatisch erzeugte Veröffentlichungskopie (`tools/publish.py`).
+<h1 align="center">PocketRA</h1>
+<p align="center"><em>Command &amp; Conquer: Red Alert, rebuilt for touch, with multiplayer by game code and game logic that follows OpenRA.</em></p>
 
----
+<p align="center">
+  <a href="https://pocketra.net"><img alt="Website" src="https://img.shields.io/badge/website-pocketra.net-ffd140?style=flat-square"></a>
+  <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-4c6ef5?style=flat-square">
+  <img alt="Platforms" src="https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20Windows%20%7C%20macOS-8c7540?style=flat-square">
+</p>
 
+**EA has not endorsed and does not support this product.** *Command & Conquer* and *Red Alert* are
+trademarks of Electronic Arts Inc. PocketRA is a free, non-commercial fan project with no
+affiliation to EA or Westwood Studios, and this repository contains no EA game data. See
+[Legal](#legal) below for the details.
+
+## What it is
+
+PocketRA rebuilds *Command & Conquer: Red Alert* from scratch for the phone in your pocket.
+Interface and touch controls run in Godot 4, and the game simulation itself runs in C++
+(GDExtension), deterministic and integer-only, at 25 ticks per second like the original. Damage,
+armour, ranges, build times, pathfinding, superweapons and AI follow the open rule files of
+[OpenRA](https://www.openra.net); deviations are marked as such in the code.
+
+## Downloads
+
+| Platform | Get it |
+|---|---|
+| Android | [Download the APK](https://github.com/tomgoeck/pocketra/releases/latest/download/pocketra-dist.apk). Not on the Play Store, so allow installs from this source once. |
+| iOS | [Join the TestFlight beta](https://testflight.apple.com/join/vE3V2vBf). No App Store review yet. |
+| Windows | [Download the installer](https://github.com/tomgoeck/pocketra/releases/latest/download/pocketra-windows-setup.exe). Built for touch, meant for trying out. |
+| macOS | [Download the disk image](https://github.com/tomgoeck/pocketra/releases/latest/download/pocketra-macos.dmg). Built for touch, meant for trying out. |
+
+All release notes and install steps: **[pocketra.net](https://pocketra.net)**. Source code and
+issues live here, and every release is also attached to this repository's
+[Releases page](https://github.com/tomgoeck/pocketra/releases).
+
+## What's inside
+
+- **Skirmish** against up to five AI opponents at three strengths, with 142 maps from OpenRA in
+  temperate and snow, all units, superweapons, ships and aircraft, and save/load.
+- **Multiplayer by game code.** Open a room and share a six-character code with friends: no
+  account, no sign-up. Lockstep like OpenRA, so only orders are transmitted and every device
+  simulates the same match, with text chat and hold-to-talk voice. Your seat is kept if a
+  notification drops you out.
+- **Tutorial** mission that walks through base building, the build bar, command bar, radial menu
+  and gestures step by step, narrated in German and English.
+- German and English throughout, with German voice lines pulled from your own CD.
+- Self-updating: the app fetches new content on start, so no reinstall is needed for content
+  updates.
+- Note: campaign missions are imported but not reliably playable yet. Some run, many break or
+  can't be won, so the menu marks them as "in testing". Skirmish and multiplayer are the finished
+  part of the game.
+- No map editor, no mods yet.
+
+## Screenshots
+
+<p align="center">
+  <img src="https://pocketra.net/img/menu.png" width="45%">
+  <img src="https://pocketra.net/img/lobby.png" width="45%">
+  <br>
+  <img src="https://pocketra.net/img/create.png" width="45%">
+  <img src="https://pocketra.net/img/mission-soviet-01.png" width="45%">
+</p>
+
+### Gameplay
+
+<p align="center"><img src="https://pocketra.net/img/battle.gif" width="70%"></p>
+
+## Layout
+
+| Folder | Contents |
+|---|---|
+| `game/` | Godot project (GDScript, scenes, translations, icons) |
+| `gdext/` | GDExtension bridge to the simulation, `godot-cpp` as a submodule |
+| `sim/` | C++ simulation (deterministic, integer-only) and tests |
+| `tools/` | Pipeline: MIX/SHP/AUD/VQA from the original game files to atlases, sounds, maps and rules |
+
+## Building
+
+Requirements: Godot 4.7, Python 3.11+, SCons, ffmpeg, Android SDK/NDK for the APK.
+
+1. Get the game data (not in this repository): unpack `ra-quickinstall.zip` from an OpenRA mirror
+   (list: https://www.openra.net/packages/ra-quickinstall-mirrors.txt) into `content/ra/`, or copy
+   `MAIN.MIX`/`REDALERT.MIX` from your own CD there.
+2. OpenRA reference for rules and maps: `git clone --depth 1 https://github.com/OpenRA/OpenRA reference/OpenRA`
+3. Pipeline (creates `game/assets/`):
+   ```bash
+   python3 tools/rules2json.py
+   python3 tools/tileset2atlas.py temperat && python3 tools/tileset2atlas.py snow && python3 tools/tileset2atlas.py interior
+   python3 tools/mapconvert.py
+   python3 tools/audconvert.py $(cat tools/sounds.txt) -o game/assets/sfx
+   ```
+4. Simulation and bridge:
+   ```bash
+   sim/tests/run.sh
+   git submodule update --init
+   cd gdext && scons platform=macos arch=arm64 target=template_debug
+   cd gdext && scons platform=android arch=arm64 target=template_debug
+   ```
+5. Godot: `Godot --headless --path game --import`, then `Godot --path game` to run, or
+   `Godot --headless --path game --export-debug Android ../build/pocketra.apk`.
+
+## Legal
+
+PocketRA is a free, non-commercial fan project. It is not endorsed by Electronic Arts and not
+affiliated with Electronic Arts or Westwood Studios. *Command & Conquer* and *Red Alert* are
+trademarks of Electronic Arts Inc.
+
+The original game files are used, as in OpenRA, under the licence granted by Electronic Arts'
+C&C Franchise Modding Guidelines: free of charge, non-commercial and without any music files from
+C&C games. Neither this repository nor the app contains or distributes those files; the app
+downloads the freely available base files from the same mirrors OpenRA uses, or reads them from
+your own copy of the game.
+
+PocketRA's own source code is licensed under the GNU General Public License, version 3 or later
+(`LICENSE`, GPL-3.0-or-later). The game rules are derived from the rule files of
+[OpenRA](https://www.openra.net), which are also GPLv3. PocketRA is an independent project and not
+part of OpenRA; origin notes for third-party code and assets are in `NOTICE`.
+
+This is an automatically generated, comment-free publication copy (`tools/publish.py`).
 """
 
 
 def build_public_copy(root: Path, out_dir: Path) -> tuple[int, int]:
     if out_dir.exists():
-        shutil.rmtree(out_dir)
-    out_dir.mkdir(parents=True)
+        for child in out_dir.iterdir():
+            if child.name == ".git":
+                continue
+            shutil.rmtree(child) if child.is_dir() else child.unlink()
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     files = list_source_files(root)
     for rel in ALWAYS_INCLUDE:
@@ -461,18 +595,17 @@ def build_public_copy(root: Path, out_dir: Path) -> tuple[int, int]:
         if p not in files and (root / p).is_file():
             files.append(p)
 
-    file_count = 0
+    (out_dir / "README.md").write_text(README_PUBLIC, encoding="utf-8")
+    (out_dir / ".gitignore").write_text(
+        "content/\ngame/assets/\n.godot/\ngame/bin/*.so\ngame/bin/*.dylib\ngame/bin/*.dll\n"
+        "*.translation\nbuild/\n*.os\n*.obj\n.sconsign.dblite\ncompile_commands.json\n*.o\n*.a\n"
+        ".DS_Store\nreference/\n__pycache__/\n*.pyc\n", encoding="utf-8")
+    file_count = 2
     stripped_count = 0
     for rel in files:
         src = root / rel
         dst = out_dir / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-
-        if rel == Path("README.md"):
-            text = src.read_text(encoding="utf-8")
-            dst.write_text(NOTICE_HEADER + text, encoding="utf-8")
-            file_count += 1
-            continue
 
         try:
             text = src.read_text(encoding="utf-8")
@@ -496,20 +629,25 @@ def build_public_copy(root: Path, out_dir: Path) -> tuple[int, int]:
     return file_count, stripped_count
 
 
-def setup_git_orphan(out_dir: Path, remote_url: str) -> None:
+def setup_git_orphan(out_dir: Path, remote_url: str, root: Path) -> None:
     git_dir = out_dir / ".git"
     if not git_dir.exists():
-        subprocess.run(["git", "init", "-q"], cwd=out_dir, check=True)
-        subprocess.run(["git", "checkout", "-q", "-b", "public"], cwd=out_dir, check=True)
-        subprocess.run(
-            ["git", "config", "user.email", "publish@localhost"], cwd=out_dir, check=True,
-        )
-        subprocess.run(["git", "config", "user.name", "publish.py"], cwd=out_dir, check=True)
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=out_dir, check=True)
+        subprocess.run(["git", "config", "user.email", "tomgoeck@users.noreply.github.com"], cwd=out_dir, check=True)
+        subprocess.run(["git", "config", "user.name", "tomgoeck"], cwd=out_dir, check=True)
     subprocess.run(["git", "add", "-A"], cwd=out_dir, check=True)
+    for path, url in SUBMODULES.items():
+        sha = subprocess.run(["git", "rev-parse", f"HEAD:{path}"], cwd=root,
+                             capture_output=True, text=True, check=True).stdout.strip()
+        (out_dir / ".gitmodules").write_text(
+            f'[submodule "{path}"]\n\tpath = {path}\n\turl = {url}\n', encoding="utf-8")
+        subprocess.run(["git", "add", ".gitmodules"], cwd=out_dir, check=True)
+        subprocess.run(["git", "update-index", "--add", "--cacheinfo", f"160000,{sha},{path}"],
+                       cwd=out_dir, check=True)
     diff = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=out_dir)
     if diff.returncode != 0:
         subprocess.run(
-            ["git", "commit", "-q", "-m", "Public snapshot (kommentarfrei)"],
+            ["git", "commit", "-q", "-m", "PocketRA: public snapshot"],
             cwd=out_dir, check=True,
         )
     remotes = subprocess.run(
@@ -519,8 +657,8 @@ def setup_git_orphan(out_dir: Path, remote_url: str) -> None:
         subprocess.run(["git", "remote", "add", "origin", remote_url], cwd=out_dir, check=True)
     else:
         subprocess.run(["git", "remote", "set-url", "origin", remote_url], cwd=out_dir, check=True)
-    print(f"Git-Repo bereit unter {out_dir} (Branch public). Push von Hand mit:")
-    print(f"  cd {out_dir} && git push -u origin public")
+    print(f"Git-Repo bereit unter {out_dir} (Branch main). Push von Hand mit:")
+    print(f"  cd {out_dir} && git push -u origin main")
 
 
 def main() -> int:
@@ -544,7 +682,7 @@ def main() -> int:
           f"davon {stripped_count} kommentarfrei umgeschrieben.")
 
     if args.git:
-        setup_git_orphan(out_dir, args.git)
+        setup_git_orphan(out_dir, args.git, REPO_ROOT)
 
     return 0
 

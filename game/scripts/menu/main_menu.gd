@@ -141,6 +141,10 @@ func _ready() -> void:
 	if args.has("--test-lobby"):
 		_shot_manual = true
 		call_deferred("_run_test_lobby")
+
+	if args.has("--test-voice-lobby"):
+		_shot_manual = true
+		call_deferred("_run_test_voice_lobby")
 	if args.has("--test-maps-unlock"):
 		_shot_manual = true
 		call_deferred("_run_test_maps_unlock")
@@ -160,6 +164,23 @@ func _ready() -> void:
 					_on_map_selected(i)
 		if _selected < 0 and _skirmish.size() > 0:
 			_on_map_selected(0)
+
+
+		var dk := args.find("--ai-difficulty")
+		if dk >= 0 and dk + 1 < args.size() and ProtoWorld.AI_DIFFICULTIES.has(args[dk + 1]):
+			_ai_difficulty = args[dk + 1]
+		_slot_defaults()
+		var sk := args.find("--ai-strategy")
+		var sl := args.find("--ai-strategies")
+		for i in _ai_slots.size():
+			_ai_slots[i]["level"] = _ai_difficulty
+			if sk >= 0 and sk + 1 < args.size() and ProtoWorld.AI_STRATEGIES.has(args[sk + 1]):
+				_ai_slots[i]["strategy"] = args[sk + 1]
+		if sl >= 0 and sl + 1 < args.size():
+			var list: PackedStringArray = str(args[sl + 1]).split(",")
+			for i in _ai_slots.size():
+				if i < list.size() and ProtoWorld.AI_STRATEGIES.has(list[i]):
+					_ai_slots[i]["strategy"] = list[i]
 		_start_skirmish()
 
 
@@ -1039,6 +1060,11 @@ func _build_ui() -> void:
 			1 if VoiceChat.enabled() else 0, func(i: int): VoiceChat.set_enabled(i == 1), self))
 
 
+	op.add_child(HudTheme.choice_row(tr("menu.options.headset"),
+			[tr("word.auto"), tr("word.on"), tr("word.off")], AudioMix.headset_mode(),
+			func(i: int): AudioMix.set_headset_mode(i), self))
+
+
 	var hub_v := NetHub.hub()
 	if hub_v != null:
 		op.add_child(HudTheme.mic_probe_row(hub_v.ensure_voice(), self))
@@ -1344,6 +1370,11 @@ func _team_name(t: int) -> String:
 const STARTING_UNITS_KEYS := {"none": "menu.skirmish.units_none", "light": "menu.skirmish.units_light", "heavy": "menu.skirmish.units_heavy"}
 
 const AI_DIFFICULTY_KEYS := {"easy": "menu.skirmish.ai_easy", "normal": "menu.skirmish.ai_normal", "hard": "menu.skirmish.ai_hard"}
+
+
+const AI_STRATEGY_KEYS := {"normal": "menu.skirmish.strat_normal", "rush": "menu.skirmish.strat_rush",
+		"turtle": "menu.skirmish.strat_turtle", "air": "menu.skirmish.strat_air",
+		"naval": "menu.skirmish.strat_naval", "random": "menu.skirmish.strat_random"}
 
 
 func _update_factions() -> void:
@@ -2641,7 +2672,12 @@ func _slot_defaults() -> void:
 
 
 	while _ai_slots.size() < ProtoWorld.AI_PLAYER_INDICES.size():
-		_ai_slots.append({"faction": "random", "team": 0, "level": _ai_difficulty})
+		_ai_slots.append({"faction": "random", "team": 0, "level": _ai_difficulty, "strategy": "normal"})
+
+
+	for slot in _ai_slots:
+		if slot is Dictionary and not slot.has("strategy"):
+			slot["strategy"] = "normal"
 
 
 func _rebuild_slots() -> void:
@@ -2680,21 +2716,29 @@ func _rebuild_slots() -> void:
 		r.add_theme_constant_override("separation", int(Dp.px(6)))
 		var l := Label.new()
 		l.text = tr("lobby.ai") % (i + 1)
-		l.custom_minimum_size = Vector2(Dp.px(52), 0)
+		l.custom_minimum_size = Vector2(Dp.px(46), 0)
 		l.add_theme_font_size_override("font_size", int(Dp.px(12)))
 		l.add_theme_color_override("font_color", HudTheme.TEXT)
 		r.add_child(l)
 		var idx := i
+
+
 		r.add_child(_button(_faction_name(str(slot.get("faction", "random"))), func():
 			_ai_slots[idx]["faction"] = _next_faction_value(str(_ai_slots[idx].get("faction", "random")))
-			_update_factions(), 110, 34))
+			_update_factions(), 96, 34))
 		r.add_child(_button(_team_name(int(slot.get("team", 0))), func():
 			_ai_slots[idx]["team"] = (int(_ai_slots[idx].get("team", 0)) + 1) % 5
-			_update_factions(), 90, 34))
+			_update_factions(), 76, 34))
 		r.add_child(_button(tr(AI_DIFFICULTY_KEYS.get(str(slot.get("level", "normal")), "menu.skirmish.ai_normal")), func():
 			var d: Array = ProtoWorld.AI_DIFFICULTIES
 			_ai_slots[idx]["level"] = d[(d.find(str(_ai_slots[idx].get("level", "normal"))) + 1) % d.size()]
-			_update_factions(), 140, 34))
+			_update_factions(), 96, 34))
+
+
+		r.add_child(_button(tr(AI_STRATEGY_KEYS.get(str(slot.get("strategy", "normal")), "menu.skirmish.strat_normal")), func():
+			var s: Array = ProtoWorld.AI_STRATEGIES
+			_ai_slots[idx]["strategy"] = s[(s.find(str(_ai_slots[idx].get("strategy", "normal"))) + 1) % s.size()]
+			_update_factions(), 96, 34))
 		_slot_box.add_child(r)
 
 
@@ -2755,3 +2799,91 @@ func _start_skirmish() -> void:
 	ProtoWorld.next_player_team = _player_team
 	ProtoWorld.next_ai_slots = _ai_slots.duplicate(true)
 	get_tree().change_scene_to_file(GAME_SCENE)
+
+
+func _run_test_voice_lobby() -> void:
+	_mp_demo_lobby()
+	_show("mp_lobby")
+	for _i in 6:
+		await get_tree().process_frame
+	var fehler := 0
+	var hub := NetHub.hub()
+	var v = hub.ensure_voice()
+	v.test_tone = true
+	var btn: Button = _mp_lobby._mic_btn
+	if btn == null:
+		print("T --test-voice-lobby: FEHLER — kein Mikrofonknopf in der Lobby")
+		print("T --test-voice-lobby: 1 Befund(e) (Sollwert 0)")
+		get_tree().quit()
+		return
+
+
+	var alt: Array = []
+	_collect_buttons(_pages["mp_lobby"], alt)
+	var klein := Vector2(1e9, 1e9)
+	for b in alt:
+		if b == btn:
+			continue
+		var r: Vector2 = (b as Control).get_global_rect().size
+		if r.x > 1.0 and r.y > 1.0:
+			klein = Vector2(minf(klein.x, r.x), minf(klein.y, r.y))
+	var groesse := btn.get_global_rect().size
+	print("T --test-voice-lobby: Tippfläche %.0f×%.0f px (kleinster Knopf der Lobby %.0f×%.0f)" % [
+			groesse.x, groesse.y, klein.x, klein.y])
+	if groesse.x < klein.x - 0.5 or groesse.y < klein.y - 0.5:
+		print("T --test-voice-lobby: FEHLER — Mikrofonknopf kleiner als der Bestand der Lobby")
+		fehler += 1
+	for fall in [{"hold": false, "mode": VoiceChat.Mode.TEAM, "col": HudTheme.VOICE_TEAM, "name": "Tipp → Team"},
+			{"hold": true, "mode": VoiceChat.Mode.ALL, "col": HudTheme.VOICE_ALL, "name": "Langdruck → alle"}]:
+		_mp_lobby._toggle_mic(bool(fall["hold"]))
+		await get_tree().process_frame
+		var ok: bool = int(v.mode) == int(fall["mode"]) \
+				and btn.get_theme_color("icon_normal_color").is_equal_approx(fall["col"])
+		print("T --test-voice-lobby: %s, Farbe %s — %s" % [fall["name"],
+				(fall["col"] as Color).to_html(false), "OK" if ok else "FEHLER"])
+		fehler += 0 if ok else 1
+
+	AudioMix.settle()
+	var musik := AudioServer.get_bus_index(AudioMix.BUSES["music"])
+	var basis := linear_to_db(maxf(AudioMix.volume("music"), 0.0001))
+	var ist := AudioServer.get_bus_volume_db(musik) if musik >= 0 else basis
+	print("T --test-voice-lobby: Menümusik %+.1f dB (Regler %+.1f dB) — %s" % [ist, basis,
+			AudioMix.state_line()])
+	if ist >= basis - 1.0:
+		print("T --test-voice-lobby: FEHLER — Menümusik wurde beim Funken nicht abgesenkt")
+		fehler += 1
+
+	var pkt := VoiceChat.test_packet(300.0)
+	for i in 12:
+		v.on_packet({"seat": 1, "name": "Jan", "color": 1, "scope": "team", "seq": i, "data": pkt})
+		v.on_packet({"seat": 2, "name": "Ada", "color": 2, "scope": "all", "seq": i, "data": pkt})
+	_mp_lobby._refresh_speakers()
+	await get_tree().process_frame
+	var zwei: bool = v.speaking_seats().size() == 2 and _mp_lobby._speak_lbl.visible
+	print("T --test-voice-lobby: zwei Sprecher angezeigt — %s (%s)" % ["OK" if zwei else "FEHLER",
+			_mp_lobby._speak_lbl.text.replace("\n", " | ")])
+	fehler += 0 if zwei else 1
+	v.set_muted(1, true)
+	for i in 12:
+		v.on_packet({"seat": 1, "name": "Jan", "color": 1, "scope": "team", "seq": 20 + i, "data": pkt})
+	var stumm: bool = not v.speaking_seats().has(1)
+	print("T --test-voice-lobby: Platz stumm geschaltet — %s" % ["OK" if stumm else "FEHLER"])
+	fehler += 0 if stumm else 1
+	v.set_muted(1, false)
+
+	_mp_lobby._toggle_mic(true)
+	AudioMix.settle()
+	await get_tree().process_frame
+	var zurueck: bool = int(v.mode) == int(VoiceChat.Mode.OFF) \
+			and absf(AudioServer.get_bus_volume_db(musik) - basis) < 0.2
+	print("T --test-voice-lobby: aus → Musik wieder %+.1f dB — %s" % [
+			AudioServer.get_bus_volume_db(musik), "OK" if zurueck else "FEHLER"])
+	fehler += 0 if zurueck else 1
+	if _shot_path != "":
+		_mp_lobby._toggle_mic(false)
+		for _i in 3:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png(_shot_path)
+		print("Screenshot: ", _shot_path)
+	print("T --test-voice-lobby: %d Befund(e) (Sollwert 0)" % fehler)
+	get_tree().quit()

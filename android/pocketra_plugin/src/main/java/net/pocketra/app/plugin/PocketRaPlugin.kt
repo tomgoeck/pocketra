@@ -22,8 +22,9 @@
 // PLUGIN_SINGLETON in game/scripts/net/voice_chat.gd und ANDROID_PLUGIN in
 // game/scripts/update/update_config.gd.
 //
-// Schnittstelle nach GDScript: game/scripts/net/net_notify.gd (Benachrichtigungen) und
-// game/scripts/net/voice_chat.gd (Aufnahme, `mic*`-Methoden unten).
+// Schnittstelle nach GDScript: game/scripts/net/net_notify.gd (Benachrichtigungen),
+// game/scripts/net/voice_chat.gd (Aufnahme, `mic*`-Methoden unten) und
+// game/scripts/audio_mix.gd (Headset-Erkennung, `isHeadsetConnected()` ganz unten).
 
 package net.pocketra.app.plugin
 
@@ -32,6 +33,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
@@ -218,8 +221,97 @@ class PocketRaPlugin(godot: Godot) : GodotPlugin(godot) {
     @UsedByGodot
     fun micInfo(): String = VoiceInput.info()
 
+    // ---------------------------------------------------------------- Headset-Erkennung
+    //
+    // Toms Handtest 2026-09-11: "Wenn es nicht ueber das Headset laeuft, geht es gar nicht
+    // (Spieltoene gehen ins Mikrofon)." Das Spiel senkt die uebrigen Toene deshalb auf ein Viertel,
+    // wenn ein Headset angeschlossen ist, und schaltet sie sonst ganz stumm (scripts/audio_mix.gd).
+    // Dafuer braucht GDScript eine verlaessliche Antwort — Godot hat keine.
+    //
+    // AudioManager.getDevices(GET_DEVICES_OUTPUTS) liefert die Liste der wirklich vorhandenen
+    // Ausgaenge. Der eingebaute Lautsprecher ist TYPE_BUILTIN_SPEAKER und zaehlt nicht; alles
+    // andere in HEADSET_TYPES traegt den Ton ans Ohr und damit vom Mikrofon weg.
+    //
+    // Ein AudioDeviceCallback haelt die Antwort aktuell, ohne dass GDScript pollen muss: Stecker
+    // ziehen oder ein Bluetooth-Hoerer, der waehrend der Partie wegfaellt, kommt so sofort an.
+    // Die Liste selbst abzufragen kostet wenig, der Callback spart aber den Weg ueber JNI bei
+    // jedem Frame.
+
+    /** Ist gerade ein Kopfhoerer/Headset (Klinke, USB, Bluetooth, BLE) der Ausgang? */
+    @UsedByGodot
+    fun isHeadsetConnected(): Boolean {
+        ensureDeviceCallback()
+        val cached = headsetCached
+        if (cached != null) return cached
+        val now = queryHeadset()
+        headsetCached = now
+        return now
+    }
+
+    private fun queryHeadset(): Boolean {
+        val am = try {
+            activity?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        } catch (e: Exception) {
+            null
+        } ?: return false
+        return try {
+            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { HEADSET_TYPES.contains(it.type) }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Einmalig anmelden. Der Callback verwirft nur den Zwischenspeicher, er rechnet nichts. */
+    private fun ensureDeviceCallback() {
+        if (deviceCallback != null) return
+        val am = try {
+            activity?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        } catch (e: Exception) {
+            null
+        } ?: return
+        val cb = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) {
+                headsetCached = null
+            }
+
+            override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) {
+                headsetCached = null
+            }
+        }
+        try {
+            am.registerAudioDeviceCallback(cb, Handler(Looper.getMainLooper()))
+            deviceCallback = cb
+        } catch (e: Exception) {
+        }
+    }
+
+    private var deviceCallback: AudioDeviceCallback? = null
+
+    @Volatile
+    private var headsetCached: Boolean? = null
+
     companion object {
         const val REQ_NOTIFY = 4711
         const val REQ_RECORD = 4712
+
+        /**
+         * Alles, was den Ton ans Ohr statt in den Raum bringt. TYPE_BLE_HEADSET/_SPEAKER gibt es
+         * erst ab API 31, TYPE_USB_HEADSET ab 26 — die Konstanten sind aber blosse Ganzzahlen und
+         * seit compileSdk 35 alle bekannt, ein Versionstest waere also nur Zierde: auf aelteren
+         * Geraeten taucht der Typ schlicht nie in der Liste auf.
+         *
+         * TYPE_USB_DEVICE steht bewusst NICHT dabei: das ist jedes USB-Audiogeraet, auch ein
+         * Lautsprecher an einem Dock. Die falsche Antwort kostet hier eine Rueckkopplung, also
+         * ist "kein Headset" im Zweifel die richtige.
+         */
+        private val HEADSET_TYPES = setOf(
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_HEARING_AID
+        )
     }
 }

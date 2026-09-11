@@ -2,6 +2,9 @@
 
 extends MissionScript
 
+
+const ProtoMainScript := preload("res://scripts/proto/proto_main.gd")
+
 var player := 0
 var enemy := 1
 
@@ -121,7 +124,8 @@ func _build_steps() -> void:
 			"cond": func(): return _cmd_sel_unit != null and api.world.selection.has(_cmd_sel_unit) and _camera_near(_cmd_sel_unit.pos)},
 
 
-		{"text": "tutorial-ui-cmd-zoom", "highlight": "cmd_zoom_in", "objective": true, "ack": true,
+		{"text": "tutorial-ui-cmd-zoom", "highlight": "cmd_zoom_in", "keep_without_highlight": true,
+			"objective": true, "ack": true,
 			"on_begin": func(): _cmd_zoom_start = api.world.zoom,
 			"cond": func(): return not is_equal_approx(api.world.zoom, _cmd_zoom_start)},
 
@@ -154,6 +158,38 @@ func _build_steps() -> void:
 		{"text": "tutorial-obj-attack", "highlight": "radial_attack", "primary": true,
 			"cond": func(): return api.has_no_required_units(enemy)},
 	]
+	_drop_steps_for_hidden_buttons()
+
+
+const _HIGHLIGHT_FOR_CMD := {
+	"clear": "cmd_clear", "base": "cmd_base", "event": "cmd_event", "sel": "cmd_sel",
+	"zoom_in": "cmd_zoom_in", "zoom_out": "cmd_zoom_out",
+}
+
+
+func _drop_steps_for_hidden_buttons() -> void:
+	var gone: Array = []
+	for id in ProtoMainScript.CMD_HIDDEN:
+		gone.append(_HIGHLIGHT_FOR_CMD.get(id, id))
+	if not ProtoMainScript.BOTTOM_ROW_VISIBLE:
+		for id in ProtoMainScript.CMD_BOTTOM_ROW:
+			gone.append(_HIGHLIGHT_FOR_CMD.get(id, id))
+	if gone.is_empty():
+		return
+	var kept: Array = []
+	for s in _steps:
+		if s.has("highlight") and s["highlight"] in gone:
+
+
+			if s.get("keep_without_highlight", false):
+				s.erase("highlight")
+				kept.append(s)
+			continue
+		kept.append(s)
+	if kept.size() != _steps.size():
+		print("Tutorial: %d Schritt(e) zu ausgeblendeten Knöpfen übersprungen (%s)" % [
+				_steps.size() - kept.size(), ", ".join(PackedStringArray(gone))])
+	_steps = kept
 
 
 func _begin_step(i: int) -> void:

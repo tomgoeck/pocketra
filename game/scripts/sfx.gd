@@ -27,6 +27,8 @@ const EVA_PRIORITY := {
 
 var view_rect: Callable
 
+var tesla_sounds: Dictionary = {}
+
 var _streams: Array[AudioStream] = []
 var _names: Dictionary = {}
 var _pool: Array[AudioStreamPlayer2D] = []
@@ -240,6 +242,23 @@ func play_voice(clips: Array, variants: Array = [], actor_id: int = 0, key: Stri
 	_voice_player.play()
 
 
+const HARVESTER_VOICE_DIRS := ["res://data/sfx/voice/harvester", "res://assets/sfx/voice/harvester"]
+
+
+func play_harvester_voice(key: String) -> bool:
+	var lang := Lang.code()
+	for dir in HARVESTER_VOICE_DIRS:
+		for l in [lang, "en"]:
+			var path := "%s/%s/%s.wav" % [dir, l, key]
+			var stream := _load_wav(path)
+			if stream != null:
+				_voice_player.stop()
+				_voice_player.stream = stream
+				_voice_player.play()
+				return true
+	return false
+
+
 func play_eva(name: String, force: bool = false) -> String:
 	var id := register(name)
 	if id < 0:
@@ -342,46 +361,38 @@ func play_events(events: PackedInt32Array) -> void:
 	var order: Array = []
 	for i in n:
 		var pos := Vector2(events[i * 3 + 1], events[i * 3 + 2])
-		order.append([gain_for(pos), events[i * 3], pos])
+		var id: int = events[i * 3]
+		order.append([gain_for(pos), id, pos])
+
+
+		if not tesla_sounds.is_empty() and tesla_sounds.has(id) and _in_view(pos):
+			AudioMix.tesla_static()
 	order.sort_custom(func(a, b): return a[0] > b[0])
 	for e in order:
 		play_at(e[1], e[2])
 
 
-const SETTINGS := "user://settings.cfg"
+func _in_view(world_pos: Vector2) -> bool:
+	if not view_rect.is_valid():
+		return false
+	var r: Rect2 = view_rect.call()
+	return r.has_point(world_pos)
 
 
-const BUSES := {"master": "Master", "music": "Musik", "sfx": "Effekte", "voice": "Stimme",
-	"video": "Video", "radio": "Funk"}
-const DEFAULT_VOLUMES := {"master": 1.0, "music": 0.5, "sfx": 0.5, "voice": 0.5, "video": 0.5,
-	"radio": 1.0}
+const SETTINGS := AudioMix.SETTINGS
 
 
 static func volume(key: String) -> float:
-	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
-	return clampf(float(cfg.get_value("audio", key + "_volume", DEFAULT_VOLUMES.get(key, 1.0))), 0.0, 1.0)
+	return AudioMix.volume(key)
 
 
 static func set_volume(key: String, value: float) -> void:
-	if not BUSES.has(key):
-		return
-	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
-	cfg.set_value("audio", key + "_volume", clampf(value, 0.0, 1.0))
-	cfg.save(SETTINGS)
-	apply_volume(key)
+	AudioMix.set_volume(key, value)
 
 
 static func apply_volume(key: String) -> void:
-	var idx := AudioServer.get_bus_index(BUSES.get(key, ""))
-	if idx < 0:
-		return
-	var v := volume(key)
-	AudioServer.set_bus_mute(idx, v <= 0.0)
-	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(v, 0.0001)))
+	AudioMix.apply(key)
 
 
 static func apply_volumes() -> void:
-	for key in BUSES:
-		apply_volume(key)
+	AudioMix.apply_all()

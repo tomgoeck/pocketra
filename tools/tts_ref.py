@@ -17,26 +17,50 @@ timerno1 train1 unitful1 unitlst1 unitrdy1 unitrep1 unitsld1 unitspd1 xploplc1""
 CLASSIC_FIRST = "conscmp1 newopt1 unitrdy1 bldginf1 lopower1 baseatk1 reinfor1 progres1".split()
 
 
-def build(lang: str, out: str, first: list[str], only: bool) -> None:
+def read_list(path: str, sfx_dir: str) -> list[str]:
+
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            out.append(line.replace("<sfx>", sfx_dir) if "<sfx>" in line
+                       else os.path.join(ROOT, line))
+    return out
+
+
+def build(lang: str, out: str, first: list[str], only: bool, list_path: str | None = None) -> None:
     d = os.path.join(ROOT, "game", "assets", "sfx", "de" if lang == "de" else "")
-    clips = list(first)
-    if not only:
-        clips += [c for c in EVA if c not in clips]
-    clips = [c for c in clips if os.path.exists(os.path.join(d, c + ".wav"))]
-    if not clips:
-        sys.exit(f"keine Clips in {d}")
+    if list_path:
+        paths = read_list(list_path, d.rstrip(os.sep))
+        missing = [p for p in paths if not os.path.exists(p)]
+        if missing:
+            print(f"{len(missing)} Datei(en) fehlen, übersprungen: "
+                  + ", ".join(os.path.basename(m) for m in missing))
+        paths = [p for p in paths if os.path.exists(p)]
+        if not paths:
+            sys.exit(f"keine Clips aus {list_path} gefunden (Sprachverzeichnis {d})")
+    else:
+        clips = list(first)
+        if not only:
+            clips += [c for c in EVA if c not in clips]
+        clips = [c for c in clips if os.path.exists(os.path.join(d, c + ".wav"))]
+        if not clips:
+            sys.exit(f"keine Clips in {d}")
+        paths = [os.path.join(d, c + ".wav") for c in clips]
     args = ["ffmpeg", "-v", "error", "-y"]
     fc = ""
-    for i, c in enumerate(clips):
-        args += ["-i", os.path.join(d, c + ".wav")]
+    for i, c in enumerate(paths):
+        args += ["-i", c]
         fc += f"[{i}:a]apad=pad_dur=0.25[p{i}];"
-    fc += "".join(f"[p{i}]" for i in range(len(clips)))
-    fc += f"concat=n={len(clips)}:v=0:a=1,afftdn=nf=-30,loudnorm=I=-18:TP=-1.5,aresample=24000"
+    fc += "".join(f"[p{i}]" for i in range(len(paths)))
+    fc += f"concat=n={len(paths)}:v=0:a=1,afftdn=nf=-30,loudnorm=I=-18:TP=-1.5,aresample=24000"
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     subprocess.run(args + ["-filter_complex", fc, "-ac", "1", out], check=True)
     dur = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
                           "-of", "csv=p=0", out], capture_output=True, text=True).stdout.strip()
-    print(f"{out}: {len(clips)} Clips, {float(dur):.1f} s")
+    print(f"{out}: {len(paths)} Clips, {float(dur):.1f} s")
 
 
 if __name__ == "__main__":
@@ -45,5 +69,7 @@ if __name__ == "__main__":
     ap.add_argument("out")
     ap.add_argument("--first", nargs="+", default=CLASSIC_FIRST, help="Clips, die vorne stehen")
     ap.add_argument("--only", action="store_true", help="nur --first, nicht alle EVA-Clips anhängen")
+    ap.add_argument("--list", dest="list_path",
+                    help="eigene Clipliste statt der EVA-Liste (z. B. tools/voice/vehicle_ref.txt)")
     a = ap.parse_args()
-    build(a.lang, a.out, a.first, a.only)
+    build(a.lang, a.out, a.first, a.only, a.list_path)

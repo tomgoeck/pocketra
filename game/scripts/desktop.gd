@@ -7,6 +7,10 @@ static func is_desktop() -> bool:
 	return OS.get_name() not in ["Android", "iOS", "Web"]
 
 
+static func has_keyboard() -> bool:
+	return OS.get_name() not in ["Android", "iOS"]
+
+
 static func fullscreen() -> bool:
 	var m := DisplayServer.window_get_mode()
 	return m == DisplayServer.WINDOW_MODE_FULLSCREEN or m == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
@@ -125,7 +129,11 @@ class Scroller extends Node:
 	const EDGE_SECONDS := 1.5
 	const KEY_SECONDS := 1.2
 
-	const WHEEL_DP := 60.0
+
+	const WHEEL_DP := 90.0
+
+
+	const PAN_SPEED := 2.5
 
 	const ZOOM_STEP := 1.1
 
@@ -147,14 +155,14 @@ class Scroller extends Node:
 	var probe_on := false
 
 
-	const KEYS_LEFT := [KEY_LEFT, KEY_A]
-	const KEYS_RIGHT := [KEY_RIGHT, KEY_D]
-	const KEYS_UP := [KEY_UP, KEY_W]
-	const KEYS_DOWN := [KEY_DOWN, KEY_S]
+	const KEYS_LEFT := [KEY_LEFT]
+	const KEYS_RIGHT := [KEY_RIGHT]
+	const KEYS_UP := [KEY_UP]
+	const KEYS_DOWN := [KEY_DOWN]
 
 
 	static func _desktop() -> bool:
-		return OS.get_name() not in ["Android", "iOS", "Web"]
+		return OS.get_name() not in ["Android", "iOS"]
 
 	func _ready() -> void:
 		set_process(_desktop())
@@ -179,7 +187,7 @@ class Scroller extends Node:
 			return
 		if e is InputEventPanGesture:
 			var pg: InputEventPanGesture = e
-			_pan(-pg.delta)
+			_pan(-pg.delta * PAN_SPEED)
 			get_viewport().set_input_as_handled()
 		elif e is InputEventMagnifyGesture:
 			var mg: InputEventMagnifyGesture = e
@@ -296,3 +304,60 @@ static func handle_fullscreen_key(e: InputEvent) -> bool:
 		toggle_fullscreen()
 		return true
 	return false
+
+
+const KEYS := [
+
+	{"id": "attack_move", "keys": [KEY_A], "show": "A", "label": "keys.attack_move"},
+	{"id": "guard", "keys": [KEY_D], "show": "D", "label": "keys.guard"},
+	{"id": "stop", "keys": [KEY_E], "show": "E", "label": "keys.stop"},
+	{"id": "deploy", "keys": [KEY_F], "show": "F", "label": "keys.deploy"},
+	{"id": "scatter", "keys": [KEY_X], "show": "X", "label": "keys.scatter"},
+
+	{"id": "repair", "keys": [KEY_R], "show": "R", "label": "keys.repair"},
+	{"id": "sell", "keys": [KEY_S], "show": "S", "label": "keys.sell"},
+
+	{"id": "all_units", "keys": [KEY_Q], "show": "Q", "label": "keys.all_units"},
+	{"id": "base", "keys": [KEY_H], "show": "H", "label": "keys.base"},
+	{"id": "last_event", "keys": [KEY_SPACE], "show": "Space", "label": "keys.last_event"},
+	{"id": "to_selection", "keys": [KEY_HOME], "show": "Home", "label": "keys.to_selection"},
+	{"id": "", "keys": [], "show": "1 – 5", "label": "keys.groups"},
+	{"id": "", "keys": [], "show": "Esc", "label": "keys.escape"},
+
+	{"id": "", "keys": [], "show": "← ↑ → ↓", "label": "keys.scroll"},
+	{"id": "zoom_in", "keys": [KEY_PLUS, KEY_EQUAL, KEY_KP_ADD, KEY_BRACKETRIGHT], "show": "+", "label": "keys.zoom_in"},
+	{"id": "zoom_out", "keys": [KEY_MINUS, KEY_KP_SUBTRACT, KEY_BRACKETLEFT], "show": "−", "label": "keys.zoom_out"},
+	{"id": "zoom_reset", "keys": [KEY_PERIOD], "show": ".", "label": "keys.zoom_reset"},
+	{"id": "", "keys": [], "show": "F11", "label": "keys.fullscreen"},
+
+	{"id": "build_bar", "keys": [KEY_B], "show": "B", "label": "keys.build_bar"},
+	{"id": "tabs", "keys": [KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6], "show": "F1 – F6", "label": "keys.tabs"},
+	{"id": "pause", "keys": [KEY_P, KEY_PAUSE], "show": "P", "label": "keys.pause"},
+	{"id": "music", "keys": [KEY_M], "show": "M", "label": "keys.music"},
+
+	{"id": "", "keys": [], "show": "keys.rmb", "label": "keys.right_click"},
+	{"id": "", "keys": [], "show": "keys.rmb", "label": "keys.right_click_build"},
+]
+
+
+static func key_action(e: InputEvent) -> Dictionary:
+	if not has_keyboard() or not (e is InputEventKey) or not e.pressed or e.echo:
+		return {"id": "", "index": 0}
+	var k: InputEventKey = e
+	if k.ctrl_pressed or k.meta_pressed or k.alt_pressed:
+		return {"id": "", "index": 0}
+	for row in KEYS:
+		var i: int = row["keys"].find(k.keycode)
+		if i >= 0:
+			return {"id": row["id"], "index": i}
+	return {"id": "", "index": 0}
+
+
+static func key_rows() -> Array:
+	var out: Array = []
+	for row in KEYS:
+		var show: String = row["show"]
+		if show.begins_with("keys."):
+			show = TranslationServer.translate(show)
+		out.append([show, TranslationServer.translate(row["label"])])
+	return out

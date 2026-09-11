@@ -94,6 +94,14 @@ const AI_RUSH_OFF := 100000
 static var next_ai_difficulty := "normal"
 
 
+const AI_STRATEGIES := ["normal", "rush", "turtle", "air", "naval", "random"]
+const AI_PERSONALITY_IDS := {"normal": 0, "rush": 1, "turtle": 2, "air": 3, "naval": 4, "random": 5}
+
+const AI_STRATEGY_BOT_TYPES := {"normal": "normal", "rush": "rush", "turtle": "turtle",
+		"air": "air", "naval": "naval"}
+static var next_ai_strategy := "normal"
+
+
 static var next_player_spawn := -1
 static var next_player_team := 0
 static var next_ai_slots: Array = []
@@ -327,6 +335,18 @@ func _apply_cmdline_args() -> void:
 	var adk := args.find("--ai-difficulty")
 	if adk >= 0 and adk + 1 < args.size() and AI_DIFFICULTIES.has(args[adk + 1]):
 		next_ai_difficulty = args[adk + 1]
+
+
+	var ask := args.find("--ai-strategy")
+	if ask >= 0 and ask + 1 < args.size() and AI_STRATEGIES.has(args[ask + 1]):
+		next_ai_strategy = args[ask + 1]
+		next_ai_slots = []
+	var asl := args.find("--ai-strategies")
+	if asl >= 0 and asl + 1 < args.size():
+		next_ai_slots = []
+		for s in str(args[asl + 1]).split(","):
+			next_ai_slots.append({"faction": "random", "team": 0,
+					"level": next_ai_difficulty, "strategy": s if AI_STRATEGIES.has(s) else "normal"})
 
 
 func _ready() -> void:
@@ -773,6 +793,10 @@ func _start_sim() -> void:
 				groups.append(gd)
 			w["impacts"] = groups
 			w["report_sound"] = sfx.register(w["report"]) if w["report"] != "" else -1
+
+
+			if int(w.get("zap_duration", 0)) > 0 and int(w["report_sound"]) >= 0:
+				sfx.tesla_sounds[int(w["report_sound"])] = true
 			w["impact_sound"] = sfx.register(w["impact_sound"]) if w["impact_sound"] != "" else -1
 
 			w["zap_bright"] = effect_ids.get(w.get("zap_bright", ""), -1)
@@ -1143,6 +1167,7 @@ func _read_savegame() -> void:
 	next_ai_faction = str(h.get("ai_faction", next_ai_faction))
 	next_ai_players = int(h.get("ai_players", next_ai_players))
 	next_ai_difficulty = str(h.get("ai_difficulty", next_ai_difficulty))
+	next_ai_strategy = str(h.get("ai_strategy", next_ai_strategy))
 	next_credits = int(h.get("credits", next_credits))
 	next_starting_units = str(h.get("starting_units", next_starting_units))
 	next_crates = bool(h.get("crates", next_crates))
@@ -1250,6 +1275,7 @@ func save_header() -> Dictionary:
 		"ai_faction": next_ai_faction,
 		"ai_players": next_ai_players,
 		"ai_difficulty": next_ai_difficulty,
+		"ai_strategy": next_ai_strategy,
 		"credits": next_credits,
 		"starting_units": next_starting_units,
 		"crates": next_crates,
@@ -1311,7 +1337,7 @@ func hostile(a: int, b: int) -> bool:
 
 
 func _roster_add(pid: int, seat: int, disp: String, faction: String, team: int,
-		kind: String, level: String, color_index: int = -1) -> void:
+		kind: String, level: String, color_index: int = -1, strategy: String = "") -> void:
 	var bot_no := 0
 	if kind == "bot":
 		for r in player_roster:
@@ -1320,7 +1346,7 @@ func _roster_add(pid: int, seat: int, disp: String, faction: String, team: int,
 		bot_no += 1
 	player_roster.append({
 		"sim": pid, "seat": seat, "name": disp, "faction": faction, "team": team,
-		"kind": kind, "level": level, "bot_no": bot_no, "color_index": color_index,
+		"kind": kind, "level": level, "strategy": strategy, "bot_no": bot_no, "color_index": color_index,
 		"color": player_colors[pid] if pid >= 0 and pid < player_colors.size() else PLAYER_COLORS[0],
 	})
 
@@ -1528,9 +1554,12 @@ func _spawn_start(player: int, cell: Vector2i, faction: String = "allies") -> vo
 				break
 
 
-func _bot_params(difficulty: String) -> Dictionary:
+func _bot_params(difficulty: String, strategy: String = "") -> Dictionary:
 	var p: Dictionary = {}
-	var bot: Dictionary = rules.ai.get("bots", {}).get(AI_BOT_TYPES.get(difficulty, "normal"), {})
+	if strategy == "" or not AI_STRATEGY_BOT_TYPES.has(strategy):
+		strategy = AI_BOT_TYPES.get(difficulty, "normal")
+	p["personality"] = int(AI_PERSONALITY_IDS.get(strategy, 0))
+	var bot: Dictionary = rules.ai.get("bots", {}).get(AI_STRATEGY_BOT_TYPES.get(strategy, "normal"), {})
 	var src: Dictionary = bot.get("params", {})
 	for k in src:
 		p[k] = int(src[k])
@@ -1582,6 +1611,28 @@ func _resolve_faction(f: String, rng: RandomNumberGenerator) -> String:
 	if f == "random" or f == "":
 		return "allies" if rng.randi() % 2 == 0 else "soviet"
 	return f
+
+
+func _resolve_strategy(want: String) -> String:
+	var s := want
+	if s == "random" or s == "" or not AI_STRATEGY_BOT_TYPES.has(s):
+		if s != "random" and s != "":
+			return "normal"
+		var pick: int = sim.pick_bot_personality() if sim != null else 0
+		s = str(AI_STRATEGIES[clampi(pick, 0, AI_STRATEGIES.size() - 2)])
+	if s == "naval" and not _map_has_water():
+		return "normal"
+	return s
+
+
+func _map_has_water() -> bool:
+	var water := 0
+	for t in _terrain_types:
+		if int(t) == TER_WATER:
+			water += 1
+			if water > 200:
+				return true
+	return false
 
 
 func _pick_team_spawn(spawns: Array, anchor: Vector2i, near: bool) -> int:
@@ -1661,6 +1712,8 @@ func _place_players() -> void:
 		var want: String = str(slot.get("faction", next_ai_faction if i == 0 else ("allies" if next_ai_faction == "soviet" else "soviet")))
 		var ai_faction := _resolve_faction(want, rng)
 		var level: String = str(slot.get("level", next_ai_difficulty))
+
+		var strategy: String = _resolve_strategy(str(slot.get("strategy", next_ai_strategy)))
 		teams[idx] = team
 		player_map["Multi%d" % spawn_index[spawns[k]]] = idx
 		_spawn_start(idx, spawns[k], ai_faction)
@@ -1669,10 +1722,10 @@ func _place_players() -> void:
 		spawns.remove_at(k)
 		sim.give_credits(idx, next_credits)
 		sim.set_faction(idx, ai_faction)
-		sim.enable_bot(idx, _bot_params(level))
+		sim.enable_bot(idx, _bot_params(level, strategy))
 		sim.set_handicap(idx, int(AI_HANDICAPS.get(level, 0)))
 		used_players.append(idx)
-		_roster_add(idx, -1, "", ai_faction, team, "bot", level)
+		_roster_add(idx, -1, "", ai_faction, team, "bot", level, -1, strategy)
 
 
 	for a in used_players:
@@ -1776,7 +1829,7 @@ func _apply_setup(setup: Dictionary) -> void:
 
 		_roster_add(pid, int(e.get("seat", -1)), str(e.get("name", "")), faction,
 				int(e.get("team", 0)), str(e.get("kind", "human")), str(e.get("level", "")),
-				int(e.get("color", -1)))
+				int(e.get("color", -1)), str(e.get("strategy", "")))
 
 		for su in e.get("start_units", []):
 			var sc: Array = su.get("cell", [cell.x, cell.y])
@@ -1791,7 +1844,12 @@ func _apply_setup(setup: Dictionary) -> void:
 		sim.reveal(pid, cell.x, cell.y, 5)
 		if str(e.get("kind", "human")) == "bot":
 			var level := str(e.get("level", "normal"))
-			sim.enable_bot(pid, _bot_params(level))
+
+
+			var strategy := str(e.get("strategy", "normal"))
+			if strategy == "naval" and not _map_has_water():
+				strategy = "normal"
+			sim.enable_bot(pid, _bot_params(level, strategy))
 			sim.set_handicap(pid, int(AI_HANDICAPS.get(level, 0)))
 		if pid == local_player:
 			my_cell = cell
@@ -3013,10 +3071,16 @@ func order_repair(depot: Unit) -> bool:
 	return true
 
 
+func low_power() -> bool:
+	if sim == null:
+		return false
+	return sim.power_drained(local_player) > sim.power_provided(local_player)
+
+
 func has_radar() -> bool:
 	if sim == null:
 		return false
-	if sim.power_drained(local_player) > sim.power_provided(local_player):
+	if low_power():
 		return false
 	for u in units:
 		if u.alive and u.player == local_player and not u.selling and types[u.type].get("provides_radar", false):
@@ -3030,7 +3094,7 @@ func has_radar() -> bool:
 func radar_jammed() -> bool:
 	if sim == null or not sim.has_method("actor_jammed"):
 		return false
-	if sim.power_drained(local_player) > sim.power_provided(local_player):
+	if low_power():
 		return false
 	var any := false
 	for u in units:
@@ -3099,6 +3163,22 @@ func order_scatter() -> void:
 	if sim != null:
 		issue(NetOrders.make(NetOrders.OP_SCATTER, 0, 0, 0, 0, _selection_ids()))
 		_voice("action")
+
+
+func order_harvesters_return() -> bool:
+	return issue(NetOrders.make(NetOrders.OP_HARVESTERS_RETURN))
+
+
+func order_harvesters_resume() -> bool:
+	return issue(NetOrders.make(NetOrders.OP_HARVESTERS_RESUME))
+
+
+func own_harvester_count() -> int:
+	var n := 0
+	for u in units:
+		if u.alive and u.player == local_player and types[u.type].get("harvester", false):
+			n += 1
+	return n
 
 
 func _set_goals(goal: Vector2, kind: int = 0) -> void:

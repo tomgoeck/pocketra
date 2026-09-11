@@ -204,6 +204,23 @@ constexpr uint8_t ORE_MAX_DENSITY = 12;
 constexpr uint8_t GEMS_MAX_DENSITY = 3;
 
 
+constexpr int32_t RES_BLOCK = 4;
+
+constexpr int32_t RICH_LOADS = 2;
+
+
+constexpr int32_t GEM_BONUS = 150;
+
+constexpr int32_t REFINERY_DIRECTION_PENALTY = 200;
+
+constexpr int32_t MAX_DOCK_QUEUE = 3;
+
+
+constexpr int32_t DOCK_QUEUE_COST = 60;
+
+constexpr int32_t DOCK_FULL_COST = 600;
+
+
 enum Armor { ARMOR_NONE = 0, ARMOR_WOOD, ARMOR_LIGHT, ARMOR_HEAVY, ARMOR_CONCRETE, ARMOR_TREE, NUM_ARMOR };
 
 
@@ -523,6 +540,14 @@ struct CrateSpawnerParams {
 };
 
 
+enum BotPersonality {
+    BOT_P_NORMAL = 0, BOT_P_RUSH = 1, BOT_P_TURTLE = 2, BOT_P_AIR = 3, BOT_P_NAVAL = 4,
+    BOT_P_RANDOM = 5, BOT_P_COUNT = 6
+};
+
+
+enum BotPlan { PLAN_ECONOMY = 0, PLAN_PRESSURE = 1, PLAN_AIR_STRIKE = 2, PLAN_SIEGE = 3, PLAN_DEFEND = 4, PLAN_COUNT = 5 };
+
 struct BotParams {
 
     int32_t min_excess_power = 0, max_excess_power = 200, excess_power_increment = 40, excess_power_threshold = 4;
@@ -565,10 +590,36 @@ struct BotParams {
 
 
     std::vector<int32_t> building_fraction, building_limit, building_delay, unit_share, unit_limit;
+
+
+    int32_t personality = BOT_P_NORMAL;
+    int32_t strategy_interval = 200;
+    int32_t plan_weight[PLAN_COUNT] = {100, 100, 100, 100, 100};
+
+    int32_t threat_map_interval = 97, threat_map_side = 6;
+
+    int32_t target_value_weight = 100, target_distance_bias = 8, target_threat_weight = 30;
+
+    int32_t sp_scan_interval = 100;
+    int32_t sp_coarse_step = 5, sp_fine_step = 2, sp_check_radius = 7;
+    int32_t sp_own_penalty = 10;
+    int32_t nuke_min_attractiveness = 3000;
+    int32_t iron_min_attractiveness = 2000;
+    int32_t chrono_min_attractiveness = 2500;
+
+    int32_t air_squad_size = 3;
+    int32_t air_danger_radius = 10;
+    int32_t aa_per_unit = 3;
+
+    int32_t raid_squad_size = 4, raid_interval = 1500;
+    int32_t siege_range_percent = 85;
+    int32_t first_attack_tick = 0;
 };
 
 struct BotSquad {
-    enum Type { ASSAULT, RUSH, PROTECTION };
+
+
+    enum Type { ASSAULT, RUSH, PROTECTION, AIR, RAID };
     enum State { IDLE, ATTACK_MOVE, ATTACK, FLEE };
     Type type = ASSAULT;
     State state = IDLE;
@@ -660,6 +711,21 @@ struct BotState {
     int32_t mcv_respond_cooldown = 0;
 
     int32_t rally_ticks = 0;
+
+    int32_t personality = BOT_P_NORMAL;
+    int32_t plan = PLAN_ECONOMY;
+    int32_t plan_score = 0;
+    int32_t strategy_ticks = 0, raid_ticks = 0, threat_ticks = 0;
+
+
+    int32_t sp_wait[SP_COUNT] = {0, 0, 0, 0};
+
+
+    std::vector<int32_t> threat_enemy, threat_friendly;
+    int32_t tm_cols = 0, tm_rows = 0, tm_side = 0;
+
+    int32_t stat_units_built = 0, stat_sp_fired = 0, stat_squads_sent = 0;
+    uint32_t stat_first_attack = 0;
 };
 
 struct PlayerState {
@@ -1259,7 +1325,10 @@ inline int32_t arm_weapon(const UnitType& t, int k) {
 
 
 struct Harvest {
-    enum State { IDLE, SEARCH, TO_FIELD, HARVESTING, TO_DOCK, DOCK_TURN, UNLOADING, WAIT };
+
+
+    enum State { IDLE, SEARCH, TO_FIELD, HARVESTING, TO_DOCK, DOCK_TURN, UNLOADING, WAIT,
+                 QUEUE, EXPLORE, PARKING, PARKED };
     State state = IDLE;
     bool automated = true;
     int32_t bales = 0;
@@ -1276,6 +1345,23 @@ struct Harvest {
     int32_t linked_proc = -1;
     int32_t timer = 0;
     uint32_t anim = 0;
+
+
+    bool dock_held = false;
+
+
+    bool park = false;
+    int32_t queue_tick = -1;
+    CPos wait_cell;
+    bool has_wait = false;
+
+
+    CPos avoid_cell;
+    bool has_avoid = false;
+    int32_t fails = 0;
+
+
+    int32_t blind = 0;
 };
 
 
@@ -1659,6 +1745,11 @@ public:
 
 
     bool order_deliver(const int32_t* ids, size_t n, int32_t refinery_id);
+
+
+    void order_harvesters_return_to_base(int32_t owner);
+
+    void order_harvesters_resume(int32_t owner);
     void order_stop(const int32_t* ids, size_t n);
     void order_scatter(const int32_t* ids, size_t n);
 
@@ -1894,6 +1985,23 @@ public:
     bool bot_enabled(int32_t owner) const { return owner >= 0 && owner < MAX_PLAYERS && players_[owner].bot.enabled; }
     size_t bot_squad_count(int32_t owner) const { return bot_enabled(owner) ? players_[owner].bot.squads.size() : 0; }
 
+
+    int32_t bot_pick_personality() { return int32_t(rand() % uint32_t(BOT_P_RANDOM)); }
+
+    int32_t bot_personality(int32_t owner) const { return bot_enabled(owner) ? players_[owner].bot.personality : -1; }
+    int32_t bot_plan(int32_t owner) const { return bot_enabled(owner) ? players_[owner].bot.plan : -1; }
+    int32_t bot_stat(int32_t owner, int32_t which) const {
+        if (!bot_enabled(owner)) return 0;
+        const BotState& b = players_[owner].bot;
+        switch (which) {
+        case 0: return b.stat_units_built;
+        case 1: return b.stat_sp_fired;
+        case 2: return b.stat_squads_sent;
+        case 3: return int32_t(b.stat_first_attack);
+        default: return 0;
+        }
+    }
+
     const BotState& bot_state(int32_t owner) const { return players_[owner < 0 || owner >= MAX_PLAYERS ? 0 : owner].bot; }
     void step_bots();
     void bot_tick(int32_t owner);
@@ -1929,6 +2037,33 @@ public:
     void bot_land_reach(CPos from, std::vector<uint8_t>& out) const;
     int32_t bot_choose_unit(int32_t owner, int32_t kind);
     bool bot_can_attack(const std::vector<int32_t>& own, const std::vector<int32_t>& enemies, bool rush) const;
+
+
+    static void bot_apply_personality(BotParams& p, int32_t personality);
+
+    void bot_threat_map(int32_t owner);
+    int32_t bot_threat_at(int32_t owner, CPos c, bool enemy) const;
+    int32_t bot_firepower_of(size_t i) const;
+
+    void bot_strategy(int32_t owner);
+    int32_t bot_plan_score(int32_t owner, int32_t plan) const;
+    int64_t bot_target_value(size_t i) const;
+    int32_t bot_pick_target(int32_t owner, WVec from, int64_t radius, bool ignore_airborne) const;
+
+    void bot_support_powers(int32_t owner);
+    bool bot_sp_target(int32_t owner, int32_t kind, CPos& out, CPos& out2, int64_t& attraction) const;
+    int64_t bot_sp_attraction(int32_t owner, int32_t kind, CPos c) const;
+
+    void bot_air_squads(int32_t owner);
+    void bot_update_air_squad(int32_t owner, BotSquad& s);
+    void bot_raid_squads(int32_t owner);
+    void bot_update_raid_squad(int32_t owner, BotSquad& s);
+    int32_t bot_raid_target(int32_t owner, WVec from) const;
+    bool bot_squad_siege(int32_t owner, BotSquad& s);
+    int32_t bot_plan_squad_size(int32_t owner) const;
+    int32_t bot_plan_sp_threshold(int32_t owner, int32_t base) const;
+    int32_t bot_count_aa(int32_t owner, WVec at, int32_t radius_cells) const;
+    bool bot_unit_is_siege(size_t i) const;
 
     void step();
     uint32_t tick() const { return tick_; }
@@ -2037,6 +2172,10 @@ private:
     int32_t smudge_depths_[NUM_SMUDGE_KINDS] = {1, 1, 1};
     uint32_t smudge_version_ = 0;
     std::vector<int32_t> claims_;
+
+
+    std::vector<int32_t> res_block_;
+    int32_t res_block_w_ = 0, res_block_h_ = 0;
     uint32_t resource_version_ = 0;
     int64_t credits_[MAX_PLAYERS] = {0, 0, 0, 0, 0, 0, 0, 0};
     int64_t resources_[MAX_PLAYERS] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -2232,10 +2371,35 @@ private:
 
 
     void step_harvester(size_t i);
-    bool closest_harvestable(size_t i, CPos& out);
+    bool closest_harvestable(size_t i, CPos& out, bool ignore_shroud = false);
     int nearest_refinery(size_t i) const;
+
+
+    int choose_refinery(size_t i) const;
     CPos dock_cell(int proc) const;
+
+    int32_t dock_reservations(int32_t proc_id, int32_t self) const;
+
+    int dock_holder(int32_t proc_id, int32_t self) const;
+
+    int32_t dock_queue_rank(size_t i, int32_t proc_id) const;
+
+
+    CPos side_cell(CPos anchor, CPos exclude, int32_t slot) const;
+    CPos dock_queue_cell(int proc, int32_t slot) const;
+    int nearest_base(size_t i) const;
+    int32_t park_rank(size_t i) const;
     void release_claim(size_t i);
+
+    int32_t resource_value_at(CPos c) const;
+    int64_t field_value(CPos c) const;
+    void add_res_value(CPos c, int32_t delta);
+    void rebuild_res_blocks();
+
+
+    bool resource_known(int32_t owner, CPos c) const;
+
+    bool frontier_cell(size_t i, CPos& out) const;
 
 
     int32_t level_threshold(int32_t type, int32_t level) const;

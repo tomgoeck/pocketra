@@ -10,6 +10,9 @@ const VoiceChat := preload("res://scripts/net/voice_chat.gd")
 
 
 const SIM_SEATS := [0, 1, 4, 5, 6, 7]
+
+
+const STRATEGIES := ["normal", "rush", "turtle", "air", "naval"]
 const MAX_SEATS := 6
 
 signal lobby_changed(data: Dictionary)
@@ -389,6 +392,12 @@ func build_setup(slug: String, clients: Array, room_settings: Dictionary) -> Dic
 		}
 		if kind == "bot":
 			entry["level"] = str(c.get("level", "normal"))
+
+
+			var strat := str(c.get("strategy", "normal"))
+			if strat == "random" or strat == "" or not STRATEGIES.has(strat):
+				strat = STRATEGIES[rng.randi() % (STRATEGIES.size())]
+			entry["strategy"] = strat
 		out_seats.append(entry)
 
 		if kind == "human":

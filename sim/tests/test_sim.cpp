@@ -892,6 +892,281 @@ static void test_bot_difficulty() {
 }
 
 
+struct UtilityWorld {
+    int32_t fact = -1, powr = -1, mslo = -1, hpad = -1, heli = -1, tank = -1, agun = -1, proc = -1;
+};
+
+static UtilityWorld build_utility_world(World& w, int size = 64) {
+    UtilityWorld t;
+    std::vector<uint8_t> cost(size_t(size) * size_t(size), 1);
+    w.set_map(size, size, cost.data());
+    Weapon gun; gun.range = 5 * CELL; gun.reload = 40; gun.damage = 3000; gun.speed = 0;
+    gun.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_VEHICLE | TT_INFANTRY;
+    const int w_gun = w.define_weapon(gun);
+    Weapon hell; hell.range = 4 * CELL; hell.reload = 30; hell.damage = 3000; hell.speed = 0;
+    hell.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_VEHICLE;
+    const int w_hell = w.define_weapon(hell);
+    Weapon flak; flak.range = 6 * CELL; flak.reload = 20; flak.damage = 2000; flak.speed = 0;
+    flak.valid_targets = TT_AIRBORNE;
+    const int w_flak = w.define_weapon(flak);
+    Weapon nuke; nuke.damage = 20000; nuke.spread = 2 * CELL; nuke.range = 0;
+    for (int i = 0; i < NUM_ARMOR; ++i) nuke.versus[i] = 100;
+    nuke.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_VEHICLE | TT_INFANTRY;
+    const int w_nuke = w.define_weapon(nuke);
+
+    UnitType fact;
+    fact.building = true; fact.foot_w = 3; fact.foot_h = 3; fact.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    fact.sprite_h = 3; fact.hp = 150000; fact.produces = 1u << QUEUE_BUILDING;
+    fact.base_provider = true; fact.provides = {"fact"}; fact.cost = 2500;
+    fact.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    t.fact = w.define_type(fact);
+
+    UnitType powr;
+    powr.building = true; powr.foot_w = 2; powr.foot_h = 2; powr.footprint = {1, 1, 1, 1};
+    powr.sprite_h = 2; powr.hp = 40000; powr.power = 200; powr.cost = 300; powr.make_ticks = 20;
+    powr.queue_kind = QUEUE_BUILDING; powr.provides = {"powr", "anypower"}; powr.ai_building_fraction = 2;
+    powr.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    t.powr = w.define_type(powr);
+
+    UnitType proc;
+    proc.building = true; proc.foot_w = 3; proc.foot_h = 3; proc.footprint = {0, 1, 0, 1, 1, 1, 1, 0, 0};
+    proc.sprite_h = 3; proc.hp = 90000; proc.power = -30; proc.cost = 1400; proc.make_ticks = 20;
+    proc.queue_kind = QUEUE_BUILDING; proc.prerequisites = {"anypower"}; proc.provides = {"proc"};
+    proc.refinery = true; proc.dock_dx = 1; proc.dock_dy = 2; proc.ai_building_fraction = 1;
+    proc.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    t.proc = w.define_type(proc);
+
+    UnitType mslo;
+    mslo.building = true; mslo.foot_w = 2; mslo.foot_h = 2; mslo.footprint = {1, 1, 1, 1};
+    mslo.sprite_h = 2; mslo.hp = 40000; mslo.power = -150; mslo.cost = 2500; mslo.make_ticks = 20;
+    mslo.queue_kind = QUEUE_BUILDING; mslo.prerequisites = {"anypower"}; mslo.ai_building_fraction = 1;
+    mslo.support_power = SP_NUKE; mslo.sp_charge = 200; mslo.sp_weapon = w_nuke; mslo.sp_flight = 10;
+    mslo.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    t.mslo = w.define_type(mslo);
+
+    UnitType hpad;
+    hpad.building = true; hpad.foot_w = 2; hpad.foot_h = 2; hpad.footprint = {1, 1, 1, 1};
+    hpad.sprite_h = 2; hpad.hp = 80000; hpad.power = -10; hpad.cost = 500; hpad.make_ticks = 20;
+    hpad.queue_kind = QUEUE_BUILDING; hpad.prerequisites = {"anypower"}; hpad.provides = {"hpad"};
+    hpad.produces = 1u << QUEUE_AIRCRAFT; hpad.ai_building_fraction = 4;
+    hpad.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    t.hpad = w.define_type(hpad);
+
+    UnitType heli;
+    heli.aircraft = true; heli.can_hover = true; heli.vtol = true; heli.speed = 149; heli.turn_rate = 16;
+    heli.cruise_altitude = 1280; heli.altitude_velocity = 43; heli.hp = 12000; heli.weapon = w_hell;
+    heli.ammo_max = 8; heli.ammo_reload = 20; heli.air_attack_type = 1; heli.facing_tolerance = 80;
+    heli.hit_radius = 426; heli.cost = 1200; heli.queue_kind = QUEUE_AIRCRAFT;
+    heli.prerequisites = {"hpad"}; heli.make_ticks = 10; heli.ai_unit_share = 90;
+    heli.target_types = TT_GROUND_ACTOR | TT_VEHICLE; heli.target_types_airborne = TT_AIRBORNE;
+    heli.rearm_actors = {t.hpad}; heli.auto_target_mask = TT_GROUND_ACTOR | TT_VEHICLE | TT_STRUCTURE;
+    t.heli = w.define_type(heli);
+
+    UnitType tank;
+    tank.speed = 72; tank.turn_rate = 20; tank.hp = 40000; tank.hit_radius = 426; tank.cost = 800;
+    tank.weapon = w_gun; tank.queue_kind = QUEUE_VEHICLE; tank.ai_unit_share = 60;
+    tank.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+    t.tank = w.define_type(tank);
+
+    UnitType agun;
+    agun.building = true; agun.foot_w = 1; agun.foot_h = 1; agun.footprint = {1};
+    agun.hp = 40000; agun.weapon = w_flak; agun.turreted = true; agun.turret_turn = 40;
+    agun.cost = 600; agun.defense = true; agun.auto_target_mask = TT_AIRBORNE;
+    agun.target_types = TT_GROUND_ACTOR | TT_STRUCTURE | TT_DEFENSE;
+    t.agun = w.define_type(agun);
+    return t;
+}
+
+
+static void test_bot_personality() {
+    BotParams rush, turtle, air;
+    World::bot_apply_personality(rush, BOT_P_RUSH);
+    World::bot_apply_personality(turtle, BOT_P_TURTLE);
+    World::bot_apply_personality(air, BOT_P_AIR);
+
+    CHECK(rush.first_attack_tick < turtle.first_attack_tick);
+
+    CHECK(turtle.nuke_min_attractiveness < rush.nuke_min_attractiveness);
+
+    CHECK(turtle.raid_squad_size == 0 && rush.raid_squad_size > 0);
+
+    CHECK(air.plan_weight[PLAN_AIR_STRIKE] > rush.plan_weight[PLAN_AIR_STRIKE]);
+    CHECK(air.target_threat_weight > rush.target_threat_weight);
+
+
+    auto roll = [](uint32_t seed) {
+        World w;
+        std::vector<uint8_t> cost(16 * 16, 1);
+        w.set_map(16, 16, cost.data());
+        w.set_rng_seed(seed);
+        BotParams p;
+        World::bot_apply_personality(p, BOT_P_RANDOM);
+        w.enable_bot(1, p);
+        return w.bot_personality(1);
+    };
+    const int32_t a = roll(4242), b = roll(4242), c = roll(99);
+    CHECK(a == b);
+    CHECK(a >= 0 && a < BOT_P_RANDOM);
+    std::printf("KI-Persoenlichkeiten: Rush T%d < Turtle T%d, Zufall(4242)=%d zweimal gleich, Zufall(99)=%d\n",
+                rush.first_attack_tick, turtle.first_attack_tick, a, c);
+    (void)c;
+}
+
+
+static void test_bot_target_value() {
+    World w;
+    const UtilityWorld t = build_utility_world(w);
+    w.set_alliance(0, 1, false);
+    w.spawn_building(t.fact, 1, {5, 5});
+    w.spawn(t.tank, 0, {20, 20});
+    w.spawn_building(t.proc, 0, {30, 30});
+    BotParams bp;
+    World::bot_apply_personality(bp, BOT_P_NORMAL);
+    w.enable_bot(1, bp);
+    const int32_t pick = w.bot_pick_target(1, WVec{5 * CELL, 5 * CELL}, 0, true);
+    int proc_id = -1;
+    for (size_t i = 0; i < w.actor_count(); ++i)
+        if (w.actor(i).owner == 0 && w.type(w.actor(i).type).refinery) proc_id = w.actor(i).id;
+    CHECK(pick == proc_id);
+    std::printf("KI-Zielwahl: Raffinerie (Wert 2800, 35 Zellen) schlaegt Panzer (Wert 800, 21 Zellen)\n");
+}
+
+
+static void test_bot_support_power() {
+    World w;
+    const UtilityWorld t = build_utility_world(w);
+    w.set_alliance(0, 1, false);
+    w.spawn_building(t.fact, 1, {4, 4});
+    w.spawn_building(t.mslo, 1, {4, 9});
+    w.spawn_building(t.powr, 1, {8, 4});
+
+    w.spawn_building(t.fact, 0, {40, 40});
+    w.spawn_building(t.proc, 0, {44, 40});
+    w.spawn_building(t.proc, 0, {40, 44});
+
+    w.spawn(t.tank, 0, {20, 55});
+    BotParams bp;
+    World::bot_apply_personality(bp, BOT_P_NORMAL);
+    bp.sp_scan_interval = 20;
+    w.enable_bot(1, bp);
+
+    CPos target{-1, -1}, target2{-1, -1};
+    int64_t attraction = 0;
+    CHECK(w.bot_sp_target(1, SP_NUKE, target, target2, attraction));
+    CHECK(attraction >= bp.nuke_min_attractiveness);
+    CHECK(target.x >= 38 && target.x <= 47 && target.y >= 38 && target.y <= 47);
+
+
+    int hp_before = 0;
+    for (size_t i = 0; i < w.actor_count(); ++i)
+        if (w.actor(i).owner == 0 && w.actor(i).type == t.fact) hp_before = w.actor(i).hp;
+    for (int k = 0; k < 400; ++k) w.step();
+    int hp_after = hp_before;
+    for (size_t i = 0; i < w.actor_count(); ++i)
+        if (w.actor(i).owner == 0 && w.actor(i).type == t.fact) hp_after = w.actor(i).hp;
+    CHECK(w.bot_stat(1, 1) >= 1);
+    CHECK(hp_after < hp_before);
+    std::printf("KI-Superwaffe: Ziel (%d,%d) Anziehung %lld, %d Abschuss/Abschuesse, Bauhof %d -> %d HP\n",
+                target.x, target.y, static_cast<long long>(attraction), w.bot_stat(1, 1), hp_before, hp_after);
+}
+
+
+static void test_bot_air_squad() {
+    World w;
+    const UtilityWorld t = build_utility_world(w);
+    w.set_alliance(0, 1, false);
+    w.spawn_building(t.fact, 1, {4, 4});
+    w.spawn_building(t.hpad, 1, {8, 4});
+    w.spawn_building(t.powr, 1, {4, 9});
+    w.spawn_building(t.fact, 0, {50, 50});
+    const int32_t victim = w.spawn_building(t.proc, 0, {46, 50});
+    BotParams bp;
+    World::bot_apply_personality(bp, BOT_P_AIR);
+    bp.air_squad_size = 2;
+    bp.first_attack_tick = 0;
+    w.enable_bot(1, bp);
+
+    for (int k = 0; k < 3; ++k) w.spawn(t.heli, 1, {10 + k, 8});
+    for (int k = 0; k < 60; ++k) w.step();
+
+    const BotState& b = w.bot_state(1);
+    int air_squads = 0, air_units = 0, ground_with_air = 0;
+    for (const BotSquad& s : b.squads) {
+        if (s.type == BotSquad::AIR) { ++air_squads; air_units += int(s.units.size()); continue; }
+        for (int32_t id : s.units) {
+            const int i = w.index_of(id);
+            if (i >= 0 && w.type(w.actor(size_t(i)).type).aircraft) ++ground_with_air;
+        }
+    }
+    CHECK(air_squads == 1);
+    CHECK(air_units == 3);
+    CHECK(ground_with_air == 0);
+
+
+    auto enemy_hp = [&]() {
+        int64_t sum = 0;
+        for (size_t i = 0; i < w.actor_count(); ++i)
+            if (w.actor(i).alive && w.actor(i).owner == 0) sum += w.actor(i).hp;
+        return sum;
+    };
+    const int64_t hp0 = enemy_hp();
+    for (int k = 0; k < 1500; ++k) w.step();
+    const int64_t hp1 = enemy_hp();
+    CHECK(hp1 < hp0);
+    (void)victim;
+    std::printf("KI-Luft-Trupp: 1 Trupp, 3 Flieger, kein Flieger im Bodentrupp; Gegner %lld -> %lld HP\n",
+                static_cast<long long>(hp0), static_cast<long long>(hp1));
+
+
+    World v;
+    const UtilityWorld t2 = build_utility_world(v);
+    v.set_alliance(0, 1, false);
+    v.spawn_building(t2.fact, 1, {4, 4});
+    v.spawn_building(t2.hpad, 1, {8, 4});
+    v.spawn_building(t2.fact, 0, {50, 50});
+    for (int k = 0; k < 4; ++k) v.spawn_building(t2.agun, 0, {46 + k, 50});
+    BotParams bp2 = bp;
+    v.enable_bot(1, bp2);
+    for (int k = 0; k < 2; ++k) v.spawn(t2.heli, 1, {10 + k, 8});
+    for (int k = 0; k < 400; ++k) v.step();
+    bool any_target = false;
+    for (const BotSquad& s : v.bot_state(1).squads)
+        if (s.type == BotSquad::AIR && s.target >= 0) any_target = true;
+    CHECK(!any_target);
+    std::printf("KI-Luft-Trupp: 2 Flieger gegen 4 Flakstellungen -> kein Ziel (AirStates: Flak x 3 >= Truppgroesse)\n");
+}
+
+
+static uint64_t state_hash(const World& w);
+
+static void test_bot_determinism() {
+    auto run = [](uint32_t seed, uint32_t ticks) {
+        World w;
+        const UtilityWorld t = build_utility_world(w);
+        w.set_rng_seed(seed);
+        w.set_alliance(0, 1, false);
+        w.spawn_building(t.fact, 0, {6, 6});
+        w.spawn_building(t.fact, 1, {50, 50});
+        w.give_credits(0, 20000);
+        w.give_credits(1, 20000);
+        BotParams a, b;
+        World::bot_apply_personality(a, BOT_P_RUSH);
+        World::bot_apply_personality(b, BOT_P_TURTLE);
+        a.squad_size = 5; a.squad_size_random_bonus = 3; a.first_attack_tick = 200;
+        b.squad_size = 6; b.squad_size_random_bonus = 3; b.first_attack_tick = 400;
+        w.enable_bot(0, a);
+        w.enable_bot(1, b);
+        for (uint32_t k = 0; k < ticks; ++k) w.step();
+        return std::pair<uint64_t, uint64_t>(state_hash(w), w.state_hash_full());
+    };
+    const auto r1 = run(777, 4000), r2 = run(777, 4000), r3 = run(778, 4000);
+    CHECK(r1.first == r2.first);
+    CHECK(r1.second == r2.second);
+    CHECK(r1.first != r3.first);
+    std::printf("KI-Determinismus: Rush gegen Turtle, 4000 Ticks, Hash %016llx zweimal identisch (Seed 778: %016llx)\n",
+                static_cast<unsigned long long>(r1.first), static_cast<unsigned long long>(r3.first));
+}
+
 static void test_build_area() {
     World w;
     std::vector<uint8_t> cost(60 * 60, 1);
@@ -3168,6 +3443,248 @@ static void test_bot_harvester_redirect() {
     std::printf("KI-Harvester: %s zum frischen Erzfeld umgeleitet (Ziel %d,%d)\n",
                 redirected > 0 ? "ja" : "NEIN", goal.x, goal.y);
     CHECK(redirected > 0);
+}
+
+
+namespace harv_fixture {
+
+
+inline UnitType harv_type() {
+    UnitType h;
+    h.speed = 72; h.turn_rate = 1024; h.hp = 60000; h.harvester = true; h.capacity = 20;
+    h.bale_load_delay = 4; h.bale_unload_delay = 1;
+    h.search_from_proc = 15; h.search_from_harv = 8;
+    h.wait_duration = 25; h.harvest_facings = 0;
+    h.hit_radius = 512;
+    return h;
+}
+
+inline UnitType proc_type() {
+    UnitType p;
+    p.building = true; p.foot_w = 3; p.foot_h = 3; p.footprint = {0, 1, 0, 1, 1, 1, 1, 0, 0};
+    p.build_block = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    p.sprite_h = 3; p.hp = 90000; p.refinery = true; p.dock_dx = 1; p.dock_dy = 2; p.dock_angle = 256;
+    return p;
+}
+
+inline UnitType fact_type() {
+    UnitType f;
+    f.building = true; f.foot_w = 3; f.foot_h = 2; f.footprint = {1, 1, 1, 1, 1, 1};
+    f.build_block = {1, 1, 1, 1, 1, 1};
+    f.sprite_h = 2; f.hp = 100000; f.base_provider = true;
+    return f;
+}
+
+}
+
+
+static void test_harvester_queue() {
+    World w;
+    std::vector<uint8_t> cost(48 * 48, 1);
+    w.set_map(48, 48, cost.data());
+    const int t_harv = w.define_type(harv_fixture::harv_type());
+    const int t_proc = w.define_type(harv_fixture::proc_type());
+    w.spawn_building(t_proc, 0, {10, 10});
+    for (int y = 20; y < 34; ++y)
+        for (int x = 8; x < 22; ++x) w.set_resource({x, y}, RES_ORE, 12);
+
+    std::vector<int32_t> ids;
+    for (int k = 0; k < 6; ++k) ids.push_back(w.spawn(t_harv, 0, {14 + k, 16}));
+
+
+    std::vector<int32_t> loads(ids.size(), 0), stall(ids.size(), 0), worst(ids.size(), 0);
+    std::vector<int32_t> last_bales(ids.size(), 0);
+    std::vector<CPos> last_cell(ids.size());
+    std::vector<int> last_state(ids.size(), -1);
+    for (size_t k = 0; k < ids.size(); ++k) last_cell[k] = w.mobile(size_t(w.index_of(ids[k]))).cell;
+
+    for (int t = 0; t < 9000; ++t) {
+        w.step();
+        for (size_t k = 0; k < ids.size(); ++k) {
+            const size_t i = size_t(w.index_of(ids[k]));
+            const Harvest& h = w.harvest(i);
+            if (last_bales[k] > 0 && h.bales == 0) ++loads[k];
+            last_bales[k] = h.bales;
+            const CPos c = w.mobile(i).cell;
+            if (c == last_cell[k] && int(h.state) == last_state[k]) {
+                if (++stall[k] > worst[k]) worst[k] = stall[k];
+            } else {
+                stall[k] = 0;
+            }
+            last_cell[k] = c;
+            last_state[k] = int(h.state);
+        }
+    }
+    int32_t min_loads = 1 << 30, max_stall = 0;
+    for (size_t k = 0; k < ids.size(); ++k) {
+        if (loads[k] < min_loads) min_loads = loads[k];
+        if (worst[k] > max_stall) max_stall = worst[k];
+    }
+    std::printf("Sechs Ernteeinheiten an einer Raffinerie: %lld Credits, mindestens %d Fuhren je "
+                "Einheit, längster Stillstand %d Ticks\n",
+                static_cast<long long>(w.credits(0)), min_loads, max_stall);
+    CHECK(min_loads >= 2);
+    CHECK(max_stall < 600);
+    CHECK(w.credits(0) >= 6000);
+}
+
+
+static void test_harvester_far_ore() {
+    World w;
+    std::vector<uint8_t> cost(64 * 64, 1);
+    w.set_map(64, 64, cost.data());
+    const int t_harv = w.define_type(harv_fixture::harv_type());
+    const int t_proc = w.define_type(harv_fixture::proc_type());
+    w.spawn_building(t_proc, 0, {6, 6});
+    for (int y = 46; y < 52; ++y)
+        for (int x = 46; x < 52; ++x) w.set_resource({x, y}, RES_ORE, 12);
+    const int32_t h = w.spawn(t_harv, 0, {9, 9});
+    const size_t i = size_t(w.index_of(h));
+    int reached = -1;
+    for (int t = 0; t < 6000; ++t) {
+        w.step();
+        if (reached < 0 && w.harvest(i).bales > 0) reached = t;
+    }
+    std::printf("Fernes Erzfeld (40 Zellen, außerhalb beider Suchradien): erster Ballen bei Tick %d, "
+                "%lld Credits\n", reached, static_cast<long long>(w.credits(0)));
+    CHECK(reached > 0);
+    CHECK(w.credits(0) > 0);
+}
+
+
+static void test_harvester_gems_and_richness() {
+    {
+        World w;
+        std::vector<uint8_t> cost(48 * 48, 1);
+        w.set_map(48, 48, cost.data());
+        const int t_harv = w.define_type(harv_fixture::harv_type());
+        const int t_proc = w.define_type(harv_fixture::proc_type());
+        w.spawn_building(t_proc, 0, {22, 4});
+        for (int y = 20; y < 26; ++y) {
+            for (int x = 10; x < 16; ++x) w.set_resource({x, y}, RES_ORE, 12);
+            for (int x = 32; x < 38; ++x) w.set_resource({x, y}, RES_GEMS, 3);
+        }
+        const int32_t h = w.spawn(t_harv, 0, {24, 23});
+        const size_t i = size_t(w.index_of(h));
+
+
+        for (int t = 0; t < 400 && w.harvest(i).state != Harvest::TO_FIELD &&
+                        w.harvest(i).state != Harvest::HARVESTING; ++t) w.step();
+        const CPos target = w.harvest(i).target;
+        std::printf("Diamanten-Vorzug: Ziel (%d,%d) — %s\n", target.x, target.y,
+                    target.x > 24 ? "Diamantenfeld" : "Erzfeld");
+        CHECK(target.x > 24);
+    }
+    {
+        World w;
+        std::vector<uint8_t> cost(48 * 48, 1);
+        w.set_map(48, 48, cost.data());
+        const int t_harv = w.define_type(harv_fixture::harv_type());
+        const int t_proc = w.define_type(harv_fixture::proc_type());
+        w.spawn_building(t_proc, 0, {4, 4});
+        for (int x = 12; x < 15; ++x) w.set_resource({x, 12}, RES_ORE, 12);
+        for (int y = 28; y < 36; ++y)
+            for (int x = 28; x < 36; ++x) w.set_resource({x, y}, RES_ORE, 12);
+        const int32_t h = w.spawn(t_harv, 0, {10, 10});
+        const size_t i = size_t(w.index_of(h));
+        for (int t = 0; t < 400 && w.harvest(i).state != Harvest::TO_FIELD &&
+                        w.harvest(i).state != Harvest::HARVESTING; ++t) w.step();
+        const CPos target = w.harvest(i).target;
+        std::printf("Ergiebigkeit: Ziel (%d,%d) — %s\n", target.x, target.y,
+                    target.y >= 28 ? "großes Feld" : "Restzellen");
+        CHECK(target.y >= 28);
+    }
+}
+
+
+static void test_harvester_park() {
+    World w;
+    std::vector<uint8_t> cost(48 * 48, 1);
+    w.set_map(48, 48, cost.data());
+    const int t_harv = w.define_type(harv_fixture::harv_type());
+    const int t_proc = w.define_type(harv_fixture::proc_type());
+    const int t_fact = w.define_type(harv_fixture::fact_type());
+    w.spawn_building(t_fact, 0, {6, 6});
+    w.spawn_building(t_proc, 0, {12, 6});
+    for (int y = 26; y < 34; ++y)
+        for (int x = 26; x < 34; ++x) w.set_resource({x, y}, RES_ORE, 12);
+    std::vector<int32_t> ids;
+    for (int k = 0; k < 4; ++k) ids.push_back(w.spawn(t_harv, 0, {20 + k, 20}));
+    for (int t = 0; t < 300; ++t) w.step();
+
+
+    const std::vector<int32_t> park_cmd = {25, 0, 0, 0, 0, 0};
+    CHECK(w.apply_order(0, park_cmd.data(), park_cmd.size()));
+    for (int t = 0; t < 2500; ++t) w.step();
+
+    std::vector<CPos> cells;
+    int parked = 0;
+    for (int32_t id : ids) {
+        const size_t i = size_t(w.index_of(id));
+        if (w.harvest(i).state == Harvest::PARKED) ++parked;
+        cells.push_back(w.mobile(i).cell);
+    }
+    bool distinct = true;
+    for (size_t a = 0; a < cells.size(); ++a)
+        for (size_t b = a + 1; b < cells.size(); ++b)
+            if (cells[a] == cells[b]) distinct = false;
+    int64_t max_dist = 0;
+    for (CPos c : cells) {
+        const int64_t d = cell_dist_sq(c, CPos{7, 7});
+        if (d > max_dist) max_dist = d;
+    }
+    std::printf("Zur Basis: %d von %d geparkt, eigene Zellen %s, weiteste %lld Zellen² vom Bauhof\n",
+                parked, int(ids.size()), distinct ? "ja" : "NEIN", static_cast<long long>(max_dist));
+    CHECK(parked == int(ids.size()));
+    CHECK(distinct);
+    CHECK(max_dist <= 100);
+
+
+    const int64_t before = w.credits(0);
+    for (int t = 0; t < 1200; ++t) w.step();
+    CHECK(w.credits(0) == before);
+
+
+    const std::vector<int32_t> resume_cmd = {26, 0, 0, 0, 0, 0};
+    CHECK(w.apply_order(0, resume_cmd.data(), resume_cmd.size()));
+    for (int t = 0; t < 4000; ++t) w.step();
+    std::printf("Weitersammeln: %lld Credits (vorher %lld)\n",
+                static_cast<long long>(w.credits(0)), static_cast<long long>(before));
+    CHECK(w.credits(0) > before);
+}
+
+
+static void test_harvester_explore() {
+    World w;
+    std::vector<uint8_t> cost(48 * 48, 1);
+    w.set_map(48, 48, cost.data());
+    w.set_visibility_players(1u);
+    UnitType ht = harv_fixture::harv_type();
+    ht.reveal_cells = 5; ht.reveal_range = 5 * 1024;
+    UnitType pt = harv_fixture::proc_type();
+    pt.reveal_cells = 6; pt.reveal_range = 6 * 1024;
+    const int t_harv = w.define_type(ht);
+    const int t_proc = w.define_type(pt);
+    w.spawn_building(t_proc, 0, {6, 6});
+    for (int y = 30; y < 38; ++y)
+        for (int x = 30; x < 38; ++x) w.set_resource({x, y}, RES_ORE, 12);
+    const int32_t h = w.spawn(t_harv, 0, {9, 9});
+    const size_t i = size_t(w.index_of(h));
+
+    for (int t = 0; t < 30; ++t) w.step();
+    const bool knew_ore = w.explored(0, CPos{33, 33});
+    const Harvest::State early = w.harvest(i).state;
+    CHECK(!knew_ore);
+    CHECK(early == Harvest::EXPLORE || early == Harvest::WAIT);
+
+    int found = -1;
+    for (int t = 0; t < 12000; ++t) {
+        w.step();
+        if (found < 0 && w.harvest(i).bales > 0) found = t;
+    }
+    std::printf("Erkundungsfahrt: Erz zu Beginn unbekannt (%s), erster Ballen bei Tick %d, %lld Credits\n",
+                knew_ore ? "NEIN" : "ja", found, static_cast<long long>(w.credits(0)));
+    CHECK(found > 0);
 }
 
 
@@ -7284,6 +7801,11 @@ int main() {
     test_auto_target_tanya();
     test_bot();
     test_bot_difficulty();
+    test_bot_personality();
+    test_bot_target_value();
+    test_bot_support_power();
+    test_bot_air_squad();
+    test_bot_determinism();
     test_build_area();
     test_defense_depot_victory();
     test_deploy_faction();
@@ -7335,6 +7857,11 @@ int main() {
     test_bot_expansion();
     test_bot_refinery_reachable();
     test_order_deliver();
+    test_harvester_queue();
+    test_harvester_far_ore();
+    test_harvester_gems_and_richness();
+    test_harvester_park();
+    test_harvester_explore();
     test_bot_squad_advance();
     test_bot_vehicle_timing();
     test_no_backwards_movement();

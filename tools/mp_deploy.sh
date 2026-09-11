@@ -1,16 +1,4 @@
 #!/bin/sh
-# Mehrspieler-Vermittler auf Toms Server ausrollen (docs/MULTIPLAYER.md §4).
-#
-#   tools/mp_deploy.sh                 # rsync, venv, systemd, nginx, Neustart, Probe
-#   tools/mp_deploy.sh --check         # nur pruefen (kein rsync, kein Neustart)
-#   tools/mp_deploy.sh --skip-nginx    # nginx nicht anfassen
-#   tools/mp_deploy.sh --host anderer  # anderer SSH-Alias
-#
-# Der erste Lauf legt den Benutzer `pocketra-mp` an, baut /opt/pocketra-mp/venv mit `websockets`,
-# installiert die systemd-Unit und traegt den `location /mp`-Block in die nginx-Site ein. Jeder
-# weitere Lauf ist unschaedlich (idempotent): er ersetzt nur mp_server.py und startet den Dienst neu.
-#
-# Der Vermittler haelt keinen Zustand auf Platte — ein Neustart trennt laufende Partien, mehr nicht.
 set -e
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -51,7 +39,6 @@ if [ -z "$CHECK_ONLY" ]; then
     say "Benutzer, venv, systemd auf $HOST"
     ssh "$HOST" "DIR='$DIR' USER_NAME='$USER_NAME' PORT='$PORT' sh -s" <<'FERN'
 set -e
-# --- Benutzer (nur beim ersten Lauf) ---------------------------------------
 if ! id "$USER_NAME" >/dev/null 2>&1; then
     useradd --system --home-dir "$DIR" --shell /usr/sbin/nologin "$USER_NAME"
     echo "Benutzer $USER_NAME angelegt"
@@ -59,7 +46,6 @@ else
     echo "Benutzer $USER_NAME vorhanden"
 fi
 
-# --- venv mit websockets ---------------------------------------------------
 if [ ! -x "$DIR/venv/bin/python" ]; then
     echo "lege venv an"
     if ! python3 -m venv "$DIR/venv" 2>/dev/null; then
@@ -81,7 +67,6 @@ echo "websockets $("$DIR/venv/bin/python" -c 'import websockets;print(websockets
 chown -R "$USER_NAME:$USER_NAME" "$DIR"
 chmod 0755 "$DIR"
 
-# --- systemd ---------------------------------------------------------------
 if ! cmp -s "$DIR/pocketra-mp.service" /etc/systemd/system/pocketra-mp.service; then
     install -m 0644 "$DIR/pocketra-mp.service" /etc/systemd/system/pocketra-mp.service
     systemctl daemon-reload
@@ -105,7 +90,6 @@ if "location /mp" in text:
 snippet = open(os.path.join(d, "nginx-mp.conf"), encoding="utf-8").read()
 snippet = "".join(l for l in snippet.splitlines(True) if not l.lstrip().startswith("#"))
 
-# Den server-Block mit "listen 443" suchen und vor dessen schliessender Klammer einfuegen.
 pos, ziel = 0, None
 while True:
     i = text.find("server", pos)

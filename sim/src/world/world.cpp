@@ -586,6 +586,7 @@ void World::init_layers() {
     res_type_.assign(map_.cells(), RES_NONE);
     res_density_.assign(map_.cells(), 0);
     claims_.assign(map_.cells(), -1);
+    rebuild_res_blocks();
     smudge_kind_.assign(map_.cells(), uint8_t(SMUDGE_NONE));
     smudge_variant_.assign(map_.cells(), 0);
     smudge_depth_.assign(map_.cells(), 0);
@@ -1031,6 +1032,10 @@ void World::order_move(const int32_t* ids, size_t n, CPos goal, int32_t near_eno
         if (types_[actors_[i].type].harvester) {
             release_claim(i);
             harvests_[i].automated = false;
+            harvests_[i].park = false;
+            harvests_[i].dock_held = false;
+            harvests_[i].queue_tick = -1;
+            harvests_[i].has_wait = false;
             actors_[i].repair_depot = -1;
             actors_[i].being_repaired = false;
             harvests_[i].state = Harvest::IDLE;
@@ -1053,6 +1058,10 @@ void World::order_stop(const int32_t* ids, size_t n) {
         if (types_[actors_[i].type].harvester) {
             release_claim(i);
             harvests_[i].automated = false;
+            harvests_[i].park = false;
+            harvests_[i].dock_held = false;
+            harvests_[i].queue_tick = -1;
+            harvests_[i].has_wait = false;
             actors_[i].repair_depot = -1;
             actors_[i].being_repaired = false;
             harvests_[i].state = Harvest::IDLE;
@@ -1181,7 +1190,19 @@ bool World::is_nudgeable(size_t k) const {
     if (m.moving || m.in_transit) return false;
     if (combats_[k].target >= 0) return false;
     const Harvest& h = harvests_[k];
-    if (types_[a.type].harvester && h.automated && h.state != Harvest::IDLE && h.state != Harvest::WAIT) return false;
+
+
+    if (types_[a.type].harvester && h.automated) {
+        switch (h.state) {
+        case Harvest::IDLE:
+        case Harvest::WAIT:
+        case Harvest::QUEUE:
+        case Harvest::PARKED:
+            break;
+        default:
+            return false;
+        }
+    }
     return true;
 }
 
