@@ -195,6 +195,8 @@ public:
 
     int pick_bot_personality();
     int bot_personality(int owner) const;
+
+    bool bot_enabled(int owner) const;
     int bot_plan(int owner) const;
     int bot_stat(int owner, int which) const;
     void order_repair(const PackedInt32Array& ids, int depot_id);

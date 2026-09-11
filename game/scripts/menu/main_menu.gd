@@ -182,7 +182,25 @@ func _ready() -> void:
 			for i in _ai_slots.size():
 				if i < list.size() and ProtoWorld.AI_STRATEGIES.has(list[i]):
 					_ai_slots[i]["strategy"] = list[i]
+
+
+		if args.has("--test-stale-setup"):
+			_fake_stale_setup()
 		_start_skirmish()
+
+
+func _fake_stale_setup() -> void:
+	var hub := NetHub.hub()
+	var slug := str(_skirmish[_selected]["slug"]) if _selected >= 0 else ProtoWorld.DEFAULT_MAP
+	var clients: Array = [
+		{"client_id": "c1", "seat": 0, "kind": "human", "name": "Tom", "faction": "soviet",
+			"team": 0, "color": 0, "spawn": -1},
+		{"client_id": "", "seat": 1, "kind": "bot", "name": "", "level": "normal",
+			"faction": "allies", "team": 0, "color": 1, "spawn": -1},
+	]
+	ProtoWorld.next_setup = hub.build_setup(slug, clients, {"credits": 5000, "starting_units": "light"})
+	print("T --test-stale-setup: alte Aufstellung mit %d Sitzen liegen gelassen" % [
+		ProtoWorld.next_setup.get("seats", []).size()])
 
 
 func _watch_multiplayer() -> void:
@@ -735,7 +753,10 @@ func _build_ui() -> void:
 	for i in _skirmish.size():
 		var m: Dictionary = _skirmish[i]
 		var b := Button.new()
-		b.text = "%s  (%d, %s)" % [m["title"], int(m["players"]), _tileset_name(m["tileset"])]
+
+
+		b.text = "%s  (%s, %s)" % [m["title"], tr("menu.skirmish.map_slots") % int(m["players"]),
+				_tileset_name(m["tileset"])]
 		b.toggle_mode = true
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.custom_minimum_size = Vector2(0, Dp.px(32))
@@ -758,7 +779,10 @@ func _build_ui() -> void:
 	scroll.add_child(listbox)
 	left.add_child(scroll)
 	sk.add_child(left)
-	var right_scroll := ScrollContainer.new()
+
+
+	var right_scroll := TouchList.new()
+	_right_scroll = right_scroll
 	right_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -798,6 +822,7 @@ func _build_ui() -> void:
 	row2.add_child(_credits_label)
 	row2.add_child(_button("+", func(): _set_credits(_credits + 2500), 40, 34))
 	right.add_child(row2)
+
 
 	_slot_box = VBoxContainer.new()
 	_slot_box.add_theme_constant_override("separation", int(Dp.px(4)))
@@ -1595,6 +1620,15 @@ func _run_test_lobby() -> void:
 			widest = maxf(widest, (c as Control).get_combined_minimum_size().x)
 	print("T: Lobby — breiteste Platzzeile %.0f dp (Hochformat rund 490 dp nutzbar)" % [
 		widest / maxf(Dp.px(1.0), 0.001)])
+
+
+	var liste_h := 0.0
+	for c in _slot_box.get_children():
+		if c is Control:
+			liste_h += (c as Control).get_combined_minimum_size().y
+	var rollbar: bool = _right_scroll != null and _right_scroll is TouchList
+	print("T: Lobby — Platzliste mit %d KI: %d Zeilen, %.0f dp hoch, rollbare Liste: %s" % [
+		_ai_players, _slot_box.get_child_count() - 1, liste_h / maxf(Dp.px(1.0), 0.001), rollbar])
 	_set_ai(3)
 	await get_tree().process_frame
 	_start_skirmish()
@@ -2604,6 +2638,9 @@ var _mp_page: Control
 var _mp_lobby: Control
 var _map_scroll: ScrollContainer
 var _slot_box: VBoxContainer
+
+
+var _right_scroll: ScrollContainer
 var _player_team := 0
 var _spawn_choice := -1
 
@@ -2773,9 +2810,20 @@ func _max_ai() -> int:
 
 
 func _set_ai(n: int) -> void:
-	_ai_players = clampi(n, 1, _max_ai())
+	var cap := _max_ai()
+	_ai_players = clampi(n, 1, cap)
+	if n > cap:
+
+
+		print("Karte hat %d Plätze — höchstens %d KI-Gegner (gewünscht %d)" % [
+			int(_skirmish[_selected]["players"]) if _selected >= 0 else 0, cap, n])
 	if _ai_label != null:
-		_ai_label.text = tr("menu.skirmish.ai_count") % _ai_players
+
+
+		if cap < ProtoWorld.AI_PLAYER_INDICES.size():
+			_ai_label.text = tr("menu.skirmish.ai_count_max") % [_ai_players, cap]
+		else:
+			_ai_label.text = tr("menu.skirmish.ai_count") % _ai_players
 
 
 	_update_factions()

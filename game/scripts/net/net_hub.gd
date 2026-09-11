@@ -9,7 +9,7 @@ const NetNotify := preload("res://scripts/net/net_notify.gd")
 const VoiceChat := preload("res://scripts/net/voice_chat.gd")
 
 
-const SIM_SEATS := [0, 1, 4, 5, 6, 7]
+const SIM_SEATS := [0, 1, 4, 5, 6, 7, 8, 9]
 
 
 const STRATEGIES := ["normal", "rush", "turtle", "air", "naval"]

@@ -240,6 +240,8 @@ menu.skirmish.crates,Kisten: %s,Crates: %s
 menu.skirmish.explored_map,Karte erkundet: %s,Explored map: %s
 menu.skirmish.fog,Nebel: %s,Fog: %s
 menu.skirmish.ai_count,KI-Gegner: %d,AI opponents: %d
+menu.skirmish.ai_count_max,KI-Gegner: %d (Karte: höchstens %d),AI opponents: %d (map allows %d)
+menu.skirmish.map_slots,Plätze: %d,Slots: %d
 menu.skirmish.ai_difficulty,KI-Stärke: %s,AI strength: %s
 menu.skirmish.ai_easy,Leicht,Easy
 menu.skirmish.ai_normal,Mittel,Normal

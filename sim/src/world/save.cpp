@@ -26,7 +26,9 @@ namespace {
 constexpr uint32_t SAVE_MAGIC = 0x5653'4152u;
 
 
-constexpr uint32_t SAVE_VERSION = 9;
+constexpr uint32_t SAVE_VERSION = 10;
+
+constexpr uint32_t SAVE_VERSION_MIN = 10;
 
 
 enum Section : uint32_t {
@@ -742,6 +744,7 @@ bool World::load(const std::vector<uint8_t>& in) {
     if (r.u32() != SAVE_MAGIC) return false;
     const uint32_t version = r.u32();
     if (version > SAVE_VERSION) return false;
+    if (version < SAVE_VERSION_MIN) return false;
     const uint64_t hash = r.u64();
     if (hash != rules_hash()) return false;
 

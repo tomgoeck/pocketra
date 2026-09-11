@@ -203,6 +203,7 @@ void RaSim::_bind_methods() {
     ClassDB::bind_method(D_METHOD("enable_bot", "owner", "params"), &RaSim::enable_bot);
     ClassDB::bind_method(D_METHOD("pick_bot_personality"), &RaSim::pick_bot_personality);
     ClassDB::bind_method(D_METHOD("bot_personality", "owner"), &RaSim::bot_personality);
+    ClassDB::bind_method(D_METHOD("bot_enabled", "owner"), &RaSim::bot_enabled);
     ClassDB::bind_method(D_METHOD("bot_plan", "owner"), &RaSim::bot_plan);
     ClassDB::bind_method(D_METHOD("bot_stat", "owner", "which"), &RaSim::bot_stat);
     ClassDB::bind_method(D_METHOD("set_handicap", "owner", "percent"), &RaSim::set_handicap);
@@ -1248,6 +1249,7 @@ int RaSim::bot_squad_count(int owner) const { return int(world_.bot_squad_count(
 
 int RaSim::pick_bot_personality() { return int(world_.bot_pick_personality()); }
 int RaSim::bot_personality(int owner) const { return int(world_.bot_personality(owner)); }
+bool RaSim::bot_enabled(int owner) const { return world_.bot_enabled(owner); }
 int RaSim::bot_plan(int owner) const { return int(world_.bot_plan(owner)); }
 
 int RaSim::bot_stat(int owner, int which) const { return int(world_.bot_stat(owner, which)); }

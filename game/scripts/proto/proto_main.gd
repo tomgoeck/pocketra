@@ -203,6 +203,10 @@ func _ready() -> void:
 		if aisk + 1 < args.size() and str(args[aisk + 1]).is_valid_int():
 			_test_ai_start = maxi(int(args[aisk + 1]), 1)
 		call_deferred("_run_test_ai_start")
+
+	_test_ai_count = args.has("--test-ai-count")
+	if _test_ai_count:
+		call_deferred("_run_test_ai_count")
 	if args.has("--test-keys"):
 		call_deferred("_run_test_keys")
 	if args.has("--test-desktop-scroll"):
@@ -2344,6 +2348,9 @@ var _test_speed_ui := false
 
 
 var _test_ai_start := -1
+
+
+var _test_ai_count := false
 var _test_defeat := false
 var _test_victory := false
 var _defeat_step := 0
@@ -9899,6 +9906,87 @@ func _run_test_ai_start() -> void:
 	get_tree().quit()
 
 
+func _run_test_ai_count() -> void:
+	while world == null or world.sim == null or world.map_data == null:
+		await get_tree().process_frame
+	await get_tree().process_frame
+	var wunsch := int(ProtoWorld.next_ai_players)
+	var plaetze: int = world.map_data.spawns.size()
+	var soll: int = clampi(wunsch, 0, maxi(mini(plaetze - 1, ProtoWorld.AI_PLAYER_INDICES.size()), 0))
+	var fehler := 0
+	var bestand: Array = []
+	var bots: Array = []
+	var kennt_bot: bool = world.sim.has_method("bot_enabled")
+	for p in ProtoWorld.AI_PLAYER_INDICES:
+		if int(world.sim.alive_count(p)) > 0:
+			bestand.append(p)
+		if kennt_bot and bool(world.sim.bot_enabled(p)):
+			bots.append(p)
+	print("T --test-ai-count: Karte %s — %d Startpunkte, gewünscht %d KI, Sollwert nach Deckelung %d" % [
+		world.map_data.slug, plaetze, wunsch, soll])
+	print("T --test-ai-count: Plätze mit Bestand %s (%d von %d) — %s" % [
+		bestand, bestand.size(), soll, "OK" if bestand.size() == soll else "FEHLER"])
+	fehler += 0 if bestand.size() == soll else 1
+	if kennt_bot:
+		print("T --test-ai-count: Plätze mit laufendem Bot %s (%d von %d) — %s" % [
+			bots, bots.size(), soll, "OK" if bots.size() == soll else "FEHLER"])
+		fehler += 0 if bots.size() == soll else 1
+	else:
+		print("T --test-ai-count: Brücke kennt `bot_enabled` nicht — Bot-Zahl nicht messbar")
+	var zeilen := 0
+	for e in world.player_roster:
+		if str(e.get("kind", "human")) == "bot":
+			zeilen += 1
+	print("T --test-ai-count: Spielerliste %d Zeilen (davon %d KI, Sollwert %d) — %s" % [
+		world.player_roster.size(), zeilen, soll, "OK" if zeilen == soll else "FEHLER"])
+	fehler += 0 if zeilen == soll else 1
+
+
+	var zellen := {}
+	var doppelt := 0
+	for name in world.player_map:
+		var pid := int(world.player_map[name])
+		if not ProtoWorld.AI_PLAYER_INDICES.has(pid) and pid != 0:
+			continue
+		if zellen.has(pid):
+			doppelt += 1
+		zellen[pid] = name
+	print("T --test-ai-count: Startpunkt je Platz %s — %s" % [
+		zellen, "OK" if doppelt == 0 else "FEHLER"])
+	fehler += 0 if doppelt == 0 else 1
+
+	for _round in 60:
+		for _t in 10:
+			world.sim.step()
+		await get_tree().process_frame
+	var mit_fact := {}
+	for u in world.units:
+		if u.alive and u.type == "fact" and ProtoWorld.AI_PLAYER_INDICES.has(int(u.player)):
+			mit_fact[int(u.player)] = true
+	print("T --test-ai-count: KI mit Bauhof nach 600 Ticks %s (%d von %d) — %s" % [
+		mit_fact.keys(), mit_fact.size(), soll, "OK" if mit_fact.size() == soll else "FEHLER"])
+	fehler += 0 if mit_fact.size() == soll else 1
+
+
+	NetHub.hub().ensure_voice()
+	_open_player_list()
+	for _i in 3:
+		await get_tree().process_frame
+	var ui_rows: int = _player_list_rows().size()
+	print("T --test-ai-count: Spielerliste im Pausenmenü %d Zeilen (Sollwert %d) — %s" % [
+		ui_rows, soll + 1, "OK" if ui_rows == soll + 1 else "FEHLER"])
+	fehler += 0 if ui_rows == soll + 1 else 1
+
+	var panel := $UI.get_node_or_null("PlayerList")
+	var funk: bool = panel != null and _findet_beschriftung(panel, tr("mp.voice_intro_again"))
+	print("T --test-ai-count: Sprechfunk-Angabe in der Liste: %s (Sollwert false) — %s" % [
+		funk, "FEHLER" if funk else "OK"])
+	fehler += 1 if funk else 0
+	_close_modals()
+	print("T --test-ai-count: %d Befund(e) (Sollwert 0)" % fehler)
+	get_tree().quit()
+
+
 func _run_test_keys() -> void:
 	while world.sim == null:
 		await get_tree().process_frame
@@ -13416,6 +13504,10 @@ func _mp_voice() -> Node:
 	return hub.voice if hub != null else null
 
 
+func _list_voice() -> Node:
+	return _mp_voice() if _mp_active() else null
+
+
 func _toggle_mic(open_channel: bool) -> void:
 	var v := _mp_voice()
 	if v == null:
@@ -13634,7 +13726,7 @@ func _show_player_list() -> void:
 		leer.add_theme_color_override("font_color", HudTheme.TEXT_DIM)
 		rows.add_child(leer)
 	box.add_child(rows)
-	var vc := _mp_voice()
+	var vc := _list_voice()
 	if _mp_active():
 
 		var ct := Label.new()
@@ -13718,7 +13810,7 @@ func _player_row(e: Dictionary, refreshers: Array) -> Control:
 	var state_lbl := _player_cell("", 104.0, HudTheme.TEXT)
 	row.add_child(state_lbl)
 
-	var vc := _mp_voice()
+	var vc := _list_voice()
 	var mute_btn: Button = null
 	if vc != null and seat >= 0 and human and _mp != null and seat != int(_mp.my_seat):
 		mute_btn = Button.new()
@@ -14487,6 +14579,17 @@ func _rolle_ans_ende(node: Node) -> void:
 		_rolle_ans_ende(k)
 
 
+func _findet_beschriftung(node: Node, text: String) -> bool:
+	if node is Label and (node as Label).text == text:
+		return true
+	if node is Button and (node as Button).text == text:
+		return true
+	for k in node.get_children():
+		if _findet_beschriftung(k, text):
+			return true
+	return false
+
+
 func _findet_text(node: Node, text: String) -> bool:
 	if node is Label and (node as Label).text == text:
 		return true
@@ -14526,6 +14629,23 @@ func _run_test_spielerliste() -> void:
 		print("T --test-spielerliste: FEHLER — im Gefecht steht kein Platz in der Liste")
 		fehler += 1
 	fehler += await _shot_players("gefecht", ["de", "en"])
+
+
+	NetHub.hub().ensure_voice()
+	_open_player_list()
+	for _i in 3:
+		await get_tree().process_frame
+	var funk_panel := $UI.get_node_or_null("PlayerList")
+	var funk: bool = funk_panel != null and _findet_beschriftung(funk_panel, tr("mp.voice_intro_again"))
+	var stumm := 0
+	for row in _player_list_rows():
+		for kind in (row as Control).get_children():
+			if kind is Button:
+				stumm += 1
+	print("T --test-spielerliste: Gefecht ohne Sprechfunk — Erstinfo %s, Stummschalter %d (Sollwert false/0) — %s" % [
+			funk, stumm, "OK" if not funk and stumm == 0 else "FEHLER"])
+	fehler += 0 if not funk and stumm == 0 else 1
+	_close_modals()
 
 	var hub := NetHub.hub()
 	hub.ensure_voice()

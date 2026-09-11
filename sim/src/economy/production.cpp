@@ -316,8 +316,8 @@ void World::step_production() {
     for (int32_t owner = 0; owner < MAX_PLAYERS; ++owner)
         if (players_[owner].power_outage > 0) --players_[owner].power_outage;
 
-    int32_t provided[MAX_PLAYERS] = {0, 0, 0, 0, 0, 0, 0, 0};
-    int32_t drained[MAX_PLAYERS] = {0, 0, 0, 0, 0, 0, 0, 0};
+    int32_t provided[MAX_PLAYERS] = {};
+    int32_t drained[MAX_PLAYERS] = {};
     for (const Actor& a : actors_) {
         if (!a.alive || a.owner < 0 || a.owner >= MAX_PLAYERS) continue;
         const UnitType& t = types_[a.type];

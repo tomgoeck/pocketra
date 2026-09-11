@@ -53,8 +53,15 @@ const PLAYER_COLORS: Array[Color] = [
 	Color(0.024, 0.969, 0.224),
 	Color(0.780, 0.094, 0.949),
 	Color(0.961, 0.463, 0.024),
+	Color(0.973, 0.380, 0.643),
+	Color(0.204, 0.729, 0.576),
 ]
-const AI_PLAYER_INDICES := [1, 4, 5, 6, 7]
+
+
+const MAX_SIM_PLAYERS := 10
+
+
+const AI_PLAYER_INDICES := [1, 4, 5, 6, 7, 8, 9]
 
 enum Armor { NONE, WOOD, LIGHT, HEAVY, CONCRETE }
 
@@ -1524,7 +1531,7 @@ func _assign_players() -> void:
 			others.append(p)
 	for p in others:
 		var idx := player_colors.size()
-		if idx >= 8:
+		if idx >= MAX_SIM_PLAYERS:
 			break
 		player_map[p["name"]] = idx
 		player_colors.append(_map_color(p, PLAYER_COLORS[mini(idx, PLAYER_COLORS.size() - 1)]))
@@ -1796,6 +1803,8 @@ func _place_players() -> void:
 
 
 func _attach_multiplayer() -> void:
+	next_setup = {}
+	net_session = null
 	var hub := NetHub.hub()
 	if hub == null or not hub.active():
 

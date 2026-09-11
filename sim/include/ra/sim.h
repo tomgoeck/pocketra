@@ -15,7 +15,9 @@ using WAngle = int32_t;
 constexpr WDist CELL = 1024;
 constexpr WAngle FULL_TURN = 1024;
 constexpr int TICKS_PER_SECOND = 25;
-constexpr int MAX_PLAYERS = 8;
+
+
+constexpr int MAX_PLAYERS = 10;
 
 const char* version();
 
@@ -2220,20 +2222,23 @@ private:
     std::vector<int32_t> res_block_;
     int32_t res_block_w_ = 0, res_block_h_ = 0;
     uint32_t resource_version_ = 0;
-    int64_t credits_[MAX_PLAYERS] = {0, 0, 0, 0, 0, 0, 0, 0};
-    int64_t resources_[MAX_PLAYERS] = {0, 0, 0, 0, 0, 0, 0, 0};
-    int64_t earned_[MAX_PLAYERS] = {0, 0, 0, 0, 0, 0, 0, 0};
+    int64_t credits_[MAX_PLAYERS] = {};
+    int64_t resources_[MAX_PLAYERS] = {};
+    int64_t earned_[MAX_PLAYERS] = {};
 
 
-    uint32_t silos_notified_[MAX_PLAYERS] = {NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER};
-    uint32_t funds_notified_[MAX_PLAYERS] = {NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER};
-    uint32_t power_notified_[MAX_PLAYERS] = {NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER};
+    uint32_t silos_notified_[MAX_PLAYERS] = {NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER,
+            NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER};
+    uint32_t funds_notified_[MAX_PLAYERS] = {NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER,
+            NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER};
+    uint32_t power_notified_[MAX_PLAYERS] = {NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER,
+            NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER, NOTIFY_NEVER};
 
 
-    bool new_options_pending_[MAX_PLAYERS] = {false, false, false, false, false, false, false, false};
+    bool new_options_pending_[MAX_PLAYERS] = {};
     bool has_storage_ = false;
 
-    int32_t power_balance_[MAX_PLAYERS] = {0, 0, 0, 0, 0, 0, 0, 0};
+    int32_t power_balance_[MAX_PLAYERS] = {};
     PlayerState players_[MAX_PLAYERS];
     std::vector<int32_t> notifications_[MAX_PLAYERS];
     uint32_t tick_ = 0;
@@ -2250,7 +2255,8 @@ private:
 
 
     std::vector<int32_t> crate_pickups_;
-    std::vector<uint8_t> detected_;
+    std::vector<uint16_t> detected_;
+
     struct PendingMine { int32_t owner; int32_t type; CPos cell; };
     std::vector<PendingMine> pending_mines_;
 

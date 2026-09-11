@@ -192,6 +192,13 @@ class Scroller extends Node:
 	func _edge_off() -> bool:
 		return _off() or (edge_blocked.is_valid() and bool(edge_blocked.call()))
 
+
+	var _debug_scroll_cache := -1
+	func _debug_scroll() -> bool:
+		if _debug_scroll_cache < 0:
+			_debug_scroll_cache = 1 if OS.get_cmdline_user_args().has("--debug-scroll") else 0
+		return _debug_scroll_cache == 1
+
 	func _pan(d: Vector2) -> void:
 		if d != Vector2.ZERO and pan.is_valid():
 			pan.call(d)
@@ -205,6 +212,8 @@ class Scroller extends Node:
 			return
 		if e is InputEventPanGesture:
 			var pg: InputEventPanGesture = e
+			if _debug_scroll():
+				print("SCROLL pan delta=%s" % pg.delta)
 			_pan(-pg.delta * PAN_SPEED)
 			get_viewport().set_input_as_handled()
 		elif e is InputEventMagnifyGesture:
@@ -217,6 +226,8 @@ class Scroller extends Node:
 
 			var f: float = mb.factor if mb.factor > 0.0 else 1.0
 			var step := Dp.px(WHEEL_DP) * f
+			if _debug_scroll() and mb.button_index >= MOUSE_BUTTON_WHEEL_UP and mb.button_index <= MOUSE_BUTTON_WHEEL_RIGHT:
+				print("SCROLL wheel btn=%d factor=%.3f step=%.1f" % [mb.button_index, mb.factor, step])
 			var zoom_mod: bool = mb.ctrl_pressed or mb.meta_pressed
 			match mb.button_index:
 				MOUSE_BUTTON_WHEEL_UP:

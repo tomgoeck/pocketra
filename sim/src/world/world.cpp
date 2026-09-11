@@ -1790,7 +1790,7 @@ void World::step_cloak() {
 
         const bool now_cloaked = a.cloak_timer <= 0 && !cloak_paused(i);
         if (now_cloaked != was_cloaked && t.cloak_sound >= 0) play_sound(t.cloak_sound, a.pos);
-        uint8_t mask = 0;
+        uint16_t mask = 0;
         for (size_t k = 0; k < actors_.size(); ++k) {
             const Actor& d = actors_[k];
             const UnitType& dt = types_[d.type];
@@ -1798,7 +1798,7 @@ void World::step_cloak() {
             if (d.owner < 0 || d.owner >= MAX_PLAYERS) continue;
             if (length(d.pos - a.pos) > dt.detect_range + (dt.building ? dt.range_radius : 0)) continue;
             for (int32_t p = 0; p < MAX_PLAYERS; ++p) {
-                if (allied(p, d.owner)) mask |= uint8_t(1u << p);
+                if (allied(p, d.owner)) mask |= uint16_t(1u << p);
             }
         }
         detected_[i] = mask;
