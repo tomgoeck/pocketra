@@ -245,6 +245,13 @@ public:
     PackedInt32Array hidden_items(int owner, int kind) const;
 
     PackedByteArray can_place(int owner, int type, int cell_x, int cell_y) const;
+
+
+    PackedByteArray build_area(int owner, int adjacent) const;
+
+
+    PackedInt32Array pending_place(int owner, int kind) const;
+    void cancel_pending_place(int owner, int kind);
     bool place_building(int owner, int type, int cell_x, int cell_y);
     int power_provided(int owner) const;
     int power_drained(int owner) const;

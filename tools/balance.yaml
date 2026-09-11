@@ -7,3 +7,4 @@ rules:
 	c4_vehicles: true
 	c4_bridges: true
 	chrono_unlimited: true
+	buildable_area_all: true

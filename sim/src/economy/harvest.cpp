@@ -28,6 +28,28 @@ int32_t World::resource_value_at(CPos c) const {
     return int32_t(res_density_[i]) * RESOURCE_VALUE[t];
 }
 
+
+bool World::allow_resource_at(int32_t type, CPos c) const {
+    if (!map_.in_bounds(c) || type <= RES_NONE || type > RES_GEMS) return false;
+    const int32_t base = map_.base_terrain(c);
+    if (base != TER_CLEAR && base != TER_ROAD) return false;
+    for (int s = 0; s < CELL_SLOTS; ++s) {
+        const int32_t o = occupant(c, s);
+        if (o >= 0 && types_[size_t(actors_[size_t(o)].type)].building) return false;
+    }
+    return true;
+}
+
+
+bool World::can_add_resource(int32_t type, CPos c) const {
+    if (!map_.in_bounds(c) || type <= RES_NONE || type > RES_GEMS) return false;
+    const int i = map_.index(c);
+    const int32_t max = type == RES_GEMS ? GEMS_MAX_DENSITY : ORE_MAX_DENSITY;
+    if (res_type_[i] == RES_NONE) return allow_resource_at(type, c);
+    if (res_type_[i] != type) return false;
+    return int32_t(res_density_[i]) + 1 <= max;
+}
+
 void World::rebuild_res_blocks() {
     res_block_w_ = (map_.width() + RES_BLOCK - 1) / RES_BLOCK;
     res_block_h_ = (map_.height() + RES_BLOCK - 1) / RES_BLOCK;
@@ -110,22 +132,21 @@ void World::step_seeds() {
         const UnitType& t = types_[a.type];
         if (t.seeds_resource == RES_NONE) continue;
         if ((tick_ + uint32_t(a.id)) % uint32_t(std::max(1, t.seed_interval)) != 0) continue;
+
+
         CPos c = a.origin;
-        const int32_t max = t.seeds_resource == RES_GEMS ? GEMS_MAX_DENSITY : ORE_MAX_DENSITY;
-        for (int step = 0; step < 100; ++step) {
-            if (map_.in_bounds(c)) {
-                const int idx = map_.index(c);
-                const int32_t base = map_.base_terrain(c);
-                const bool allowed = (base == TER_CLEAR || base == TER_ROAD) && cell_empty(c);
-                if (allowed && (res_type_[idx] == RES_NONE || res_type_[idx] == t.seeds_resource) &&
-                    res_density_[idx] < max) {
-                    set_resource(c, t.seeds_resource, res_density_[idx] + 1);
-                    break;
-                }
-            }
+        bool found = false;
+        const int32_t range = t.seed_max_range > 0 ? t.seed_max_range : 0;
+        for (int32_t step = 0; step < range; ++step) {
             const int d = int(rand() % NUM_DIRS);
             c = CPos{c.x + DIR_DX[d], c.y + DIR_DY[d]};
+            if (resource_type(c) == t.seeds_resource && !can_add_resource(t.seeds_resource, c)) continue;
+            found = true;
+            break;
         }
+
+        if (found && can_add_resource(t.seeds_resource, c))
+            set_resource(c, t.seeds_resource, resource_density(c) + 1);
     }
 }
 

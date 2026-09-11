@@ -1172,46 +1172,111 @@ static void test_build_area() {
     std::vector<uint8_t> cost(60 * 60, 1);
     w.set_map(60, 60, cost.data());
 
+
     UnitType fact; fact.building = true; fact.foot_w = 3; fact.foot_h = 3;
     fact.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1}; fact.build_block = fact.footprint;
     fact.hp = 100000; fact.base_provider = true; fact.base_range = 16 * CELL;
     fact.requires_base_provider = true;
 
+
     UnitType silo; silo.building = true; silo.foot_w = 1; silo.foot_h = 1; silo.footprint = {1};
-    silo.build_block = {1}; silo.hp = 30000; silo.gives_buildable_area = false;
+    silo.build_block = {1}; silo.hp = 30000; silo.gives_buildable_area = true;
     silo.requires_base_provider = true;
 
-    UnitType powr = silo; powr.gives_buildable_area = true;
+    UnitType tsla = silo; tsla.defense = true;
 
-    UnitType sbag = silo; sbag.wall = true; sbag.adjacent = 7; sbag.requires_base_provider = false;
+    UnitType sbag = silo; sbag.wall = true; sbag.adjacent = 7;
+    sbag.requires_base_provider = false; sbag.gives_buildable_area = false;
     const int t_fact = w.define_type(fact), t_silo = w.define_type(silo);
-    const int t_powr = w.define_type(powr), t_sbag = w.define_type(sbag);
+    const int t_tsla = w.define_type(tsla), t_sbag = w.define_type(sbag);
     w.spawn_building(t_fact, 0, {20, 20});
 
 
     CHECK(w.can_place(0, t_silo, {24, 21}, nullptr));
     CHECK(!w.can_place(0, t_silo, {25, 21}, nullptr));
 
-    CHECK(w.can_place(0, t_sbag, {30, 21}, nullptr));
-    CHECK(w.can_place(0, t_sbag, {31, 21}, nullptr));
+
+    CHECK(w.can_place(0, t_sbag, {29, 21}, nullptr));
+    CHECK(!w.can_place(0, t_sbag, {30, 21}, nullptr));
 
     CHECK(w.spawn_building(t_silo, 0, {24, 21}) > 0);
-    CHECK(!w.can_place(0, t_silo, {26, 21}, nullptr));
-
-    CHECK(w.spawn_building(t_powr, 0, {24, 25}) > 0);
-    CHECK(w.can_place(0, t_silo, {26, 25}, nullptr));
+    CHECK(w.can_place(0, t_silo, {26, 21}, nullptr));
 
 
-    CHECK(w.can_place(0, t_sbag, {33, 21}, nullptr));
-    CHECK(!w.can_place(0, t_silo, {33, 21}, nullptr));
+    CHECK(w.can_place(0, t_tsla, {20, 24}, nullptr));
+    CHECK(w.spawn_building(t_tsla, 0, {20, 24}) > 0);
+    CHECK(w.can_place(0, t_tsla, {20, 26}, nullptr));
 
-    CHECK(!w.can_place(0, t_sbag, {40, 21}, nullptr));
+
+    CHECK(w.spawn_building(t_silo, 0, {20, 30}) > 0);
+    CHECK(w.can_place(0, t_sbag, {27, 30}, nullptr));
+    CHECK(!w.can_place(0, t_sbag, {28, 30}, nullptr));
+    CHECK(w.spawn_building(t_sbag, 0, {27, 30}) > 0);
+    CHECK(!w.can_place(0, t_silo, {29, 30}, nullptr));
+    CHECK(!w.can_place(0, t_sbag, {34, 30}, nullptr));
 
 
-    CHECK(w.spawn_building(t_powr, 0, {45, 45}) > 0);
-    CHECK(!w.can_place(0, t_silo, {47, 45}, nullptr));
-    CHECK(w.can_place(0, t_sbag, {47, 45}, nullptr));
-    std::printf("Baubereich: Adjacent 2/7, Silo ohne Baufläche, Mauern im ganzen Bauhof-Umkreis\n");
+    CPos c{26, 21};
+    for (int i = 0; i < 14; ++i) {
+        CHECK(w.can_place(0, t_silo, c, nullptr));
+        CHECK(w.spawn_building(t_silo, 0, c) > 0);
+        c.x += 2;
+    }
+    CHECK(w.can_place(0, t_silo, {c.x, 21}, nullptr));
+    const int weit = c.x - 22;
+    CHECK(weit > 16);
+
+    CHECK(!w.can_place(0, t_silo, {c.x + 4, 21}, nullptr));
+    std::printf("Baubereich: Adjacent 2/7, jedes Gebaeude ausser Mauern gibt Flaeche, Kette %d Zellen weit\n", weit);
+}
+
+
+static void test_place_over_unit() {
+    World w;
+    std::vector<uint8_t> cost(40 * 40, 1);
+    w.set_map(40, 40, cost.data());
+    UnitType fact; fact.building = true; fact.foot_w = 3; fact.foot_h = 3;
+    fact.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1}; fact.build_block = fact.footprint;
+    fact.hp = 150000; fact.base_provider = true; fact.produces = 1u << QUEUE_BUILDING;
+    fact.provides = {"fact"};
+    UnitType powr; powr.building = true; powr.foot_w = 1; powr.foot_h = 1; powr.footprint = {1};
+    powr.build_block = {1}; powr.hp = 40000; powr.cost = 300; powr.queue_kind = QUEUE_BUILDING;
+    UnitType tank; tank.speed = 85; tank.turn_rate = 1024; tank.hp = 40000;
+    UnitType silo = powr;
+    const int t_fact = w.define_type(fact), t_powr = w.define_type(powr), t_tank = w.define_type(tank);
+    const int t_silo = w.define_type(silo);
+    w.spawn_building(t_fact, 0, {10, 10});
+    w.give_credits(0, 5000);
+
+
+    const int32_t own = w.spawn(t_tank, 0, {14, 11});
+    CHECK(own > 0);
+    CHECK(w.can_place(0, t_powr, {14, 11}, nullptr));
+
+    const int32_t foe = w.spawn(t_tank, 1, {14, 10});
+    CHECK(foe > 0);
+    CHECK(!w.can_place(0, t_powr, {14, 10}, nullptr));
+
+
+    CHECK(w.queue_build(0, t_powr));
+    for (int t = 0; t < 400 && !w.queue(0, QUEUE_BUILDING).front().done; ++t) w.step();
+    CHECK(w.queue(0, QUEUE_BUILDING).front().done);
+    CHECK(w.place_building(0, t_powr, {14, 11}));
+    CHECK(w.pending_place_type(0, 0) == t_powr);
+    CHECK(!w.queue(0, QUEUE_BUILDING).empty());
+
+    CHECK(!w.can_place(0, t_silo, {14, 11}, nullptr));
+    CHECK(w.can_place(0, t_powr, {14, 11}, nullptr));
+    int built = -1;
+    for (int t = 0; t < 200; ++t) {
+        w.step();
+        if (w.pending_place_type(0, 0) < 0) { built = t; break; }
+    }
+    CHECK(built >= 0);
+    CHECK(w.queue(0, QUEUE_BUILDING).empty());
+    CHECK(w.occupant({14, 11}) >= 0);
+    CHECK(w.actor(size_t(w.index_of(own))).alive);
+    std::printf("Bauen ueber eigener Einheit: Panzer ausgewichen, Gebaeude nach %d Ticks gesetzt\n", built);
 }
 
 
@@ -3405,6 +3470,128 @@ static void test_field_generation_mixed() {
 }
 
 
+namespace seed_fixture {
+
+inline UnitType mine_type(int32_t res) {
+    UnitType m;
+    m.building = true; m.foot_w = 1; m.foot_h = 1; m.footprint = {1}; m.build_block = m.footprint;
+    m.hp = 1;
+    m.seeds_resource = res; m.seed_interval = 75; m.seed_max_range = 100;
+    return m;
+}
+
+inline int64_t total(World& w, int size, int32_t res) {
+    int64_t s = 0;
+    for (int y = 0; y < size; ++y)
+        for (int x = 0; x < size; ++x)
+            if (w.resource_type({x, y}) == res) s += w.resource_density({x, y});
+    return s;
+}
+
+}
+
+
+static void test_seeds_rate() {
+    using namespace seed_fixture;
+    World w;
+    std::vector<uint8_t> cost(64 * 64, 1);
+    w.set_map(64, 64, cost.data());
+    const int t = w.define_type(mine_type(RES_ORE));
+    w.set_rng_seed(4711);
+    w.spawn_building(t, 2, {32, 32});
+    for (int i = 0; i < 1000; ++i) w.step();
+    const int64_t grown = total(w, 64, RES_ORE);
+    std::printf("Erzmine frei: %lld Dichtestufen je 1000 Ticks (OpenRA: 13)\n", (long long)grown);
+    CHECK(grown >= 12 && grown <= 14);
+
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x)
+            if (w.resource_density({x, y}) > 0)
+                CHECK(std::abs(x - 32) <= 100 && std::abs(y - 32) <= 100);
+}
+
+
+static void test_seeds_none_without_mine() {
+    using namespace seed_fixture;
+    World w;
+    std::vector<uint8_t> cost(64 * 64, 1);
+    w.set_map(64, 64, cost.data());
+    w.set_rng_seed(4711);
+    for (int y = 20; y < 26; ++y)
+        for (int x = 20; x < 26; ++x) w.set_resource({x, y}, RES_ORE, 6);
+    const int64_t before = total(w, 64, RES_ORE);
+    for (int i = 0; i < 2000; ++i) w.step();
+    CHECK(total(w, 64, RES_ORE) == before);
+}
+
+
+static void test_seeds_max_density() {
+    using namespace seed_fixture;
+    World w;
+    std::vector<uint8_t> terrain(64 * 64, uint8_t(TER_CLEAR));
+
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x)
+            if (x < 31 || x > 33 || y < 31 || y > 33) terrain[y * 64 + x] = uint8_t(TER_WATER);
+    w.set_terrain(64, 64, terrain.data());
+    const int t = w.define_type(mine_type(RES_ORE));
+    w.set_rng_seed(99);
+    w.spawn_building(t, 2, {32, 32});
+    for (int i = 0; i < 120000; ++i) w.step();
+    std::printf("Kessel 3x3: %lld von %d Stufen gefuellt\n", (long long)total(w, 64, RES_ORE), 8 * ORE_MAX_DENSITY);
+    CHECK(total(w, 64, RES_ORE) == 8 * ORE_MAX_DENSITY);
+    for (int y = 31; y <= 33; ++y)
+        for (int x = 31; x <= 33; ++x)
+            CHECK(w.resource_density({x, y}) <= ORE_MAX_DENSITY);
+    CHECK(w.resource_density({32, 32}) == 0);
+}
+
+
+static void test_seeds_gems() {
+    using namespace seed_fixture;
+    World w;
+    std::vector<uint8_t> cost(64 * 64, 1);
+    w.set_map(64, 64, cost.data());
+    const int t = w.define_type(mine_type(RES_GEMS));
+    w.set_rng_seed(2024);
+    w.spawn_building(t, 2, {32, 32});
+    for (int i = 0; i < 1000; ++i) w.step();
+    const int64_t gems = total(w, 64, RES_GEMS);
+    std::printf("Diamantmine: %lld Dichtestufen je 1000 Ticks (OpenRA: 13)\n", (long long)gems);
+    CHECK(gems >= 12 && gems <= 14);
+    CHECK(total(w, 64, RES_ORE) == 0);
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x)
+            CHECK(w.resource_density({x, y}) <= GEMS_MAX_DENSITY);
+}
+
+
+static void test_seeds_blocked_walk() {
+    using namespace seed_fixture;
+    World w;
+    std::vector<uint8_t> terrain(64 * 64, uint8_t(TER_CLEAR));
+
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x)
+            if ((x < 27 || x > 37 || y < 27 || y > 37) && !(y == 32 && x >= 27 && x < 50))
+                terrain[y * 64 + x] = uint8_t(TER_WATER);
+    w.set_terrain(64, 64, terrain.data());
+    const int t = w.define_type(mine_type(RES_ORE));
+    w.set_rng_seed(31337);
+    w.spawn_building(t, 2, {32, 32});
+    for (int y = 27; y <= 37; ++y)
+        for (int x = 27; x <= 37; ++x)
+            if (!(x == 32 && y == 32)) w.set_resource({x, y}, RES_ORE, ORE_MAX_DENSITY);
+    const int64_t before = total(w, 64, RES_ORE);
+    for (int i = 0; i < 10000; ++i) w.step();
+    const int64_t grown = total(w, 64, RES_ORE) - before;
+    const int64_t free_rate = 133;
+    std::printf("Erzmine im Kessel: %lld von %lld möglichen Streuungen (%lld %%)\n",
+                (long long)grown, (long long)free_rate, (long long)(100 * grown / free_rate));
+    CHECK(grown > 0);
+    CHECK(grown < free_rate / 2);
+}
+
 static void test_bot_harvester_redirect() {
     World w;
     std::vector<uint8_t> cost(64 * 64, 1);
@@ -4637,6 +4824,112 @@ static void test_air_production() {
     const int h2 = w.index_of(w.actor(before2).id);
     CHECK(w.air(size_t(h2)).alt > 0);
     std::printf("Flugzeugbau: mit Sammelpunkt Höhe %d\n", w.air(size_t(h2)).alt);
+}
+
+
+static void test_landing_facing() {
+    World w;
+    std::vector<uint8_t> cost(64 * 64, 1);
+    w.set_map(64, 64, cost.data());
+
+    UnitType hpad;
+    hpad.building = true; hpad.foot_w = 2; hpad.foot_h = 2; hpad.footprint = {1, 1, 1, 1};
+    hpad.build_block = hpad.footprint; hpad.hp = 80000; hpad.provides = {"hpad"};
+    hpad.exit_dx = 0; hpad.exit_dy = 0; hpad.exit_ox = 0; hpad.exit_oy = -256;
+    hpad.exit_facing = 896;
+    UnitType afld;
+    afld.building = true; afld.foot_w = 3; afld.foot_h = 3;
+    afld.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    afld.build_block = afld.footprint; afld.hp = 100000; afld.provides = {"afld"};
+    afld.exit_dx = 1; afld.exit_dy = 1; afld.exit_ox = 0; afld.exit_oy = 0;
+    afld.exit_facing = 768;
+    const int t_hpad = w.define_type(hpad), t_afld = w.define_type(afld);
+
+    UnitType heli;
+    heli.aircraft = true; heli.can_hover = true; heli.vtol = true; heli.speed = 149;
+    heli.turn_rate = 16; heli.cruise_altitude = 1280; heli.altitude_velocity = 43;
+    heli.hp = 12000; heli.hit_radius = 426;
+    heli.rearm_actors = {t_hpad}; heli.land_actors = {t_hpad};
+    UnitType yak;
+    yak.aircraft = true; yak.speed = 178; yak.turn_rate = 16; yak.cruise_altitude = 2560;
+    yak.altitude_velocity = 43; yak.hp = 12000; yak.hit_radius = 426;
+    yak.rearm_actors = {t_afld}; yak.land_actors = {t_afld};
+    const int t_heli = w.define_type(heli), t_yak = w.define_type(yak);
+
+    const int32_t pad = w.spawn_building(t_hpad, 0, {12, 12});
+    const int32_t fld = w.spawn_building(t_afld, 0, {40, 40});
+    const int pi = w.index_of(pad), fi = w.index_of(fld);
+
+
+    const int32_t h = w.spawn(t_heli, 0, CPos{40, 12}, -1, 100, true);
+
+    CHECK(w.actor(size_t(w.index_of(h))).facing == AIRCRAFT_INITIAL_FACING);
+    WAngle heli_face[2] = {-1, -1};
+    for (int run = 0; run < 2; ++run) {
+        CHECK(w.can_resupply_at(h, pad));
+        w.order_resupply(&h, 1, pad);
+        int hi = w.index_of(h);
+        for (int t = 0; t < 2000; ++t) {
+            w.step();
+            hi = w.index_of(h);
+            if (w.air(size_t(hi)).state == Air::LANDED) break;
+        }
+        hi = w.index_of(h);
+        CHECK(w.air(size_t(hi)).state == Air::LANDED);
+        CHECK(w.actor(size_t(hi)).facing == hpad.exit_facing);
+        CHECK(w.actor(size_t(hi)).pos.x == w.actor(size_t(pi)).pos.x + hpad.exit_ox);
+        CHECK(w.actor(size_t(hi)).pos.y == w.actor(size_t(pi)).pos.y + hpad.exit_oy);
+        heli_face[run] = w.actor(size_t(hi)).facing;
+
+        const CPos away = run == 0 ? CPos{12, 45} : CPos{12, 12};
+        w.order_move(&h, 1, away, 0);
+        for (int t = 0; t < 900; ++t) {
+            w.step();
+            hi = w.index_of(h);
+
+
+            if (w.air(size_t(hi)).state == Air::TAKING_OFF)
+                CHECK(w.actor(size_t(hi)).facing == hpad.exit_facing);
+            if (!w.air(size_t(hi)).has_goal && w.air(size_t(hi)).state == Air::CRUISING) break;
+        }
+    }
+    CHECK(heli_face[0] == heli_face[1]);
+    std::printf("Landerichtung: Hubschrauber auf hpad %d und %d (Exit.Facing %d)\n",
+                heli_face[0], heli_face[1], hpad.exit_facing);
+
+
+    const CPos starts[3] = {{6, 40}, {40, 6}, {58, 58}};
+    for (int run = 0; run < 3; ++run) {
+        const int32_t y = w.spawn(t_yak, 0, starts[run], -1, 100, true);
+        int yi = w.index_of(y);
+        CHECK(w.can_resupply_at(y, fld));
+        w.order_resupply(&y, 1, fld);
+        for (int t = 0; t < 3000; ++t) {
+            w.step();
+            yi = w.index_of(y);
+            if (w.air(size_t(yi)).state == Air::LANDED) break;
+        }
+        yi = w.index_of(y);
+        CHECK(w.air(size_t(yi)).state == Air::LANDED);
+        CHECK(w.air(size_t(yi)).alt == 0);
+        CHECK(w.actor(size_t(yi)).facing == afld.exit_facing);
+        CHECK(w.actor(size_t(yi)).pos.x == w.actor(size_t(fi)).pos.x + afld.exit_ox);
+        CHECK(w.actor(size_t(yi)).pos.y == w.actor(size_t(fi)).pos.y + afld.exit_oy);
+        std::printf("Landerichtung: Jak aus (%d,%d) auf afld %d (Pistenrichtung %d)\n",
+                    starts[run].x, starts[run].y, w.actor(size_t(yi)).facing, afld.exit_facing);
+
+        w.destroy(w.actor(size_t(yi)).id);
+        for (int t = 0; t < 5; ++t) w.step();
+    }
+
+
+    const int32_t h2 = w.spawn(t_yak, 0, CPos{41, 41}, -1, 100, false);
+    const int h2i = w.index_of(h2);
+    CHECK(w.air(size_t(h2i)).state == Air::LANDED);
+    CHECK(w.actor(size_t(h2i)).facing == afld.exit_facing);
+    CHECK(w.actor(size_t(h2i)).pos.x == w.actor(size_t(fi)).pos.x + afld.exit_ox);
+    std::printf("Landerichtung: von der Karte gesetzte Jak steht angedockt in %d\n",
+                w.actor(size_t(h2i)).facing);
 }
 
 
@@ -7807,6 +8100,7 @@ int main() {
     test_bot_air_squad();
     test_bot_determinism();
     test_build_area();
+    test_place_over_unit();
     test_defense_depot_victory();
     test_deploy_faction();
     test_capture();
@@ -7853,6 +8147,11 @@ int main() {
     test_economy_rules();
     test_bot_recovery();
     test_bot_intervals();
+    test_seeds_rate();
+    test_seeds_none_without_mine();
+    test_seeds_max_density();
+    test_seeds_gems();
+    test_seeds_blocked_walk();
     test_bot_harvester_redirect();
     test_bot_expansion();
     test_bot_refinery_reachable();
@@ -7871,6 +8170,7 @@ int main() {
     test_air_armaments();
     test_air_attack_run();
     test_air_production();
+    test_landing_facing();
     test_landing_pads();
     test_fall_to_earth();
     test_new_options();

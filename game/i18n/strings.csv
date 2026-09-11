@@ -15,6 +15,7 @@ toast.built,Gebaut,Built
 toast.cannot_build_here,Kann hier nicht bauen,Cannot build here.
 toast.order_cancelled,Befehl abgebrochen,Order cancelled
 toast.cancelled,Abgebrochen,Cancelled
+toast.place_pending,"Einheiten weichen aus — hier wird gebaut, sobald der Platz frei ist","Units are moving aside — building starts as soon as the spot is clear"
 toast.placement_cancelled,"Platzierung abgebrochen — Gebäude bleibt bereit, Cameo antippen","Placement cancelled — building stays ready, tap its cameo"
 toast.select_target,Ziel wählen: %s,Select target: %s
 toast.move_count,Bewegen (%d Einheiten),Move (%d units)
@@ -43,6 +44,10 @@ toast.boarding,Einsteigen: %s,Boarding: %s
 toast.unloading,Entladen,Unloading
 toast.nobody_aboard,Niemand an Bord,Nobody aboard
 toast.unload_blocked,Hier ist kein Platz zum Aussteigen,No room to unload here
+toast.target_picked,"Ziel: %s — jetzt Aktion wählen","Target: %s — now pick an action"
+toast.target_dropped,Zielwahl verworfen,Target dropped
+toast.order_impossible,Das geht hier nicht,Not possible here
+toast.unload_ordered,Hinfahren und dort entladen,Moving there to unload
 toast.rally_set,Sammelpunkt gesetzt,Rally point set
 toast.no_rally_point,Dieses Gebäude hat keinen Sammelpunkt,This building has no rally point
 toast.rally_ground_only,Sammelpunkt nur auf freien Boden,Rally point on clear ground only
@@ -90,7 +95,8 @@ cmd.zoom_out.label,Zoom -,Zoom -
 cmd.zoom_out.tip,Weiter weg,Zoom out
 help.btn.music,Musik ein- oder ausschalten.,Turn music on or off.
 help.btn.menu,"Spielmenü öffnen: Fortsetzen, Ziele, Steuerung, Musik, Beenden.","Open the game menu: resume, objectives, controls, music, quit."
-help.btn.build_toggle,Bauleiste ein- oder ausblenden.,Show or hide the build bar.
+help.btn.build_toggle,"Bauleiste ein- oder ausblenden. Sie klappt auch von selbst auf, wenn der Bauhof ins Bild kommt, und zu, wenn kein eigener Baubereich mehr zu sehen ist.","Show or hide the build bar. It also opens by itself when the construction yard comes into view and closes when no buildable area of yours is on screen."
+help.placement,"Bauen: Alles außer Mauern und Zäunen erweitert den Baubereich — du kannst deine Basis beliebig weit wachsen lassen, solange ein eigenes Gebäude in der Nähe steht. Grüne Felder sind frei, rote nicht. Steht eine eigene Einheit im Weg, darfst du trotzdem bauen: sie geht zur Seite und das Gebäude entsteht danach von selbst. Mit Maus (Mac, Windows) hängt ein fertiges Gebäude schon beim Überfahren der Karte am Zeiger; Linksklick baut, Rechtsklick oder Escape legt es zurück.","Building: everything except walls and fences extends your buildable area — your base can grow as far as you like as long as one of your buildings is nearby. Green cells are free, red ones are not. If one of your own units is in the way you may still build: it steps aside and the building goes up afterwards. With a mouse (Mac, Windows) a finished building follows the pointer as soon as you move over the map; left click builds, right click or Escape puts it back."
 help.btn.sell,"Verkauf: Gebäude antippen, um es zu verkaufen (50 % Erstattung).","Sell: tap a building to sell it (50% refund)."
 help.btn.repair,"Reparatur: Gebäude antippen, um die Reparatur ein- oder auszuschalten.","Repair: tap a building to toggle repair on or off."
 help.btn.add,"Mehr+: die nächste Auswahl zur bestehenden hinzufügen, statt sie zu ersetzen. Solange der Modus läuft, ist der Bildschirmrand gelb.","More+: add the next selection instead of replacing it. While the mode is on, the screen border is yellow."
@@ -201,6 +207,17 @@ radial.action.unload,Entladen,Unload
 radial.action.attack_move,Angriffszug,Attack Move
 radial.action.move,Bewegen,Move
 radial.action.clear,Leeren,Clear
+radial.action.cancel,Abbrechen,Cancel
+radial.action.board,Einsteigen,Board
+radial.action.deliver,Abliefern,Deliver
+radial.action.repair_at,Reparieren,Repair
+radial.action.land,Landen,Land
+radial.action.capture,Erobern,Capture
+radial.action.fix,Instand setzen,Fix up
+radial.action.infiltrate,Infiltrieren,Infiltrate
+radial.action.bridge,Brücke reparieren,Repair bridge
+bar.target,Ziel: %s,Target: %s
+bar.target_ground,Ziel: diese Stelle,Target: this spot
 radial.target.force_fire,Zwangsfeuer — Stelle wählen,Force fire — pick location
 radial.target.guard,Bewachen — Einheit oder Gebäude wählen,Guard — pick unit or building
 menu.main.continue,Weiter,Continue
@@ -317,9 +334,11 @@ gesture.one_finger.desc,gehört immer den Einheiten — nie der Kamera,always co
 gesture.tap_own.label,Tippen auf eigene Einheit (ohne Auswahl),Tap own unit (nothing selected)
 gesture.tap_own.desc,auswählen,select
 gesture.tap_friendly.label,Tippen auf eigene Einheit (mit Auswahl),Tap own unit (with selection)
-gesture.tap_friendly.desc,"Befehl statt Neuauswahl: einsteigen, reparieren, abladen — sonst bewachen/folgen","order instead of re-select: board, repair, deliver — otherwise guard/follow"
+gesture.tap_friendly.desc,"Ziel markieren — die Aktionsleiste zeigt, was damit geht (Bewachen, Zwangsfeuer, Einsteigen, Bewegen …)","mark it as the target — the action bar shows what you can do (guard, force fire, board, move …)"
 gesture.tap_own_building.label,Tippen auf eigenes Gebäude (mit Auswahl),Tap own building (with selection)
-gesture.tap_own_building.desc,daneben hinbewegen,move next to it
+gesture.tap_own_building.desc,"Ziel markieren — Aktionsleiste mit Bewegen, Abliefern, Reparieren, Einsteigen, Landen","mark it as the target — action bar with move, deliver, repair, board, land"
+gesture.action_bar.label,Aktionsleiste,Action bar
+gesture.action_bar.desc,"Eintrag antippen führt ihn aus; ein Tipp daneben wechselt das Ziel oder verwirft es — ohne Befehl","tap an entry to run it; a tap beside it switches the target or drops it — no order is given"
 gesture.double_tap.label,Doppeltippen,Double-tap
 gesture.double_tap.desc,"Neuauswahl: alle sichtbaren Einheiten desselben Typs, bei einem Gebäude nur dieses","re-select: all visible units of the same type, or just that one building"
 gesture.drag_empty.label,Ziehen auf leerem Boden,Drag on empty ground
@@ -331,9 +350,9 @@ gesture.tap_enemy.desc,angreifen,attack
 gesture.tap_ore.label,Tippen auf Erz (Harvester),Tap ore (harvester)
 gesture.tap_ore.desc,dort ernten,harvest there
 gesture.long_press_selection.label,Langes Drücken mit Auswahl,Long press with selection
-gesture.long_press_selection.desc,"Radialmenü: Angriffszug, Bewegen, Stopp, Zerstreuen, Ernten","Radial menu: attack move, move, stop, scatter, harvest"
+gesture.long_press_selection.desc,"Stelle markieren — Aktionsleiste mit Bewegen, Angriffszug, Zwangsfeuer, Entladen hier, Mine legen, Stopp","mark the spot — action bar with move, attack move, force fire, unload here, lay mine, stop"
 gesture.long_press_own.label,Langes Drücken auf eigene Einheit,Long press on own unit
-gesture.long_press_own.desc,"Radialmenü mit Zwangsangriff — Angreifen (Zwangsfeuer) auf eigene, verbündete und neutrale Ziele","Radial menu with Force Attack — attack your own, allied and neutral targets"
+gesture.long_press_own.desc,"Aktionsleiste für dieses Ziel, dazu Zwangsfeuer auf eigene, verbündete und neutrale Ziele und die Infokarte","action bar for that target, plus force fire on your own, allied and neutral targets, and the info card"
 gesture.long_press_empty.label,Langes Drücken ohne Auswahl,Long press without selection
 gesture.long_press_empty.desc,Name und Zustand des Objekts darunter,name and status of the object underneath
 gesture.two_finger_drag.label,Zwei Finger ziehen,Two-finger drag
@@ -371,6 +390,7 @@ speed.slower,Langsam,Slower
 speed.normal,Normal,Normal
 speed.fast,Schnell,Fast
 speed.faster,Sehr schnell,Faster
+speed.superfast,Super-Schnell,Super fast
 save.slot,Slot %s,Slot %s
 save.slot_auto,Autosave,Autosave
 save.slot_empty,leer,empty
@@ -389,6 +409,9 @@ lobby.team_none,–,–
 lobby.spawn,Startpunkt: %s,Start: %s
 lobby.spawn_random,zufällig,random
 lobby.map_hint,Marker antippen = eigener Startpunkt,Tap a marker to pick your start
+lobby.map_hint_ai,Marker antippen = Startpunkt für %s,Tap a marker to set the start for %s
+lobby.spawn_short,Nr. %s,#%s
+lobby.spawn_ai_tip,Startpunkt dieser KI wählen,Pick this AI's start point
 lobby.spawn_taken,Startpunkt ist schon belegt,That start point is taken
 lobby.slots,Plätze,Slots
 faction.random,Zufällig,Random
@@ -691,6 +714,12 @@ toast.resumed,Weiter,Resumed
 toast.no_pause_mp,Im Mehrspieler nicht möglich,Not possible in multiplayer
 keys.title,Tastatur und Maus (PC),Keyboard and mouse (PC)
 keys.rmb,Rechtsklick,Right-click
+keys.lmb,Linksklick,Left-click
+keys.lmb2,Doppelklick links,Left double-click
+keys.shift_lmb,Umschalt + Linksklick,Shift + left-click
+keys.shift_rmb,Umschalt + Rechtsklick,Shift + right-click
+keys.ctrl_rmb,Strg + Rechtsklick,Ctrl + right-click
+keys.rmb_hold,Rechtsklick halten / Mittelklick,Hold right-click / middle-click
 keys.attack_move,Angriffsbewegung,Attack move
 keys.guard,Bewachen,Guard
 keys.stop,Anhalten,Stop
@@ -705,6 +734,7 @@ keys.to_selection,Zur Auswahl,To selection
 keys.groups,"Kontrollgruppe wählen, mit Strg zuweisen","Select control group, assign with Ctrl"
 keys.escape,"Modus verlassen, Auswahl aufheben, Pausenmenü","Leave mode, clear selection, pause menu"
 keys.scroll,Karte schieben,Scroll the map
+keys.scroll_wasd,Karte schieben,Scroll the map
 keys.zoom_in,Näher heran,Zoom in
 keys.zoom_out,Weiter weg,Zoom out
 keys.zoom_reset,Zoom zurücksetzen,Reset zoom
@@ -713,5 +743,11 @@ keys.build_bar,Bauleiste auf/zu,Toggle build bar
 keys.tabs,Bauleisten-Reiter,Build bar tabs
 keys.pause,Pause,Pause
 keys.music,Musik an/aus,Toggle music
-keys.right_click,"Auf der Karte: Auswahl aufheben, Modus verlassen","On the map: clear selection, leave mode"
+keys.left_click,"Auswählen; Ziehen = Auswahlrahmen; ins Leere = Auswahl aufheben","Select; drag = selection box; on empty ground = clear selection"
+keys.left_click_add,Zur Auswahl hinzufügen oder daraus entfernen,Add to or remove from the selection
+keys.double_click,Alle sichtbaren desselben Typs,All visible units of that type
+keys.right_click,"Befehl: bewegen, angreifen, bewachen, einsteigen, abliefern","Order: move, attack, guard, board, deliver"
+keys.right_click_queue,Befehl anhängen,Queue the order
+keys.right_click_force,Zwangsfeuer,Force fire
+keys.radial,Radialmenü,Radial menu
 keys.right_click_build,"In der Bauleiste: anhalten, nochmal abbrechen","In the build bar: hold, again to cancel"

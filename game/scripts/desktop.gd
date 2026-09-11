@@ -20,10 +20,14 @@ static func toggle_fullscreen() -> void:
 	set_fullscreen(not fullscreen())
 
 
+static func fullscreen_mode() -> int:
+	return DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+
+
 static func set_fullscreen_now(on: bool) -> void:
 	if not is_desktop():
 		return
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if on else DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_mode(fullscreen_mode() if on else DisplayServer.WINDOW_MODE_WINDOWED)
 
 
 static func set_fullscreen(on: bool) -> void:
@@ -42,7 +46,7 @@ static func apply_saved_fullscreen() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load("user://settings.cfg")
 	if bool(cfg.get_value("display", "fullscreen", true)):
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		DisplayServer.window_set_mode(fullscreen_mode())
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 
@@ -138,7 +142,7 @@ class Scroller extends Node:
 	const ZOOM_STEP := 1.1
 
 
-	const HARD_EDGE_DP := 2.0
+	const HARD_EDGE_DP := 6.0
 
 
 	var pan := Callable()
@@ -159,6 +163,20 @@ class Scroller extends Node:
 	const KEYS_RIGHT := [KEY_RIGHT]
 	const KEYS_UP := [KEY_UP]
 	const KEYS_DOWN := [KEY_DOWN]
+
+
+	const KEYS_WASD_LEFT := [KEY_A]
+	const KEYS_WASD_RIGHT := [KEY_D]
+	const KEYS_WASD_UP := [KEY_W]
+	const KEYS_WASD_DOWN := [KEY_S]
+
+	const KEYS_WASD := [KEY_W, KEY_A, KEY_S, KEY_D]
+
+
+	func takes_key(e: InputEvent) -> bool:
+		if not (e is InputEventKey) or not _desktop():
+			return false
+		return KEYS_WASD.has((e as InputEventKey).keycode)
 
 
 	static func _desktop() -> bool:
@@ -223,6 +241,8 @@ class Scroller extends Node:
 	func key_direction() -> Vector2:
 		if get_viewport().gui_get_focus_owner() is LineEdit:
 			return Vector2.ZERO
+
+
 		var d := Vector2.ZERO
 		for k in KEYS_LEFT:
 			if Input.is_physical_key_pressed(k):
@@ -240,14 +260,39 @@ class Scroller extends Node:
 			if Input.is_physical_key_pressed(k):
 				d.y += 1.0
 				break
+		for k in KEYS_WASD_UP:
+			if Input.is_key_pressed(k):
+				d.y -= 1.0
+				break
+		for k in KEYS_WASD_DOWN:
+			if Input.is_key_pressed(k):
+				d.y += 1.0
+				break
+		for k in KEYS_WASD_LEFT:
+			if Input.is_key_pressed(k):
+				d.x -= 1.0
+				break
+		for k in KEYS_WASD_RIGHT:
+			if Input.is_key_pressed(k):
+				d.x += 1.0
+				break
 		return d.normalized()
 
+
+	func pointer() -> Vector2:
+		if probe_on:
+			return probe
+		return Vector2(DisplayServer.mouse_get_position() - DisplayServer.window_get_position())
 
 	func edge_direction() -> Vector2:
 		var vp := get_viewport()
 		var vs := vp.get_visible_rect().size
-		var m := probe if probe_on else vp.get_mouse_position()
+		var m := pointer()
 		if not probe_on:
+
+
+			if DisplayServer.get_name() == "headless":
+				return Vector2.ZERO
 			if not DisplayServer.window_is_focused():
 				return Vector2.ZERO
 			if m.x < 0.0 or m.y < 0.0 or m.x > vs.x or m.y > vs.y:
@@ -272,8 +317,30 @@ class Scroller extends Node:
 			return Vector2.ZERO
 		return d.normalized()
 
+
+	var _confined := false
+
+	func _update_mouse_lock() -> void:
+		if DisplayServer.get_name() == "headless":
+			return
+		var m := DisplayServer.window_get_mode()
+		var full: bool = m == DisplayServer.WINDOW_MODE_FULLSCREEN or m == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+		var want: bool = full and not _off()
+		if want == _confined:
+			return
+		_confined = want
+		Input.mouse_mode = Input.MOUSE_MODE_CONFINED if want else Input.MOUSE_MODE_VISIBLE
+
+	func _exit_tree() -> void:
+		if _confined:
+			_confined = false
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
 	func _process(delta: float) -> void:
-		if not _desktop() or _edge_off():
+		if not _desktop():
+			return
+		_update_mouse_lock()
+		if _edge_off():
 			return
 		var d := key_direction()
 		var secs := KEY_SECONDS
@@ -308,14 +375,14 @@ static func handle_fullscreen_key(e: InputEvent) -> bool:
 
 const KEYS := [
 
-	{"id": "attack_move", "keys": [KEY_A], "show": "A", "label": "keys.attack_move"},
-	{"id": "guard", "keys": [KEY_D], "show": "D", "label": "keys.guard"},
+	{"id": "attack_move", "keys": [KEY_T], "show": "T", "label": "keys.attack_move"},
+	{"id": "guard", "keys": [KEY_G], "show": "G", "label": "keys.guard"},
 	{"id": "stop", "keys": [KEY_E], "show": "E", "label": "keys.stop"},
 	{"id": "deploy", "keys": [KEY_F], "show": "F", "label": "keys.deploy"},
 	{"id": "scatter", "keys": [KEY_X], "show": "X", "label": "keys.scatter"},
 
 	{"id": "repair", "keys": [KEY_R], "show": "R", "label": "keys.repair"},
-	{"id": "sell", "keys": [KEY_S], "show": "S", "label": "keys.sell"},
+	{"id": "sell", "keys": [KEY_V], "show": "V", "label": "keys.sell"},
 
 	{"id": "all_units", "keys": [KEY_Q], "show": "Q", "label": "keys.all_units"},
 	{"id": "base", "keys": [KEY_H], "show": "H", "label": "keys.base"},
@@ -325,6 +392,7 @@ const KEYS := [
 	{"id": "", "keys": [], "show": "Esc", "label": "keys.escape"},
 
 	{"id": "", "keys": [], "show": "← ↑ → ↓", "label": "keys.scroll"},
+	{"id": "", "keys": [], "show": "W A S D", "label": "keys.scroll_wasd"},
 	{"id": "zoom_in", "keys": [KEY_PLUS, KEY_EQUAL, KEY_KP_ADD, KEY_BRACKETRIGHT], "show": "+", "label": "keys.zoom_in"},
 	{"id": "zoom_out", "keys": [KEY_MINUS, KEY_KP_SUBTRACT, KEY_BRACKETLEFT], "show": "−", "label": "keys.zoom_out"},
 	{"id": "zoom_reset", "keys": [KEY_PERIOD], "show": ".", "label": "keys.zoom_reset"},
@@ -335,7 +403,14 @@ const KEYS := [
 	{"id": "pause", "keys": [KEY_P, KEY_PAUSE], "show": "P", "label": "keys.pause"},
 	{"id": "music", "keys": [KEY_M], "show": "M", "label": "keys.music"},
 
+
+	{"id": "", "keys": [], "show": "keys.lmb", "label": "keys.left_click"},
+	{"id": "", "keys": [], "show": "keys.shift_lmb", "label": "keys.left_click_add"},
+	{"id": "", "keys": [], "show": "keys.lmb2", "label": "keys.double_click"},
 	{"id": "", "keys": [], "show": "keys.rmb", "label": "keys.right_click"},
+	{"id": "", "keys": [], "show": "keys.shift_rmb", "label": "keys.right_click_queue"},
+	{"id": "", "keys": [], "show": "keys.ctrl_rmb", "label": "keys.right_click_force"},
+	{"id": "", "keys": [], "show": "keys.rmb_hold", "label": "keys.radial"},
 	{"id": "", "keys": [], "show": "keys.rmb", "label": "keys.right_click_build"},
 ]
 

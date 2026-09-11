@@ -241,6 +241,9 @@ void RaSim::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_palette_husk_offset", "rows"), &RaSim::set_palette_husk_offset);
     ClassDB::bind_method(D_METHOD("set_palette_submerged_row", "row"), &RaSim::set_palette_submerged_row);
     ClassDB::bind_method(D_METHOD("can_place", "owner", "type", "cell_x", "cell_y"), &RaSim::can_place);
+    ClassDB::bind_method(D_METHOD("build_area", "owner", "adjacent"), &RaSim::build_area);
+    ClassDB::bind_method(D_METHOD("pending_place", "owner", "kind"), &RaSim::pending_place);
+    ClassDB::bind_method(D_METHOD("cancel_pending_place", "owner", "kind"), &RaSim::cancel_pending_place);
     ClassDB::bind_method(D_METHOD("place_building", "owner", "type", "cell_x", "cell_y"), &RaSim::place_building);
     ClassDB::bind_method(D_METHOD("power_provided", "owner"), &RaSim::power_provided);
     ClassDB::bind_method(D_METHOD("power_drained", "owner"), &RaSim::power_drained);
@@ -1355,6 +1358,28 @@ PackedByteArray RaSim::can_place(int owner, int type, int cell_x, int cell_y) co
     for (size_t i = 0; i < cells.size(); ++i) out.set(int64_t(i) + 1, cells[i]);
     return out;
 }
+
+PackedByteArray RaSim::build_area(int owner, int adjacent) const {
+    std::vector<uint8_t> cells;
+    world_.buildable_area(owner, adjacent, cells);
+    PackedByteArray out;
+    out.resize(int64_t(cells.size()));
+    for (size_t i = 0; i < cells.size(); ++i) out.set(int64_t(i), cells[i]);
+    return out;
+}
+
+PackedInt32Array RaSim::pending_place(int owner, int kind) const {
+    PackedInt32Array out;
+    const int t = world_.pending_place_type(owner, kind);
+    if (t < 0) return out;
+    const ra::CPos c = world_.pending_place_origin(owner, kind);
+    out.push_back(t);
+    out.push_back(c.x);
+    out.push_back(c.y);
+    return out;
+}
+
+void RaSim::cancel_pending_place(int owner, int kind) { world_.cancel_pending_place(owner, kind); }
 
 bool RaSim::place_building(int owner, int type, int cell_x, int cell_y) {
     return world_.place_building(owner, type, {cell_x, cell_y});

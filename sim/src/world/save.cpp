@@ -26,7 +26,7 @@ namespace {
 constexpr uint32_t SAVE_MAGIC = 0x5653'4152u;
 
 
-constexpr uint32_t SAVE_VERSION = 8;
+constexpr uint32_t SAVE_VERSION = 9;
 
 
 enum Section : uint32_t {
@@ -443,11 +443,16 @@ template <class V> void visit_fields(V& v, BotState& b) {
     v(b.stat_units_built); v(b.stat_sp_fired); v(b.stat_squads_sent); v(b.stat_first_attack);
 }
 
+template <class V> void visit_fields(V& v, PendingPlace& p) {
+    v(p.type); v(p.origin); v(p.ticks);
+}
+
 template <class V> void visit_fields(V& v, PlayerState& p) {
     v(p.queues); v(p.bot); v(p.primary); v(p.win_state); v(p.non_combatant); v(p.faction);
     v(p.allies); v(p.enemies); v(p.explicit_enemies); v(p.participant); v(p.had_required);
     v(p.power_outage); v(p.infiltrated_tokens); v(p.handicap);
     v(p.powers);
+    v(p.pending);
 }
 
 template <class V> void visit_fields(V& v, CrateSpawnerParams& c) {

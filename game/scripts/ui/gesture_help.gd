@@ -14,6 +14,7 @@ const LINE_KEYS := [
 	["gesture.tap_own.label", "gesture.tap_own.desc"],
 	["gesture.tap_friendly.label", "gesture.tap_friendly.desc"],
 	["gesture.tap_own_building.label", "gesture.tap_own_building.desc"],
+	["gesture.action_bar.label", "gesture.action_bar.desc"],
 	["gesture.double_tap.label", "gesture.double_tap.desc"],
 	["gesture.drag_empty.label", "gesture.drag_empty.desc"],
 	["gesture.tap_ground.label", "gesture.tap_ground.desc"],

@@ -366,30 +366,30 @@ func _error_text(code: String) -> String:
 	return code
 
 
-func _taken_spawns() -> Dictionary:
+func _taken_spawns(except_seat: int = -9) -> Dictionary:
 	var out := {}
 	if _hub == null:
 		return out
+	var skip: int = except_seat if except_seat != -9 else int(_hub.my_seat)
 	for c in _hub.lobby.get("clients", []):
 		var sp := int(c.get("spawn", -1))
-		if sp >= 0 and int(c.get("seat", -1)) != int(_hub.my_seat):
+		if sp >= 0 and int(c.get("seat", -1)) != skip:
 			out[sp] = int(c.get("color", 0))
 	return out
 
 
 func _my_spawn() -> int:
-	if _hub == null:
-		return -1
-	for c in _hub.lobby.get("clients", []):
-		if int(c.get("seat", -1)) == int(_hub.my_seat):
-			return int(c.get("spawn", -1))
-	return -1
+	return int(_my_row().get("spawn", -1))
 
 
 func _my_row() -> Dictionary:
+	return _row_of(int(_hub.my_seat)) if _hub != null else {}
+
+
+func _row_of(seat: int) -> Dictionary:
 	if _hub != null:
 		for c in _hub.lobby.get("clients", []):
-			if int(c.get("seat", -1)) == int(_hub.my_seat):
+			if int(c.get("seat", -1)) == seat:
 				return c
 	return {}
 
@@ -401,15 +401,19 @@ func _map_title(slug: String) -> String:
 	return slug
 
 
-func _zoom_map() -> void:
+func _zoom_map(for_seat: int = -1) -> void:
 	if _hub == null:
 		return
 	var slug: String = str(_hub.map_slug)
+	var seat: int = for_seat if for_seat >= 0 else int(_hub.my_seat)
+	var row := _row_of(seat)
 	var seats: Array = NetHub.map_seats(slug)
 	var head := "%s — %s" % [_map_title(slug), tr("mp.seats_plain") % int(seats[1])]
-	var mine := _my_spawn()
-	MapPreview.open_overlay(self, slug, head, tr("lobby.map_hint"), _taken_spawns(), mine,
-			func(idx): _pick_spawn(-1 if idx == mine else idx))
+	var hint := tr("lobby.map_hint") if for_seat < 0 \
+			else tr("lobby.map_hint_ai") % str(row.get("name", "?"))
+	var mine := int(row.get("spawn", -1))
+	MapPreview.open_overlay(self, slug, head, hint, _taken_spawns(seat), mine,
+			func(idx): _pick_spawn(-1 if idx == mine else idx, seat))
 
 
 func open_map_overlay() -> void:
@@ -420,15 +424,22 @@ func open_map_picker() -> void:
 	_open_map_picker()
 
 
-func _pick_spawn(idx: int) -> void:
-	var c := _my_row()
-	if _hub == null or _hub.client == null or c.is_empty():
+func _pick_spawn(idx: int, for_seat: int = -1) -> void:
+	if _hub == null or _hub.client == null:
+		return
+	var seat: int = for_seat if for_seat >= 0 else int(_hub.my_seat)
+	var c := _row_of(seat)
+	if c.is_empty():
 		return
 
 
 	_hub.last_error = ""
+
+
+	var edit_seat: int = -1 if seat == int(_hub.my_seat) else seat
+	var strat := str(c.get("strategy", "")) if str(c.get("kind", "human")) == "bot" else ""
 	_hub.client.set_slot(str(c.get("faction", "random")), int(c.get("team", 0)),
-			int(c.get("color", 0)), idx)
+			int(c.get("color", 0)), idx, edit_seat, strat)
 
 
 var _picker: Control = null
@@ -562,7 +573,6 @@ func _seat_row(c: Dictionary) -> Control:
 		row.add_child(_value(faction_text, 92.0, HudTheme.TEXT))
 		row.add_child(_value(team_text, 92.0, HudTheme.GOLD if team > 0 else HudTheme.TEXT_DIM))
 
-
 	if mine:
 		row.add_child(_cycle(spawn_text, true, _zoom_map, 116.0))
 	elif is_bot:
@@ -585,21 +595,38 @@ func _seat_row(c: Dictionary) -> Control:
 			row.add_child(_value(cur_txt, 116.0, HudTheme.TEXT))
 	else:
 		row.add_child(_value(spawn_text, 116.0, HudTheme.TEXT if spawn >= 0 else HudTheme.TEXT_DIM))
+
+
+	if is_bot:
+		var sp_txt: String = tr("lobby.spawn_short") % (str(spawn + 1) if spawn >= 0 else "?")
+		if _hub.host:
+			var seat_for_map := seat
+			var open_for_bot := func(): _zoom_map(seat_for_map)
+			var sp_btn := _cycle(sp_txt, true, open_for_bot, 48.0)
+			sp_btn.tooltip_text = tr("lobby.spawn_ai_tip")
+			if spawn >= 0:
+				sp_btn.add_theme_color_override("font_color", HudTheme.GOLD)
+			row.add_child(sp_btn)
+		else:
+			row.add_child(_value(sp_txt, 48.0, HudTheme.TEXT if spawn >= 0 else HudTheme.TEXT_DIM))
 	var ready_lbl := Label.new()
 	ready_lbl.text = "✔" if bool(c.get("ready", false)) or is_bot else "…"
 	ready_lbl.custom_minimum_size = Vector2(Dp.px(20), 0)
 	ready_lbl.add_theme_font_size_override("font_size", int(Dp.px(13)))
 	ready_lbl.add_theme_color_override("font_color", HudTheme.READY_GREEN if bool(c.get("ready", false)) else HudTheme.TEXT_DIM)
 	row.add_child(ready_lbl)
-	var ping_lbl := Label.new()
-	var ping := int(c.get("ping", -1))
-	ping_lbl.text = "" if str(c.get("kind", "human")) == "bot" else ("%d ms" % ping if ping >= 0 else "—")
-	if absent:
-		ping_lbl.text = tr("mp.absent")
-	ping_lbl.custom_minimum_size = Vector2(Dp.px(48), 0)
-	ping_lbl.add_theme_font_size_override("font_size", int(Dp.px(11)))
-	ping_lbl.add_theme_color_override("font_color", HudTheme.TEXT_DIM)
-	row.add_child(ping_lbl)
+
+
+	if not is_bot:
+		var ping_lbl := Label.new()
+		var ping := int(c.get("ping", -1))
+		ping_lbl.text = "%d ms" % ping if ping >= 0 else "—"
+		if absent:
+			ping_lbl.text = tr("mp.absent")
+		ping_lbl.custom_minimum_size = Vector2(Dp.px(48), 0)
+		ping_lbl.add_theme_font_size_override("font_size", int(Dp.px(11)))
+		ping_lbl.add_theme_color_override("font_color", HudTheme.TEXT_DIM)
+		row.add_child(ping_lbl)
 
 
 	var v_mute := _voice()

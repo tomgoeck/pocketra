@@ -18,9 +18,21 @@ int32_t World::air_altitude(int32_t id) const {
 
 void World::air_move(size_t i, WVec goal, bool land) {
     Air& air = airs_[i];
+    const UnitType& t = types_[actors_[i].type];
     air.goal = goal;
     air.has_goal = true;
-    air.land_at_goal = land ? 1 : 0;
+    air.land_at_goal = land ? LAND_TOUCHDOWN : LAND_NONE;
+    if (land && !t.can_hover) {
+        const int b = air.base >= 0 ? index_of(air.base) : -1;
+        if (b >= 0 && actors_[size_t(b)].alive && dock_pos(size_t(b)) == goal) {
+            air.land_at_goal = LAND_APPROACH;
+            air.goal = approach_point(i, goal);
+        } else {
+
+
+            air.land_at_goal = LAND_NONE;
+        }
+    }
     if (air.state == Air::LANDED) air.state = Air::TAKING_OFF;
 }
 
@@ -86,7 +98,7 @@ void World::release_pad(int32_t pad_id) {
         air.returning = false;
         if (air.state == Air::LANDED || air.state == Air::LANDING) {
             air.state = Air::TAKING_OFF;
-            air.land_at_goal = 0;
+            air.land_at_goal = LAND_NONE;
             air.has_goal = false;
         }
 
@@ -131,11 +143,49 @@ WVec World::dock_pos(size_t base) const {
 }
 
 
-void World::snap_dock_facing(Actor& a, const Air& air) const {
-    if (air.base < 0) return;
-    const int b = index_of(air.base);
-    if (b < 0 || !actors_[size_t(b)].alive) return;
-    a.facing = types_[actors_[size_t(b)].type].exit_facing;
+WAngle World::landing_facing(size_t i, WVec touchdown) const {
+    const Air& air = airs_[i];
+    if (air.base >= 0) {
+        const int b = index_of(air.base);
+        if (b >= 0 && actors_[size_t(b)].alive && dock_pos(size_t(b)) == touchdown)
+            return types_[actors_[size_t(b)].type].exit_facing;
+    }
+    return AIRCRAFT_INITIAL_FACING;
+}
+
+
+static int64_t turn_radius(const UnitType& t) {
+    return t.turn_rate > 0 ? 180 * int64_t(std::max(1, t.speed)) / t.turn_rate : 0;
+}
+
+
+WVec World::approach_point(size_t i, WVec touchdown) const {
+    const UnitType& t = types_[actors_[i].type];
+    const int64_t speed = std::max(1, t.speed);
+    const int64_t drop = int64_t(t.cruise_altitude) * speed / std::max(1, t.altitude_velocity);
+    const int64_t back_dist = drop + 3 * turn_radius(t);
+    const WVec back = direction_of(wrap_angle(landing_facing(i, touchdown) + FULL_TURN / 2));
+    return WVec{touchdown.x + static_cast<WDist>(back.x * back_dist / 1024),
+                touchdown.y + static_cast<WDist>(back.y * back_dist / 1024)};
+}
+
+
+int World::pad_below(size_t i) const {
+    const Actor& a = actors_[i];
+    const std::vector<int32_t>& pads = pads_of(types_[a.type]);
+    if (pads.empty()) return -1;
+    const CPos c = to_cell(a.pos);
+    for (size_t k = 0; k < actors_.size(); ++k) {
+        const Actor& b = actors_[k];
+        if (k == i || !b.alive || b.owner != a.owner || b.sell_ticks >= 0) continue;
+        if (std::find(pads.begin(), pads.end(), b.type) == pads.end()) continue;
+        const UnitType& bt = types_[b.type];
+        const int dx = c.x - b.origin.x, dy = c.y - b.origin.y;
+        if (dx < 0 || dy < 0 || dx >= bt.foot_w || dy >= bt.foot_h) continue;
+        if (pad_reserved(b.id, static_cast<int>(i))) continue;
+        return static_cast<int>(k);
+    }
+    return -1;
 }
 
 void World::air_return_to_base(size_t i) {
@@ -226,9 +276,17 @@ void World::step_air_combat(size_t i) {
         return;
     }
 
+
+    if (air.land_at_goal == LAND_TURN) {
+        if (c.target < 0 && !c.attack_move) return;
+        air.land_at_goal = LAND_NONE;
+        air.returning = false;
+    }
+
     if (air.state == Air::LANDED || air.state == Air::LANDING) {
         if (c.target < 0 && !c.attack_move) return;
         air.state = Air::TAKING_OFF;
+        air.land_at_goal = LAND_NONE;
         air.returning = false;
         return;
     }
@@ -336,7 +394,7 @@ bool World::start_fall_to_earth(size_t i) {
     air.base = -1;
     air.returning = false;
     air.has_goal = false;
-    air.land_at_goal = 0;
+    air.land_at_goal = LAND_NONE;
     air.state = Air::FALLING;
     air.ammo = 0;
 
@@ -419,12 +477,38 @@ void World::step_aircraft(size_t i) {
         air.state = Air::TAKING_OFF;
     }
 
+    const int32_t speed = std::max(1, t.speed);
 
-    const WDist want_alt = (air.state == Air::LANDING) ? 0 : t.cruise_altitude;
+
+    if (air.land_at_goal == LAND_TURN) {
+        const WAngle want = landing_facing(i, air.goal);
+        a.facing = turn_towards(a.facing, want, t.turn_rate);
+        if (a.facing == want) {
+            air.land_at_goal = LAND_NONE;
+            air.state = Air::LANDING;
+        }
+        m.moving = false;
+        m.cell = to_cell(a.pos);
+        m.to_cell = m.cell;
+        return;
+    }
+
+
+    WDist want_alt = t.cruise_altitude;
+    if (air.state == Air::LANDING) {
+        want_alt = 0;
+        if (!t.can_hover && air.has_goal) {
+            const int64_t rest = length(air.goal - a.pos);
+            want_alt = static_cast<WDist>(std::min<int64_t>(t.cruise_altitude,
+                                                            rest * t.altitude_velocity / speed));
+        }
+    }
     if (air.alt < want_alt) air.alt = std::min(want_alt, air.alt + t.altitude_velocity);
     else if (air.alt > want_alt) air.alt = std::max(want_alt, air.alt - t.altitude_velocity);
     if (air.state == Air::TAKING_OFF && air.alt >= t.cruise_altitude) air.state = Air::CRUISING;
-    if (air.state == Air::LANDING && air.alt <= 0) {
+
+
+    if (air.state == Air::LANDING && air.alt <= 0 && (t.can_hover || !air.has_goal)) {
         air.state = Air::LANDED;
         air.has_goal = false;
         m.moving = false;
@@ -433,7 +517,6 @@ void World::step_aircraft(size_t i) {
         return;
     }
 
-    const int32_t speed = std::max(1, t.speed);
     WAngle want_face = a.facing;
     int64_t dist = 0;
     if (air.has_goal) {
@@ -442,17 +525,19 @@ void World::step_aircraft(size_t i) {
         if (dist > 0) want_face = angle_of(d);
     }
 
+
+    const bool taking_off = air.state == Air::TAKING_OFF;
+    if (taking_off) want_face = a.facing;
+
     if (t.can_hover) {
 
         a.facing = turn_towards(a.facing, want_face, t.turn_rate);
-        if (air.has_goal) {
+        if (air.has_goal && !taking_off) {
             if (dist <= speed) {
                 a.pos = air.goal;
                 air.has_goal = false;
-                if (air.land_at_goal) {
-                    air.state = Air::LANDING;
-                    snap_dock_facing(a, air);
-                }
+
+                if (air.land_at_goal != LAND_NONE) air.land_at_goal = LAND_TURN;
             } else {
                 const WVec d = air.goal - a.pos;
                 a.pos.x += static_cast<WDist>(int64_t(d.x) * speed / dist);
@@ -465,15 +550,40 @@ void World::step_aircraft(size_t i) {
         const WVec dir = direction_of(a.facing);
         a.pos.x += static_cast<WDist>(int64_t(dir.x) * speed / 1024);
         a.pos.y += static_cast<WDist>(int64_t(dir.y) * speed / 1024);
-        if (air.has_goal && dist <= speed * 2) {
-            air.has_goal = false;
-            if (air.land_at_goal) {
+
+
+        const int64_t reached = air.land_at_goal == LAND_APPROACH
+            ? std::max<int64_t>(speed * 2, 3 * turn_radius(t)) : speed * 2;
+        if (air.has_goal && dist <= reached) {
+            if (air.land_at_goal == LAND_APPROACH) {
+
+
+                const int b = air.base >= 0 ? index_of(air.base) : -1;
+                if (b < 0 || !actors_[size_t(b)].alive) {
+                    air.land_at_goal = LAND_NONE;
+                    air.has_goal = false;
+                } else {
+                    air.goal = dock_pos(size_t(b));
+                    air.land_at_goal = LAND_TOUCHDOWN;
+                    air.state = Air::LANDING;
+                }
+            } else if (air.land_at_goal == LAND_TOUCHDOWN) {
+
                 a.pos = air.goal;
-                air.state = Air::LANDING;
-                snap_dock_facing(a, air);
+                a.facing = landing_facing(i, air.goal);
+                air.alt = 0;
+                air.has_goal = false;
+                air.land_at_goal = LAND_NONE;
+                air.state = Air::LANDED;
+                m.moving = false;
+                m.cell = to_cell(a.pos);
+                m.to_cell = m.cell;
+                return;
+            } else {
+                air.has_goal = false;
             }
         }
-        if (!air.has_goal) {
+        if (!air.has_goal && !taking_off && air.state != Air::LANDING) {
 
 
             a.facing = turn_towards(a.facing, wrap_angle(a.facing + FULL_TURN / 4), t.turn_rate);

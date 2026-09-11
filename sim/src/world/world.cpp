@@ -846,7 +846,10 @@ int32_t World::spawn(int32_t type, int32_t owner, CPos cell, WAngle facing, int3
 
     a.pos = subcell_center(c, sub);
 
-    a.facing = facing >= 0 ? wrap_angle(facing) : static_cast<WAngle>(rand() % FULL_TURN);
+
+    a.facing = facing >= 0 ? wrap_angle(facing)
+             : (types_[type].aircraft ? AIRCRAFT_INITIAL_FACING
+                                      : static_cast<WAngle>(rand() % FULL_TURN));
     a.hp = std::max(1, types_[type].hp * std::min(100, std::max(1, health_percent)) / 100);
     a.origin = c;
     Mobile m;
@@ -860,6 +863,19 @@ int32_t World::spawn(int32_t type, int32_t owner, CPos cell, WAngle facing, int3
         Air& ai = airs_[size_t(idx)];
         ai.alt = airborne ? types_[type].cruise_altitude : 0;
         ai.state = airborne ? Air::CRUISING : Air::TAKING_OFF;
+
+
+        if (!airborne) {
+            const int b = pad_below(size_t(idx));
+            if (b >= 0) {
+                ai.base = actors_[size_t(b)].id;
+                ai.state = Air::LANDED;
+                actors_[idx].pos = dock_pos(size_t(b));
+                actors_[idx].facing = types_[actors_[size_t(b)].type].exit_facing;
+                prev_pos_[size_t(idx)] = actors_[idx].pos;
+                prev_facing_[size_t(idx)] = actors_[idx].facing;
+            }
+        }
     } else if (map_.in_bounds(c)) {
         slot_at(map_.index(c), sub) = idx;
     }
@@ -1587,6 +1603,7 @@ void World::step() {
     step_projectiles();
     step_bots();
     step_production();
+    step_pending_places();
     step_buildings();
     step_repairs();
     step_enter();

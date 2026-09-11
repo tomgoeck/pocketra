@@ -267,6 +267,10 @@ def apply_actor_balance(act: dict, path: Path = BALANCE_FILE) -> bool:
         act["portable_chrono"]["max_distance"] = 0
 
 
+    if rules.get("buildable_area_all") and act.get("building") and not act.get("wall"):
+        act["gives_buildable_area"] = True
+
+
     if rules.get("c4_bridges") and isinstance(act.get("bridge"), dict):
         act["demolishable"] = True
     if not rules.get("c4_vehicles"):

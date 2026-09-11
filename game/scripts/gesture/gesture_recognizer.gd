@@ -29,7 +29,11 @@ var state := S.IDLE
 
 
 var input_blocked := false
+
+
+var mouse_long_press := true
 var _fingers := {}
+var _press_emulated := false
 var _press_pos := Vector2.ZERO
 var _press_time := 0
 var _last_tap_time := -100000
@@ -51,6 +55,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		return
 	if e is InputEventScreenTouch:
 		if e.pressed:
+			_press_emulated = e.device == InputEvent.DEVICE_ID_EMULATION
 			_down(e.index, e.position)
 		else:
 			_up(e.index, e.position)
@@ -59,7 +64,8 @@ func _unhandled_input(e: InputEvent) -> void:
 
 
 func _process(_delta: float) -> void:
-	if state == S.PRESS and Time.get_ticks_msec() - _press_time >= long_press_ms:
+	if state == S.PRESS and (mouse_long_press or not _press_emulated) \
+			and Time.get_ticks_msec() - _press_time >= long_press_ms:
 		state = S.LONG
 		long_press.emit(_press_pos)
 

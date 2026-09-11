@@ -194,6 +194,7 @@ void World::lock_for_pickup(size_t ti) {
 void World::air_take_off(size_t i) {
     Air& air = airs_[i];
     if (air.state == Air::LANDED || air.state == Air::LANDING) air.state = Air::TAKING_OFF;
+    air.land_at_goal = LAND_NONE;
     air.returning = false;
 }
 

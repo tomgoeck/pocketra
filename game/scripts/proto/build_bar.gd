@@ -645,6 +645,18 @@ func any_ready() -> bool:
 	return _any_ready
 
 
+func ready_building() -> int:
+	if world == null or world.sim == null:
+		return -1
+	for k in [kind, 0, 3]:
+		if k != 0 and k != 3:
+			continue
+		var q: PackedInt32Array = world.sim.queue_state(world.local_player, k)
+		if q.size() >= 7 and q[2] == 1:
+			return q[0]
+	return -1
+
+
 var _producer_missing := false
 var _paused := false
 var _first_index := -1

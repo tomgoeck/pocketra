@@ -726,6 +726,26 @@ async def teil_teams(url):
     await a.drain(0.2)
 
 
+    await a.send(t="slot", seat=2, spawn=3)
+    await asyncio.sleep(0.2)
+    lb = letzte_lobby(await b.drain(0.4))
+    pruefe(lb and [k.get("spawn") for k in lb.get("clients", [])] == [-1, 2, 3],
+           "Gastgeber setzt den Startpunkt des KI-Platzes, alle sehen ihn", lb)
+    await a.drain(0.2)
+    await a.send(t="slot", seat=2, spawn=2)
+    err = await a.expect("error", skip=())
+    pruefe(err and err.get("code") == "spawnoccupied",
+           "belegter Startpunkt wird auch fuer einen KI-Platz abgewiesen", err)
+    lb = letzte_lobby(await a.drain(0.4))
+    pruefe(lb and [k.get("spawn") for k in lb.get("clients", [])] == [-1, 2, 3],
+           "abgewiesener KI-Wunsch aendert nichts", lb)
+    await b.drain(0.3)
+    await a.send(t="slot", seat=2, spawn=-1)
+    await asyncio.sleep(0.2)
+    await a.drain(0.3)
+    await b.drain(0.3)
+
+
     await a.send(t="ready", on=True)
     await b.send(t="ready", on=True)
     await asyncio.sleep(0.25)

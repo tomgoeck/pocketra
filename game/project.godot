@@ -41,7 +41,7 @@ config/custom_user_dir_name="Godot/app_userdata/pocketra"
 ; App-Version (nur mit einer neuen APK änderbar) — dieselbe Zahl steht in export_presets.cfg als
 ; version/name und landet über tools/update_pack.sh als apk_version in version.json.
 ; UpdateConfig.app_version() liest sie; min_supported in version.json vergleicht dagegen.
-config/version="0.18"
+config/version="0.20"
 run/main_scene="res://scenes/intro.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 ; Android-Zurücktaste beendet nicht die App — sie wird in proto_main/main_menu behandelt (Audit 09, N3)
@@ -92,8 +92,14 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/handheld/orientation=4
 window/stretch/mode="disabled"
-window/size/mode.windows=3
-window/size/mode.macos=3
+; Startfenster am PC: 4 = MODE_EXCLUSIVE_FULLSCREEN (nicht 3 = MODE_FULLSCREEN). Auf macOS haelt
+; nur der exklusive Modus Dock und Menueleiste unten, wenn der Zeiger an den Bildschirmrand faehrt
+; — sonst schiebt sich die Menueleiste ueber die oberste Zeile und das Randscrollen nach oben geht
+; nicht (Toms Befund 2026-09-11). Auf Windows spart er zusaetzlich den 1-px-Rand des
+; Mehrfenster-Vollbilds. Dieselbe Wahl trifft zur Laufzeit Desktop.fullscreen_mode()
+; (scripts/desktop.gd), das F11/Alt+Enter und die gespeicherte Einstellung bedient.
+window/size/mode.windows=4
+window/size/mode.macos=4
 
 [input_devices]
 

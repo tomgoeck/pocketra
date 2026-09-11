@@ -5,6 +5,9 @@ extends Node
 
 const Desktop := preload("res://scripts/desktop.gd")
 
+
+const ActionBar := preload("res://scripts/proto/action_bar.gd")
+
 @onready var world: ProtoWorld = $World
 @onready var gestures: GestureRecognizer = $Gestures
 @onready var radial: RadialMenu = $UI/RadialMenu
@@ -46,7 +49,11 @@ const NOTIFY_KEYS := ["notify.building", "notify.building_in_progress", "notify.
 	"notify.unit_ready", "notify.insufficient_funds", "notify.no_build", "notify.cancelled",
 	"notify.new_options", "notify.low_power", "notify.structure_sold", "notify.repairing",
 	"notify.primary_selected", "notify.unit_repaired", "notify.win", "notify.lose",
-	"notify.silos_needed", "notify.cannot_place"]
+	"notify.silos_needed", "notify.cannot_place",
+
+
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+	"toast.place_pending"]
 
 var _last_gesture := "—"
 var _screenshot_path := ""
@@ -125,6 +132,28 @@ var _sp_source := Vector2.ZERO
 var _click_mode := ""
 
 
+var action_bar: Control = null
+
+var _bar_target: ProtoWorld.Unit = null
+
+var _bar_cell := Vector2.ZERO
+var _bar_has_cell := false
+
+var _bar_press := Vector2.ZERO
+
+
+var _unload_ids := PackedInt32Array()
+var _unload_cell := Vector2.ZERO
+var _unload_deadline := -1
+
+
+var _force_touch := false
+
+
+func _touch_model() -> bool:
+	return _force_touch or not Desktop.is_desktop()
+
+
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var k := args.find("--screenshot")
@@ -166,6 +195,14 @@ func _ready() -> void:
 	_test_speed_ui = args.has("--test-speed-ui")
 	if _test_speed_ui:
 		call_deferred("_run_test_speed_ui")
+
+
+	var aisk := args.find("--test-ai-start")
+	if aisk >= 0:
+		_test_ai_start = 3
+		if aisk + 1 < args.size() and str(args[aisk + 1]).is_valid_int():
+			_test_ai_start = maxi(int(args[aisk + 1]), 1)
+		call_deferred("_run_test_ai_start")
 	if args.has("--test-keys"):
 		call_deferred("_run_test_keys")
 	if args.has("--test-desktop-scroll"):
@@ -237,14 +274,23 @@ func _ready() -> void:
 	_test_forcefire = args.has("--test-forcefire")
 	_test_c4 = args.has("--test-c4")
 	_test_wall = args.has("--test-wall")
-	_test_bauradius = args.has("--test-bauradius")
+	_test_build_area = args.has("--test-build-area")
+
+
+	_auto_bar_enabled = true
+	for a in args:
+		if String(a).begins_with("--test-") and a != "--test-build-area":
+			_auto_bar_enabled = false
 	_test_retreat = args.has("--test-retreat")
 
 	var trk := args.find("--test-ready")
 	if trk >= 0:
 		_test_ready = args[trk + 1] if (trk + 1 < args.size() and not args[trk + 1].begins_with("--")) else "zu"
 		_test_ui = true
+	_force_touch = args.has("--touch")
 	_test_tap_orders = args.has("--test-tap-orders")
+	if _test_tap_orders:
+		_force_touch = true
 	_test_lobby_tap = args.has("--test-lobby")
 	_test_toasts = args.has("--test-toasts")
 	_test_eva = args.has("--test-eva")
@@ -312,7 +358,17 @@ func _ready() -> void:
 	gestures.pan.connect(func(d): world.pan_screen(d); _last_gesture = "Schwenken")
 	gestures.pinch.connect(func(f, c): world.zoom_at(f, c); _last_gesture = "Zoom %.2f" % world.zoom)
 	gestures.two_finger_ended.connect(world.end_camera_gesture)
+
+
+	gestures.mouse_long_press = not Desktop.has_keyboard()
 	radial.chosen.connect(_on_radial)
+
+
+	action_bar = ActionBar.new()
+	action_bar.name = "ActionBar"
+	$UI.add_child(action_bar)
+	action_bar.chosen.connect(_on_action_bar)
+	action_bar.dismissed.connect(_on_action_bar_dismissed)
 
 
 	build_toggle.toggle_mode = true
@@ -323,7 +379,7 @@ func _ready() -> void:
 	build_toggle.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	build_toggle.tooltip_text = tr("ui.build_toggle_tip")
 	HudTheme.style_icon_button(build_toggle)
-	HudTheme.wire_help(build_toggle, "help.btn.build_toggle", $UI, func(): build_bar.visible = not build_bar.visible)
+	HudTheme.wire_help(build_toggle, "help.btn.build_toggle", $UI, _toggle_build_bar)
 	build_bar.visibility_changed.connect(func(): build_toggle.set_pressed_no_signal(build_bar.visible))
 	build_toggle.set_pressed_no_signal(build_bar.visible)
 
@@ -348,7 +404,9 @@ func _ready() -> void:
 	build_bar.place_requested.connect(_begin_placement)
 	build_bar.blocked.connect(_toast)
 	build_bar.height_changed.connect(_layout_ui)
-	place_confirm.pressed.connect(_confirm_placement)
+
+
+	HudTheme.wire_help(place_confirm, "help.placement", $UI, _confirm_placement)
 	place_cancel.pressed.connect(_cancel_placement)
 	HudTheme.wire_help(music_toggle, "help.btn.music", $UI, _toggle_music)
 	_update_music_icon()
@@ -417,7 +475,8 @@ func _scroll_blocked() -> bool:
 
 
 func _edge_scroll_blocked() -> bool:
-	return _boxing or world.placing_type >= 0 or radial.visible or _info_card != null
+	return _boxing or radial.visible or _info_card != null \
+			or (action_bar != null and action_bar.visible)
 
 
 func _on_window_resized() -> void:
@@ -583,7 +642,8 @@ func _update_toasts() -> void:
 
 
 func _on_notify(kind: int) -> void:
-	if kind >= 0 and kind < NOTIFY_KEYS.size():
+
+	if kind >= 0 and kind < NOTIFY_KEYS.size() and NOTIFY_KEYS[kind] != "":
 		_toast(tr(NOTIFY_KEYS[kind]))
 
 
@@ -596,6 +656,137 @@ func _on_under_attack(pos: Vector2) -> void:
 	minimap.add_ping(pos)
 
 
+var _hover_ghost := false
+var _hover_declined := -1
+
+
+func _hover_ghost_possible() -> bool:
+
+
+	if not _auto_bar_enabled or world == null or world.sim == null or not Desktop.has_keyboard():
+		return false
+	if not build_bar.visible or not build_bar.is_visible_in_tree():
+		return false
+	if _confirm_mode != "" or _order_mode != "" or _click_mode != "" or _boxing:
+		return false
+	if radial.visible or _info_card != null or (_menu_panel != null and _menu_panel.visible):
+		return false
+	if action_bar != null and action_bar.visible:
+		return false
+	return _hover_ghost or world.placing_type < 0
+
+
+func _over_hud(p: Vector2) -> bool:
+	if build_bar.visible and build_bar.get_global_rect().has_point(p):
+		return true
+	if _menu_panel != null and _menu_panel.visible and _menu_panel.get_global_rect().has_point(p):
+		return true
+	if _info_card != null and _info_card.get_global_rect().has_point(p):
+		return true
+	return _hud_button_at(p)
+
+
+func _hover_ghost_motion(m: InputEventMouseMotion) -> void:
+	if m.button_mask != 0 or world == null or world.sim == null or not Desktop.has_keyboard():
+		return
+	if _confirm_mode == "place" and world.placing_type >= 0:
+		if _over_hud(m.position):
+			return
+		world.move_placement(world.screen_to_world(m.position))
+		world.place_armed = true
+		return
+	if not _hover_ghost_possible() or _over_hud(m.position):
+		_end_hover_ghost()
+		return
+	var ready: int = build_bar.ready_building()
+	if ready < 0 or ready == _hover_declined:
+		_end_hover_ghost()
+		return
+	if not _hover_ghost or world.placing_type != ready:
+		_bar_open_before_placement = build_bar.visible
+		world.begin_placement(ready)
+		_hover_ghost = true
+
+		build_bar.mark_ready_offered()
+
+
+	world.move_placement(world.screen_to_world(m.position))
+	world.place_armed = true
+
+
+func _end_hover_ghost(declined: bool = false) -> void:
+	if not _hover_ghost:
+		return
+	_hover_ghost = false
+	if declined:
+		_hover_declined = world.placing_type
+	world.cancel_placement()
+
+
+const AUTO_BAR_DELAY := 0.3
+
+var _auto_bar_enabled := true
+var _auto_bar_timer := 0.0
+var _auto_bar_manual_closed := false
+var _auto_bar_manual_open := false
+var _auto_bar_open_at := Vector2.ZERO
+
+
+func _toggle_build_bar() -> void:
+	var open := not build_bar.visible
+	build_bar.visible = open
+	_auto_bar_manual_closed = not open
+	_auto_bar_manual_open = open
+	_hover_declined = -1
+	_auto_bar_open_at = world.visible_world_rect().get_center() if world != null else Vector2.ZERO
+	_auto_bar_timer = 0.0
+
+
+func _tick_auto_build_bar(delta: float) -> void:
+	if not _auto_bar_enabled or world == null or world.sim == null:
+		return
+
+
+	if world.placing_type >= 0 or _confirm_mode != "":
+		_auto_bar_timer = 0.0
+		return
+	var yard := _conyard_in_view()
+	var area: bool = world.build_area_in_view()
+
+
+	var view := world.visible_world_rect()
+	if not yard:
+		_auto_bar_manual_closed = false
+	if _auto_bar_manual_open and view.get_center().distance_to(_auto_bar_open_at) > minf(view.size.x, view.size.y) / 2.0:
+		_auto_bar_manual_open = false
+	var want := build_bar.visible
+	if yard and not _auto_bar_manual_closed:
+		want = true
+	elif not area and not _auto_bar_manual_open:
+		want = false
+	if want == build_bar.visible:
+		_auto_bar_timer = 0.0
+		return
+	_auto_bar_timer += delta
+	if _auto_bar_timer < AUTO_BAR_DELAY:
+		return
+	_auto_bar_timer = 0.0
+	build_bar.visible = want
+	if want:
+
+
+		build_bar.mark_ready_offered()
+
+
+func _conyard_in_view() -> bool:
+	var view := world.visible_world_rect()
+	for u in world.units:
+		if u.alive and u.player == world.local_player and world.types[u.type].get("base_provider", false) \
+				and view.intersects(world.unit_rect(u)):
+			return true
+	return false
+
+
 var _bar_open_before_placement := true
 
 
@@ -605,6 +796,8 @@ func _begin_placement(type_id: int) -> void:
 	_order_mode = ""
 	_end_click_mode()
 	world.begin_placement(type_id)
+	_hover_ghost = false
+	_hover_declined = -1
 	_bar_open_before_placement = build_bar.visible
 	build_bar.visible = false
 	_show_confirm("place", tr("ui.build_confirm"))
@@ -624,13 +817,23 @@ func _confirm_placement() -> void:
 		_end_placement(tr("toast.sold") if world.sell_selected() else tr("toast.sell_impossible"))
 		return
 	if world.confirm_placement():
+		_hover_declined = -1
 		_end_placement(tr("toast.built"))
 	else:
 		_toast(tr("toast.cannot_build_here"))
 
 
 func _cancel_placement() -> void:
+
+
+	if _hover_ghost and _confirm_mode == "":
+		_end_hover_ghost(true)
+		_toast(tr("toast.placement_cancelled"))
+		return
 	if _confirm_mode == "place":
+
+
+		_hover_declined = world.placing_type
 
 
 		build_bar.decline_ready(world.placing_type)
@@ -647,6 +850,7 @@ func _cancel_placement() -> void:
 func _end_placement(msg: String) -> void:
 	_confirm_mode = ""
 	_order_mode = ""
+	_hover_ghost = false
 	place_confirm.visible = false
 	place_cancel.visible = false
 
@@ -756,11 +960,17 @@ func _on_tap(p: Vector2) -> void:
 	var wp := world.screen_to_world(p)
 	if world.placing_type >= 0:
 
-		if world.tap_placement(wp):
-			_end_placement(tr("toast.built"))
+
+		if _hover_ghost and not world.placement_ok():
+			_end_hover_ghost(true)
 		else:
-			_toast(tr("toast.tap_again_to_build") if world.placement_ok() else tr("toast.cannot_build_here"))
-		return
+
+			if world.tap_placement(wp):
+				_hover_declined = -1
+				_end_placement(tr("toast.built"))
+			else:
+				_toast(tr("toast.tap_again_to_build") if world.placement_ok() else tr("toast.cannot_build_here"))
+			return
 	if _confirm_mode == "sell":
 		_end_placement(tr("toast.sale_cancelled"))
 	var hit := world.pick_unit(wp, Dp.px(HIT_RADIUS_DP) / world.zoom)
@@ -773,6 +983,16 @@ func _on_tap(p: Vector2) -> void:
 
 
 		_end_click_mode()
+
+
+	if _desktop_select_first():
+		_desktop_left_click(p, hit)
+		return
+
+
+	if _touch_model() and _bar_candidate(hit):
+		_open_target_bar(hit, p)
+		return
 
 
 	if hit != null and hit.player == world.local_player and not world.selection.is_empty() and world.selected_building() == null \
@@ -892,7 +1112,7 @@ func _tap_order_on_friendly(hit: ProtoWorld.Unit) -> bool:
 		return false
 
 
-	if hit.selected:
+	if hit.selected and not _desktop_cmd:
 		return false
 
 
@@ -910,17 +1130,304 @@ func _tap_order_on_friendly(hit: ProtoWorld.Unit) -> bool:
 	return true
 
 
+const ENTER_ACTIONS := {1: "capture", 2: "fix", 3: "c4", 4: "infiltrate", 5: "bridge"}
+
+
+func _bar_candidate(hit: ProtoWorld.Unit) -> bool:
+	if hit == null or not hit.alive or world.selection.is_empty() or world.selected_building() != null:
+		return false
+
+
+	if hit.selected:
+		return false
+
+
+	if not world.selectable(hit):
+		return false
+	if hit.player != world.local_player:
+		if hit.player == ProtoWorld.PLAYER_NEUTRAL or hit.player == ProtoWorld.PLAYER_CREEPS \
+				or world.hostile(world.local_player, hit.player):
+			return false
+	return true
+
+
+func _target_items(hit: ProtoWorld.Unit) -> Array:
+	var items: Array = []
+	if hit == null:
+		return items
+	var own: bool = hit.player == world.local_player
+	var foe: bool = world.hostile(world.local_player, hit.player)
+
+
+	var friendly: bool = own or (not foe and hit.player != ProtoWorld.PLAYER_NEUTRAL \
+			and hit.player != ProtoWorld.PLAYER_CREEPS)
+	var ek := world.enter_kind(hit)
+	if ENTER_ACTIONS.has(ek):
+		items.append(ENTER_ACTIONS[ek])
+	if own:
+		if world.can_land_at(hit):
+			items.append("land")
+		if world.can_board(hit):
+			items.append("board")
+		if world.can_deliver_to(hit):
+			items.append("deliver")
+		if world.can_repair_at(hit):
+			items.append("repair_at")
+
+
+	if friendly and not world.types[hit.type].get("building", false) and world.sim != null \
+			and world.sim.has_method("order_guard"):
+		items.append("guard")
+	if foe and world.selection_armed():
+		items.append("attack")
+	elif world.selection_can_force_attack(hit):
+
+
+		items.append("force_attack")
+	if friendly:
+		items.append("move")
+	items.append("info")
+	items.append("cancel")
+	return items
+
+
+func _cell_items() -> Array:
+
+
+	if not world.selected_buildings().is_empty():
+		var b: Array = _radial_items()
+		b.append("cancel")
+		return b
+	var items: Array = ["move", "attack_move"]
+	if world.sim != null and world.sim.has_method("order_attack_cell"):
+		items.append("force_fire")
+
+	if world.selection_can_unload():
+		items.append("unload")
+	var has_harvester := false
+	for u in world.selection:
+		if world.types[u.type].get("harvester", false):
+			has_harvester = true
+	if has_harvester:
+		items.append("harvest")
+	if world.selection_can_lay_mine():
+		items.append("mine")
+	if world.selection_can_chrono():
+		items.append("chrono")
+	if world.selection_can_deploy():
+		items.append("deploy")
+	if world.selection_can_detonate():
+		items.append("detonate")
+	items.append("stop")
+	items.append("scatter")
+	items.append("clear")
+	items.append("cancel")
+	return items
+
+
+func _open_target_bar(hit: ProtoWorld.Unit, press: Vector2, extra: Array = []) -> void:
+	_clear_pending_unload()
+	var items: Array = extra.duplicate()
+	for a in _target_items(hit):
+		if not items.has(a):
+			items.append(a)
+	_bar_target = hit
+	_bar_has_cell = false
+	_bar_press = press
+	_force_target = hit if world.selection_can_force_attack(hit) else null
+	_c4_target = hit if world.enter_kind(hit) == ProtoWorld.ENTER_DEMOLISH else null
+
+
+	var r := world.unit_rect(hit)
+	var ring_r: float = maxf(Dp.px(16), maxf(r.size.x, r.size.y) * 0.75 * world.zoom)
+	action_bar.open(items, press, tr("bar.target") % _type_label(hit.type),
+			world.world_to_screen(r.get_center()), ring_r, _bar_min_y())
+	_toast(tr("toast.target_picked") % _type_label(hit.type))
+	_last_gesture = "Ziel: %s" % hit.type
+
+
+func _open_cell_bar(wp: Vector2, press: Vector2) -> void:
+	_clear_pending_unload()
+	_bar_target = null
+	_bar_cell = wp
+	_bar_has_cell = true
+	_bar_press = press
+	_force_target = null
+	_c4_target = null
+	action_bar.open(_cell_items(), press, tr("bar.target_ground"),
+			world.world_to_screen(wp), Dp.px(18), _bar_min_y())
+	_last_gesture = "Ziel: Stelle"
+
+
+func _bar_min_y() -> float:
+	return status_bar.position.y + status_bar.size.y + Dp.px(8)
+
+
+func _on_action_bar(action: String) -> void:
+	var target := _bar_target
+	var cell := _bar_cell
+	var has_cell := _bar_has_cell
+	var press := _bar_press
+	_bar_target = null
+	_bar_has_cell = false
+	if action == "" or action == "cancel":
+		_force_target = null
+		_c4_target = null
+		_last_gesture = "Zielwahl verworfen"
+		_toast(tr("toast.target_dropped"))
+		return
+
+
+	if action in ["stop", "scatter", "clear", "deploy", "mine", "detonate", "sell", "repair",
+			"primary", "force_attack", "c4"]:
+		_on_radial(action)
+		return
+	_force_target = null
+	_c4_target = null
+	world.sfx.play_ui("ramenu1")
+	match action:
+		"move":
+			if has_cell:
+				world.order_move(cell)
+			else:
+
+
+				world.order_move(target.pos)
+				_toast(tr("toast.move_next_to") % _type_label(target.type))
+			_last_gesture = "Bewegen (%d)" % world.selection.size()
+		"attack_move":
+			world.order_attack_move(cell)
+			_toast(tr("toast.attack_move_count") % world.selection.size())
+			_last_gesture = "Angriffszug (%d)" % world.selection.size()
+		"force_fire":
+			_toast(tr("radial.action.force_fire") if world.order_attack_cell(cell) else tr("toast.force_fire_impossible"))
+			_last_gesture = "Zwangsfeuer (%d)" % world.selection.size()
+		"harvest":
+			_toast(tr("radial.action.harvest") if world.order_harvest(cell) else tr("toast.no_harvester"))
+		"chrono":
+			_toast(tr("toast.chrono_jumped") if world.chrono_selected(cell) else tr("toast.chrono_impossible"))
+		"unload":
+			_begin_unload_at(cell)
+		"guard":
+			if world.order_guard(target):
+				_toast(tr("toast.guarding") % _type_label(target.type))
+				_last_gesture = "Bewachen (%d)" % world.selection.size()
+			else:
+				_toast(tr("toast.no_guard_target"))
+		"attack":
+			if world.order_attack(target):
+				_toast(tr("toast.attacking") % [_type_label(target.type), world.selection.size()])
+				_last_gesture = "Angriff (%d)" % world.selection.size()
+		"land":
+			_toast(tr("toast.landing") % _type_label(target.type) if world.order_land_at(target) else tr("toast.order_impossible"))
+		"board":
+			_toast(tr("toast.boarding") % _type_label(target.type) if world.order_enter_transport(target) else tr("toast.order_impossible"))
+		"deliver":
+			_toast(tr("toast.deliver_ore") % _type_label(target.type) if world.order_deliver(target) else tr("toast.order_impossible"))
+		"repair_at":
+			_toast(tr("toast.repair_at_depot") if world.order_repair(target) else tr("toast.order_impossible"))
+		"capture", "fix", "infiltrate", "bridge":
+
+
+			var what := world.order_enter(target)
+			_toast(tr(what) % _type_label(target.type) if what != "" else tr("toast.order_impossible"))
+			_last_gesture = "Enter (%s)" % action
+		"info":
+			if target != null:
+				_show_info_card(target, press)
+
+
+func _on_action_bar_dismissed(pos: Vector2) -> void:
+	var hit := world.pick_unit(world.screen_to_world(pos), Dp.px(HIT_RADIUS_DP) / world.zoom)
+	if hit != null and hit != _bar_target and _bar_candidate(hit):
+		_open_target_bar(hit, pos)
+		return
+	_bar_target = null
+	_bar_has_cell = false
+	_force_target = null
+	_c4_target = null
+	_last_gesture = "Zielwahl verworfen"
+	_toast(tr("toast.target_dropped"))
+
+
+func _begin_unload_at(wp: Vector2) -> void:
+	var ids := world.loaded_ids(false)
+	if ids.is_empty():
+		_toast(tr("toast.nobody_aboard"))
+		return
+	world.order_move_ids(ids, Vector2i(wp / ProtoWorld.CELL))
+	_unload_ids = ids
+	_unload_cell = wp
+
+
+	_unload_deadline = world.sim.tick() + 2000 if world.sim != null else -1
+	_toast(tr("toast.unload_ordered"))
+	_last_gesture = "Entladen hier (%d)" % ids.size()
+
+
+func _clear_pending_unload() -> void:
+	_unload_ids = PackedInt32Array()
+	_unload_deadline = -1
+
+
+func _step_pending_unload() -> void:
+	if _unload_ids.is_empty() or world == null or world.sim == null:
+		return
+	if _unload_deadline >= 0 and world.sim.tick() > _unload_deadline:
+		_clear_pending_unload()
+		return
+	var ready := PackedInt32Array()
+	var left := PackedInt32Array()
+	for id in _unload_ids:
+		var u := world.unit_by_id(id)
+		if u == null or not u.alive:
+			continue
+
+
+		if not u.moving and u.pos.distance_to(_unload_cell) <= ProtoWorld.CELL * 1.9:
+			ready.append(id)
+		else:
+			left.append(id)
+	_unload_ids = left
+	if not ready.is_empty():
+		if world.unload_ids(ready):
+			_toast(tr("toast.unloading"))
+		else:
+			_toast(tr("toast.unload_blocked"))
+	if _unload_ids.is_empty():
+		_unload_deadline = -1
+
+
 var _hud_tap_from := Vector2.ZERO
 var _hud_tap_live := false
 
 
 func _input(e: InputEvent) -> void:
+
+
+	if e is InputEventMouseMotion:
+		var mm: InputEventMouseMotion = e
+		if (_radial_mouse or _radial_sticky) and radial.visible:
+			radial.update(mm.position)
+			return
+		_hover_ghost_motion(mm)
+		return
+
+
+	if e is InputEventMouseButton and Desktop.has_keyboard():
+		var rb: InputEventMouseButton = e
+		if rb.button_index == MOUSE_BUTTON_RIGHT and not rb.pressed and not _rmb_consumed:
+			_attack_under_hud(rb.position)
+		return
 	if not (e is InputEventScreenTouch):
 		return
 	var t: InputEventScreenTouch = e
 	if t.index != 0:
 		return
 	if t.pressed:
+
+
+		_tap_from_mouse = t.device == InputEvent.DEVICE_ID_EMULATION
 		_hud_tap_from = t.position
 		_hud_tap_live = true
 		return
@@ -930,11 +1437,17 @@ func _input(e: InputEvent) -> void:
 
 	if t.position.distance_to(_hud_tap_from) > Dp.px(gestures.tap_slop_dp):
 		return
+	if _tap_from_mouse:
+		return
 	_attack_under_hud(t.position)
 
 
 func _attack_under_hud(p: Vector2) -> bool:
 	if world == null or world.sim == null or _scroll_blocked():
+		return false
+
+
+	if action_bar != null and action_bar.visible:
 		return false
 
 
@@ -967,7 +1480,7 @@ func _hud_button_under(n: Node, p: Vector2) -> bool:
 	if n is Control and not (n as Control).is_visible_in_tree():
 		return false
 	if n == build_bar or (_menu_panel != null and n == _menu_panel) \
-			or (_info_card != null and n == _info_card) or n.is_in_group("modal"):
+			or (_info_card != null and n == _info_card) or n == action_bar or n.is_in_group("modal"):
 		return false
 	if n is Button:
 		var b: Button = n
@@ -998,6 +1511,10 @@ var _drag_pos := Vector2.ZERO
 
 
 func _on_drag_started(p: Vector2) -> void:
+
+
+	if _hover_ghost:
+		_end_hover_ghost(true)
 	if world.placing_type >= 0:
 		world.move_placement(_place_pos(p))
 		world.place_armed = true
@@ -1090,6 +1607,18 @@ func _on_long_press(p: Vector2) -> void:
 			_c4_target = hit
 
 
+		if _touch_model():
+			if world.selection.is_empty():
+				_show_info_card(hit, p)
+				_last_gesture = "Infokarte"
+				return
+
+
+			if hit.selected:
+				_open_cell_bar(wp, p)
+				return
+			_open_target_bar(hit, p)
+			return
 		if hit.player != world.local_player or not world.selectable(hit):
 
 
@@ -1113,6 +1642,11 @@ func _on_long_press(p: Vector2) -> void:
 		return
 	if world.selection.is_empty():
 		_toast(tr("toast.ground"))
+		return
+
+
+	if _touch_model():
+		_open_cell_bar(wp, p)
 		return
 	radial.open(p, _radial_items())
 	_last_gesture = "Radialmenü"
@@ -1807,6 +2341,9 @@ var _speed_switched := false
 
 
 var _test_speed_ui := false
+
+
+var _test_ai_start := -1
 var _test_defeat := false
 var _test_victory := false
 var _defeat_step := 0
@@ -2132,7 +2669,153 @@ func _run_test_placement() -> void:
 			t, ghost_pos, real_pos, diff, "OK" if ok else "FEHLER"])
 		_placement_shots[t] = {"origin": cell}
 	print("T --test-placement: %d/%d Gebäude geprüft, %d Abweichungen" % [checked, PLACEMENT_TEST_TYPES.size(), fail])
+	call_deferred("_run_test_placement_geometrie")
+
+
+const PLACEMENT_GEOMETRY_TYPES := ["silo", "sam", "pdox", "afld", "fix", "powr", "fact"]
+
+
+func _run_test_placement_geometrie() -> void:
+	var sim = world.sim
+	var fehler := 0
+	var stellen := [Vector2(0.5, 0.5), Vector2(0.1, 0.1), Vector2(0.9, 0.1), Vector2(0.1, 0.9), Vector2(0.9, 0.9)]
+	for t in PLACEMENT_GEOMETRY_TYPES:
+		if not world.type_ids.has(t):
+			print("T --test-placement Geometrie: %-5s fehlt in rules.json — übersprungen" % t)
+			continue
+		var tid: int = world.type_ids[t]
+		var td: Dictionary = world.types[t]
+		var rows: PackedStringArray = String(td["footprint"]).split(" ")
+		var fw := rows[0].length()
+		var fh := rows.size()
+		var b: Vector2 = td.get("bounds", Vector2(ProtoWorld.CELL, ProtoWorld.CELL))
+		var bw := int(round(b.x / ProtoWorld.CELL))
+		var bh := int(round(b.y / ProtoWorld.CELL))
+
+		var zelle := Vector2i(40, 30)
+		var mitte_soll := zelle - Vector2i(int(floor((bw - 1) / 2.0)), int(floor((bh - 1) / 2.0)))
+		world.begin_placement(tid)
+		var geo_ok := true
+		var abw := PackedStringArray()
+		for s in stellen:
+			var wp: Vector2 = (Vector2(zelle) + s) * ProtoWorld.CELL
+			world.move_placement(wp)
+			var soll := Vector2i(floori(zelle.x + s.x - (bw - 1) / 2.0), floori(zelle.y + s.y - (bh - 1) / 2.0))
+			var o: Vector2i = world.place_origin
+			var drin: bool = o.x <= zelle.x and zelle.x < o.x + fw and o.y <= zelle.y and zelle.y < o.y + fh
+			if o != soll or not drin:
+				geo_ok = false
+				abw.append("%s→%s(soll %s%s)" % [s, o, soll, "" if drin else ", Zeiger außerhalb"])
+		if not geo_ok:
+			fehler += 1
+		print("T --test-placement Geometrie: %-5s %d×%d (Sprite %d×%d) Zeiger %s → Ursprung %s (Sollwert %s) %s%s" % [
+			t, fw, fh, bw, bh, zelle, world.place_origin, mitte_soll,
+			"OK" if geo_ok else "FEHLER", "" if geo_ok else " " + " ".join(abw)])
+		world.cancel_placement()
+
+		var frei := _placement_free_cell(tid, Vector2i(40, 35))
+		if frei.x < 0:
+			print("T --test-placement Geometrie: %-5s keine freie Zelle — Tipp-Probe übersprungen" % t)
+			continue
+		var zeiger := frei + Vector2i(int(floor((bw - 1) / 2.0)), int(floor((bh - 1) / 2.0)))
+		var zp: Vector2 = (Vector2(zeiger) + Vector2(0.5, 0.5)) * ProtoWorld.CELL
+		world.begin_placement(tid)
+		world.place_armed = false
+		var erster: bool = world.tap_placement(zp)
+		var gesetzt: Vector2i = world.place_origin
+		var zweiter: bool = world.tap_placement(zp)
+		var tipp_ok: bool = not erster and gesetzt == frei and zweiter
+		if not tipp_ok:
+			fehler += 1
+		print("T --test-placement Geometrie: %-5s Tipp auf %s → Ursprung %s (Sollwert %s), zweiter Tipp baut=%s %s" % [
+			t, zeiger, gesetzt, frei, zweiter, "OK" if tipp_ok else "FEHLER"])
+		world.cancel_placement()
+
+
+	var sid: int = world.type_ids.get("silo", -1)
+	if not Desktop.has_keyboard():
+		print("T --test-placement Geometrie: kein Desktop — Hover-Probe übersprungen")
+	elif sid < 0:
+		print("T --test-placement Geometrie: silo fehlt — Hover-Probe übersprungen")
+	else:
+		sim.give_credits(0, 20000)
+		var frei2 := _placement_free_cell(sid, Vector2i(40, 35))
+		if build_bar.ready_building() != sid:
+			world.queue_build(sid)
+			for _t in 20000:
+				sim.step()
+				if build_bar.ready_building() == sid:
+					break
+		await get_tree().process_frame
+		if frei2.x < 0 or build_bar.ready_building() != sid:
+			print("T --test-placement Geometrie: Silo nicht fertig oder keine freie Zelle — Hover-Probe übersprungen")
+		else:
+
+
+			var fenster_vorher := get_window().size
+			get_window().size = Vector2i(1280, 720)
+			for _f in 3:
+				await get_tree().process_frame
+			_begin_placement(sid)
+			world.center_on(world.placement_pos_for("silo", frei2))
+			await get_tree().process_frame
+			await get_tree().process_frame
+			var sp := world.world_to_screen((Vector2(frei2) + Vector2(0.5, 0.5)) * ProtoWorld.CELL)
+			var mm := InputEventMouseMotion.new()
+			mm.position = sp
+			mm.global_position = sp
+			Input.parse_input_event(mm)
+			await get_tree().process_frame
+			var hover_ok: bool = world.placing_type == sid and world.place_origin == frei2 and world.place_armed
+			if not hover_ok:
+				fehler += 1
+			print("T --test-placement Geometrie: Maus auf Zelle %s → Geist auf %s (Sollwert %s), bereit=%s %s" % [
+				frei2, world.place_origin, frei2, world.place_armed, "OK" if hover_ok else "FEHLER"])
+			for gedrueckt in [true, false]:
+				var mb := InputEventMouseButton.new()
+				mb.button_index = MOUSE_BUTTON_LEFT
+				mb.pressed = gedrueckt
+				mb.position = sp
+				mb.global_position = sp
+				Input.parse_input_event(mb)
+				await get_tree().process_frame
+				await get_tree().process_frame
+			for _t in 5:
+				sim.step()
+			await get_tree().process_frame
+
+
+			var steht := false
+			for u in world.units:
+				if u.alive and u.player == 0 and u.type == "silo" and world.placement_origin_of("silo", u.pos) == frei2:
+					steht = true
+					break
+			var gebaut: bool = world.placing_type < 0 \
+					and (steht or not sim.pending_place(0, ProtoWorld.Queue.BUILDING).is_empty())
+			if not gebaut:
+				fehler += 1
+				world.cancel_placement()
+				world.cancel_build(ProtoWorld.Queue.BUILDING, sid)
+			print("T --test-placement Geometrie: Linksklick auf dieselbe Stelle → gebaut=%s, Platzierung beendet=%s %s" % [
+				gebaut, world.placing_type < 0, "OK" if gebaut else "FEHLER"])
+			_end_placement("T Geistbild-Geometrie geprüft")
+			get_window().size = fenster_vorher
+			await get_tree().process_frame
+	print("T --test-placement Geometrie: %d Befund(e) (Sollwert 0)" % fehler)
 	call_deferred("_run_test_placement_tap")
+
+
+func _placement_free_cell(type_id: int, probe: Vector2i) -> Vector2i:
+	for r in range(0, 26):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var c := probe + Vector2i(dx, dy)
+				var res: PackedByteArray = world.sim.can_place(0, type_id, c.x, c.y)
+				if res.size() > 0 and res[0] == 1:
+					return c
+	return Vector2i(-1, -1)
 
 
 func _run_test_forcefire() -> void:
@@ -2369,7 +3052,7 @@ func _run_test_wall() -> void:
 		get_tree().quit()
 
 
-var _test_bauradius := false
+var _test_build_area := false
 
 
 func _bau_footprint_free(type: String, c: Vector2i) -> bool:
@@ -2393,31 +3076,21 @@ func _bau_dist(c: Vector2i, org: Vector2i, w: int, h: int) -> int:
 	return maxi(dx, dy)
 
 
-func _bau_find_spot(org: Vector2i, w: int, h: int, used: Array) -> Vector2i:
-	for r in range(4, 11):
-		for dy in range(-r, r + 1):
-			for dx in range(-r, r + 1):
-				var c := Vector2i(org.x + dx, org.y + dy)
-				if _bau_dist(c, org, w, h) != r:
-					continue
-				var free := true
-				for i in range(0, 4):
-					var q := c + Vector2i(i, 0)
-					if not _bau_footprint_free("silo", q) or used.has(q):
-						free = false
-						break
-
-				for i in range(0, 2):
-					for j in range(0, 3):
-						var q2 := c + Vector2i(2 + i, j)
-						if not _bau_footprint_free("silo", q2) or used.has(q2):
-							free = false
-				if free and not _bau_ok("silo", c):
-					return c
+func _bau_free_ring(type: String, org: Vector2i, w: int, h: int, r: int) -> Vector2i:
+	for dy in range(-r, r + 1):
+		for dx in range(-r, r + 1):
+			var c := Vector2i(org.x + dx, org.y + dy)
+			if _bau_dist(c, org, w, h) == r and _bau_footprint_free(type, c):
+				return c
 	return Vector2i(-1, -1)
 
 
-func _run_test_bauradius() -> void:
+func _bau_look_at(c: Vector2i) -> void:
+	world.center_on(Vector2(c) * ProtoWorld.CELL)
+	await get_tree().create_timer(0.8).timeout
+
+
+func _run_test_build_area() -> void:
 	var sim = world.sim
 	if _test_step != 0 or sim.tick() < 10:
 		return
@@ -2431,15 +3104,14 @@ func _run_test_bauradius() -> void:
 			fact = u
 			break
 	if fact == null:
-		print("T --test-bauradius: kein Bauhof auf der Karte — FEHLER")
+		print("T --test-build-area: kein Bauhof auf der Karte — FEHLER")
 		get_tree().quit()
 		return
 	var fo := Vector2i(world.unit_rect(fact).position / ProtoWorld.CELL)
 	var ft: Dictionary = world.types["fact"]
 	var fw: int = int(String(ft["footprint"]).split(" ")[0].length())
 	var fh: int = int(ft["sprite_h"])
-	print("T --test-bauradius: Bauhof %s, Fußabdruck %d×%d, BaseProvider.Range %d Zellen" % [
-			fo, fw, fh, int(ft.get("base_range", 0)) / 1024])
+	print("T --test-build-area: Bauhof %s, Fußabdruck %d×%d" % [fo, fw, fh])
 
 
 	var ohne: Array = []
@@ -2448,21 +3120,18 @@ func _run_test_bauradius() -> void:
 		if t.get("building", false) and not t.get("decoration", false) and not t.get("gives_buildable_area", false):
 			ohne.append(n)
 	ohne.sort()
-	print("T --test-bauradius: keine Baufläche (%d Typen): %s" % [ohne.size(), ", ".join(ohne)])
-	for n in ["fact", "powr", "proc", "tent", "silo", "kenn", "spen", "syrd", "gun", "pbox", "tsla", "sbag", "fenc"]:
-		if not world.types.has(n):
-			continue
-		var t: Dictionary = world.types[n]
-		print("T --test-bauradius:   %-4s Baufläche=%-5s Adjacent=%d Mauer=%s" % [
-				n, str(t.get("gives_buildable_area", false)), int(t.get("adjacent", 2)), str(t.get("wall", false))])
-
-	for n in ["silo", "kenn", "gun", "pbox"]:
-		if world.types.has(n) and world.types[n].get("gives_buildable_area", false):
-			print("T --test-bauradius: %s gibt Baufläche, mods/ra sagt `-GivesBuildableArea` — FEHLER" % n)
+	print("T --test-build-area: keine Baufläche (%d Typen): %s" % [ohne.size(), ", ".join(ohne)])
+	for n in ohne:
+		if not world.types[n].get("wall", false):
+			print("T --test-build-area: %s gibt keine Baufläche, ist aber keine Mauer — FEHLER" % n)
 			fehler += 1
-	for n in ["fact", "powr", "proc"]:
+	for n in ["fact", "powr", "proc", "silo", "tsla", "gun", "pbox", "kenn", "spen", "syrd"]:
 		if world.types.has(n) and not world.types[n].get("gives_buildable_area", false):
-			print("T --test-bauradius: %s gibt keine Baufläche, mods/ra sagt doch — FEHLER" % n)
+			print("T --test-build-area: %s gibt keine Baufläche (Sollwert ja) — FEHLER" % n)
+			fehler += 1
+	for n in ["sbag", "fenc", "brik", "cycl", "barb", "wood"]:
+		if world.types.has(n) and world.types[n].get("gives_buildable_area", false):
+			print("T --test-build-area: %s ist eine Mauer und gibt trotzdem Baufläche — FEHLER" % n)
 			fehler += 1
 
 
@@ -2488,70 +3157,294 @@ func _run_test_bauradius() -> void:
 					maxd = maxi(maxd, _bau_dist(c, fo, fw, fh))
 				line += ("+" if o else ("." if f else "#"))
 			zeilen.append(line)
-		print("T --test-bauradius: %-4s %d von %d freien Zellen erlaubt, größter Abstand zum Bauhof %d Zellen" % [
+		print("T --test-build-area: %-4s %d von %d freien Zellen erlaubt, größter Abstand zum Bauhof %d Zellen" % [
 				probe, ok, frei, maxd])
-		if probe == "sbag":
+		if probe == "silo":
 			karte = zeilen
 	if not karte.is_empty():
-		print("T --test-bauradius: Karte für sbag (+ erlaubt, . frei aber außerhalb, # belegt/Terrain):")
+		print("T --test-build-area: Karte für silo (+ erlaubt, . frei aber außerhalb, # belegt/Terrain):")
 		for line in karte:
 			print("T   " + line)
 
 
-	var radius: int = int(ft.get("base_range", 0)) / 1024
-	var fc := Vector2(fo) + Vector2(fw, fh) / 2.0
-	var mp := Vector2i(-1, -1)
-	var mp_d := 0
-	for r in range(9, radius):
-		for dy in range(-r, r + 1):
-			for dx in range(-r, r + 1):
-				var c := Vector2i(fo.x + dx, fo.y + dy)
-				if mp.x >= 0 or _bau_dist(c, fo, fw, fh) != r:
-					continue
-				if (Vector2(c) + Vector2(0.5, 0.5)).distance_to(fc) > float(radius) - 1.5:
-					continue
-				if _bau_footprint_free("sbag", c):
-					mp = c
-					mp_d = r
-	if mp.x < 0:
-		print("T --test-bauradius: keine freie Mauerprobe im Umkreis gefunden — übersprungen")
+	var tp := _bau_free_ring("tsla", fo, fw, fh, 2)
+	if tp.x < 0 or not world.type_ids.has("tsla"):
+		print("T --test-build-area: keine freie Stelle für die Teslaspule — Schritt 3 übersprungen")
 	else:
-		var mok: bool = _bau_ok("sbag", mp)
-		print("T --test-bauradius: Mauer auf %s — %d Zellen vom Bauhof (Umkreis %d), kein Gebäude in Adjacent-Reichweite: erlaubt=%s (Sollwert true) %s" % [
-				mp, mp_d, radius, mok, "OK" if mok else "FEHLER"])
-		if not mok:
-			fehler += 1
+		world.call("_add_building", "tsla", 0, tp)
 
 
-	var used: Array = []
-	var p1 := _bau_find_spot(fo, fw, fh, used)
-	if p1.x < 0:
-		print("T --test-bauradius: keine freie Probestelle gefunden — Schritt 3 übersprungen")
-	else:
-		for i in range(0, 4):
-			used.append(p1 + Vector2i(i, 0))
-		for i in range(0, 2):
-			for j in range(0, 3):
-				used.append(p1 + Vector2i(2 + i, j))
-		var vor: bool = _bau_ok("silo", p1)
-		world.call("_add_building", "silo", 0, p1 + Vector2i(2, 0))
-		var nach_silo: bool = _bau_ok("silo", p1)
-		print("T --test-bauradius: Probe %s — vor dem Silo bebaubar=%s, mit Silo daneben=%s (Sollwert false/false) %s" % [
-				p1, vor, nach_silo, "OK" if not vor and not nach_silo else "FEHLER"])
-		if vor or nach_silo:
-			fehler += 1
-		var p2 := _bau_find_spot(fo, fw, fh, used)
-		if p2.x < 0:
-			print("T --test-bauradius: keine zweite Probestelle — Gegenprobe übersprungen")
+		var weiter := Vector2i(-1, -1)
+		for d in [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]:
+			var c: Vector2i = tp + d
+			if _bau_footprint_free("tsla", c) and _bau_dist(c, fo, fw, fh) > 2:
+				weiter = c
+				break
+		if weiter.x < 0:
+			print("T --test-build-area: keine zweite Stelle hinter der Spule — übersprungen")
 		else:
-			var vor2: bool = _bau_ok("silo", p2)
-			world.call("_add_building", "powr", 0, p2 + Vector2i(2, 0))
-			var nach_powr: bool = _bau_ok("silo", p2)
-			print("T --test-bauradius: Gegenprobe %s — vor dem Kraftwerk bebaubar=%s, mit Kraftwerk daneben=%s (Sollwert false/true) %s" % [
-					p2, vor2, nach_powr, "OK" if not vor2 and nach_powr else "FEHLER"])
-			if vor2 or not nach_powr:
+			var tok: bool = _bau_ok("tsla", weiter)
+			print("T --test-build-area: Teslaspule auf %s als Anker → zweite Spule auf %s erlaubt=%s (Sollwert true) %s" % [
+					tp, weiter, tok, "OK" if tok else "FEHLER"])
+			if not tok:
 				fehler += 1
-	print("T --test-bauradius: fertig, %d Befund(e) (Sollwert 0)" % fehler)
+	var mp := _bau_free_ring("sbag", fo, fw, fh, 7)
+	if mp.x < 0 or not world.type_ids.has("sbag"):
+		print("T --test-build-area: keine freie Stelle für die Mauer — Gegenprobe übersprungen")
+	else:
+		world.call("_add_building", "sbag", 0, mp)
+		var hinter := Vector2i(-1, -1)
+		for d in [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]:
+			var c2: Vector2i = mp + d
+			if _bau_footprint_free("silo", c2) and _bau_dist(c2, fo, fw, fh) > 4:
+				hinter = c2
+				break
+		if hinter.x >= 0:
+			var sok: bool = _bau_ok("silo", hinter)
+			print("T --test-build-area: Mauer auf %s als Anker → Silo auf %s erlaubt=%s (Sollwert false) %s" % [
+					mp, hinter, sok, "OK" if not sok else "FEHLER"])
+			if sok:
+				fehler += 1
+
+
+	var kette := 0
+	var richtung := Vector2i.ZERO
+	for d in [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]:
+		var frei2 := 0
+		var probe: Vector2i = fo + d
+		for i in 30:
+			if not _bau_footprint_free("silo", probe):
+				break
+			frei2 += 1
+			probe += d
+		if frei2 > kette:
+			kette = frei2
+			richtung = d
+	kette = 0
+	if richtung == Vector2i.ZERO:
+		print("T --test-build-area: keine freie Richtung für die Silo-Kette — Schritt 4 übersprungen")
+	else:
+		var c3: Vector2i = fo + richtung * 2
+		for i in 30:
+			if not _bau_footprint_free("silo", c3) or not _bau_ok("silo", c3):
+				break
+			world.call("_add_building", "silo", 0, c3)
+			kette = _bau_dist(c3, fo, fw, fh)
+			c3 += richtung
+		print("T --test-build-area: Silo-Kette nach %s reicht %d Zellen vom Bauhof weg (früherer Bauhof-Kreis: 16) %s" % [
+				richtung, kette, "OK" if kette > 16 else "FEHLER"])
+		if kette <= 16:
+			fehler += 1
+
+
+	if not _auto_bar_enabled:
+		print("T --test-build-area: Automatik ausgeschaltet — Schritt 5 übersprungen")
+	else:
+		var leer := Vector2i(world.bounds.position) + Vector2i(3, 3)
+		if _bau_dist(leer, fo, fw, fh) < 30:
+			leer = Vector2i(world.bounds.end) - Vector2i(3, 3)
+		await _bau_look_at(fo)
+		var auf1: bool = build_bar.visible
+		print("T --test-build-area: Bauhof im Bild → Leiste offen=%s (Sollwert true) %s" % [
+				auf1, "OK" if auf1 else "FEHLER"])
+		if not auf1:
+			fehler += 1
+		await _bau_look_at(leer)
+		var zu1: bool = not build_bar.visible
+		print("T --test-build-area: Kamera in der Leere (%s), Baufläche im Bild=%s → Leiste zu=%s (Sollwert true) %s" % [
+				leer, world.build_area_in_view(), zu1, "OK" if zu1 else "FEHLER"])
+		if not zu1:
+			fehler += 1
+
+
+		_toggle_build_bar()
+		var auf2: bool = build_bar.visible
+		await get_tree().create_timer(0.8).timeout
+		var bleibt: bool = build_bar.visible
+		print("T --test-build-area: von Hand aufgeklappt=%s, bleibt ohne Kameraschwenk offen=%s (Sollwert true/true) %s" % [
+				auf2, bleibt, "OK" if auf2 and bleibt else "FEHLER"])
+		if not (auf2 and bleibt):
+			fehler += 1
+		await _bau_look_at(fo)
+
+		_toggle_build_bar()
+		await get_tree().create_timer(0.8).timeout
+		var zu2: bool = not build_bar.visible
+		print("T --test-build-area: von Hand zugeklappt bei sichtbarem Bauhof → bleibt zu=%s (Sollwert true) %s" % [
+				zu2, "OK" if zu2 else "FEHLER"])
+		if not zu2:
+			fehler += 1
+
+		await _bau_look_at(leer)
+		await _bau_look_at(fo)
+		var auf3: bool = build_bar.visible
+		print("T --test-build-area: Bauhof nach dem Wegschwenken wieder im Bild → Leiste offen=%s (Sollwert true) %s" % [
+				auf3, "OK" if auf3 else "FEHLER"])
+		if not auf3:
+			fehler += 1
+
+		var pid: int = world.type_ids.get("powr", -1)
+		if pid >= 0:
+			world.queue_build(pid)
+			build_bar.visible = false
+			var q0: PackedInt32Array = sim.queue_state(0, 0)
+			for _t in 120:
+				sim.step()
+			var q1: PackedInt32Array = sim.queue_state(0, 0)
+			var laeuft: bool = q1.size() >= 7 and q0.size() >= 7 and (q1[1] > q0[1] or q1[2] == 1)
+			print("T --test-build-area: Produktion bei zugeklappter Leiste läuft weiter=%s (Fortschritt %d → %d) %s" % [
+					laeuft, q0[1] if q0.size() > 1 else -1, q1[1] if q1.size() > 1 else -1,
+					"OK" if laeuft else "FEHLER"])
+			if not laeuft:
+				fehler += 1
+
+
+	if not Desktop.has_keyboard():
+		print("T --test-build-area: kein Desktop — Schritt 6 übersprungen")
+	else:
+
+
+		var fenster6 := get_window().size
+		get_window().size = Vector2i(1280, 720)
+		for _f in 3:
+			await get_tree().process_frame
+		var pid2: int = world.type_ids.get("powr", -1)
+		build_bar.visible = true
+		build_bar.select_queue(ProtoWorld.Queue.BUILDING)
+		_hover_declined = -1
+		await _bau_look_at(fo)
+		if pid2 >= 0 and build_bar.ready_building() < 0:
+			world.queue_build(pid2)
+			for _t in 2000:
+				sim.step()
+				if build_bar.ready_building() >= 0:
+					break
+		await get_tree().process_frame
+		var fertig: int = build_bar.ready_building()
+		print("T --test-build-area: fertiges Gebäude in der Leiste: %s, Platzierung läuft=%s" % [
+				world.type_names[fertig] if fertig >= 0 else "keins", _confirm_mode == "place"])
+		var gut := _bau_free_ring("powr", fo, fw, fh, 2)
+		var maus := func(p2: Vector2) -> void:
+			var mm := InputEventMouseMotion.new()
+			mm.position = p2
+			mm.global_position = p2
+			Input.parse_input_event(mm)
+			await get_tree().process_frame
+
+
+		var pname: String = world.type_names[fertig] if fertig >= 0 else "powr"
+		var zelle := func(c: Vector2i) -> Vector2:
+			return world.world_to_screen(world.placement_pos_for(pname, c))
+		if fertig < 0 or gut.x < 0:
+			print("T --test-build-area: nichts fertig oder keine freie Zelle — Schritt 6 übersprungen")
+		else:
+
+			await maus.call(zelle.call(gut))
+			var h1: bool = world.placing_type == fertig and world.place_origin == gut and world.placement_ok()
+			print("T --test-build-area: Maus über gültiger Zelle %s → Geist auf %s, baubar=%s (Sollwert %s/true) %s" % [
+					gut, world.place_origin, world.placement_ok(), gut, "OK" if h1 else "FEHLER"])
+			if not h1:
+				fehler += 1
+
+			var weit2 := Vector2i(world.bounds.position) + Vector2i(4, 4)
+			await maus.call(zelle.call(weit2))
+			var h2: bool = not world.placement_ok()
+			print("T --test-build-area: Maus weit außerhalb %s → baubar=%s (Sollwert false) %s" % [
+					weit2, world.placement_ok(), "OK" if h2 else "FEHLER"])
+			if not h2:
+				fehler += 1
+
+
+			_on_right_click_map()
+			await get_tree().process_frame
+			await maus.call(zelle.call(gut))
+			var h3: bool = world.placing_type < 0 and not _hover_ghost and build_bar.ready_building() == fertig
+			print("T --test-build-area: Rechtsklick → Geist weg=%s, Gebäude weiter fertig=%s, bleibt weg=%s (Sollwert true/true/true) %s" % [
+					world.placing_type < 0, build_bar.ready_building() == fertig, not _hover_ghost,
+					"OK" if h3 else "FEHLER"])
+			if not h3:
+				fehler += 1
+
+			_toggle_build_bar()
+			_toggle_build_bar()
+			await get_tree().process_frame
+			await maus.call(zelle.call(gut))
+			var h4: bool = _hover_ghost and world.placing_type == fertig and build_bar.visible
+			print("T --test-build-area: nach dem Umschalten der Leiste → Schwebe-Geist=%s, Leiste offen=%s (Sollwert true/true) %s" % [
+					_hover_ghost, build_bar.visible, "OK" if h4 else "FEHLER"])
+			if not h4:
+				fehler += 1
+
+			await maus.call(build_toggle.get_global_rect().get_center())
+			var h5: bool = not _hover_ghost and world.placing_type < 0
+			print("T --test-build-area: Maus über dem Bauleisten-Knopf → Geist=%s (Sollwert false) %s" % [
+					_hover_ghost, "OK" if h5 else "FEHLER"])
+			if not h5:
+				fehler += 1
+		get_window().size = fenster6
+		await get_tree().process_frame
+
+
+	var pid3: int = world.type_ids.get("powr", -1)
+	var stelle := _bau_free_ring("powr", fo, fw, fh, 2)
+	if pid3 < 0 or stelle.x < 0:
+		print("T --test-build-area: keine freie Stelle für die Einheitprobe — Schritt 7 übersprungen")
+	else:
+		var panzer: ProtoWorld.Unit = world.spawn_unit("2tnk", 0, stelle)
+		var gegner: ProtoWorld.Unit = world.spawn_unit("2tnk", 1, stelle + Vector2i(0, 3))
+		if panzer == null:
+			print("T --test-build-area: kein Panzer setzbar — Schritt 7 übersprungen")
+		else:
+			for _t in 3:
+				sim.step()
+			var eigen_ok: bool = _bau_ok("powr", stelle)
+			print("T --test-build-area: eigener Panzer auf %s → Platzierung erlaubt=%s (Sollwert true) %s" % [
+					stelle, eigen_ok, "OK" if eigen_ok else "FEHLER"])
+			if not eigen_ok:
+				fehler += 1
+			if gegner != null:
+				var feind_ok: bool = _bau_ok("powr", stelle + Vector2i(0, 3))
+				print("T --test-build-area: gegnerischer Panzer auf %s → Platzierung erlaubt=%s (Sollwert false) %s" % [
+						stelle + Vector2i(0, 3), feind_ok, "OK" if not feind_ok else "FEHLER"])
+				if feind_ok:
+					fehler += 1
+
+			if build_bar.ready_building() != pid3:
+				world.queue_build(pid3)
+				for _t in 3000:
+					sim.step()
+					if build_bar.ready_building() == pid3:
+						break
+			if build_bar.ready_building() != pid3:
+				print("T --test-build-area: Kraftwerk wurde nicht fertig — Schritt 7 unvollständig")
+			else:
+				world.begin_placement(pid3)
+
+
+				world.move_placement(world.placement_pos_for("powr", stelle))
+				var gesetzt: bool = world.place_origin == stelle and world.confirm_placement()
+				for _t in 3:
+					sim.step()
+				var vorgemerkt: PackedInt32Array = sim.pending_place(0, 0)
+				print("T --test-build-area: Bestätigt=%s → vorgemerkt=%s" % [gesetzt, vorgemerkt])
+				var ticks := -1
+				for t in 400:
+					sim.step()
+					if sim.pending_place(0, 0).is_empty():
+						ticks = t
+						break
+
+				await get_tree().process_frame
+				await get_tree().process_frame
+				var steht := false
+				for u in world.units:
+					if u.alive and u.player == 0 and u.type == "powr" and Vector2i(world.unit_rect(u).position / ProtoWorld.CELL) == stelle:
+						steht = true
+				print("T --test-build-area: Einheit ausgewichen → Kraftwerk nach %d Ticks auf %s gebaut=%s (Sollwert true) %s" % [
+						ticks, stelle, steht, "OK" if steht else "FEHLER"])
+				if not steht:
+					fehler += 1
+	print("T --test-build-area: fertig, %d Befund(e) (Sollwert 0)" % fehler)
 	get_tree().quit()
 
 
@@ -3457,10 +4350,9 @@ func _run_test_placement_tap() -> void:
 		call_deferred("_run_test_placement_shots")
 		return
 	var td: Dictionary = world.types["weap"]
-	var rows0: PackedStringArray = td["footprint"].split(" ")
 
 
-	var free_pos := (Vector2(free_cell) + Vector2(rows0[0].length(), rows0.size()) / 2.0) * ProtoWorld.CELL
+	var free_pos: Vector2 = world.placement_pos_for("weap", free_cell)
 
 
 	world.begin_placement(type_id)
@@ -3498,7 +4390,7 @@ func _run_test_placement_shots() -> void:
 
 
 		world.begin_placement(type_id)
-		world.move_placement((Vector2(origin) + Vector2(w + 2, 0.5)) * ProtoWorld.CELL)
+		world.move_placement(world.placement_pos_for(t, origin + Vector2i(w + 2, 0)))
 		world.zoom_at(ProtoWorld.MAX_ZOOM / world.zoom, world.get_viewport_rect().size / 2.0)
 		world.center_on((Vector2(origin) + Vector2(w + 1.0, 1.0)) * ProtoWorld.CELL)
 		await get_tree().process_frame
@@ -3574,6 +4466,58 @@ func _tap_o_name(u) -> String:
 	return "—" if u == null else str(u.type)
 
 
+func _tap_o_map(p: Vector2) -> void:
+	_on_tap(p)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+func _tap_o_bar(action: String) -> bool:
+	var b: Button = action_bar.button_for(action)
+	if b == null:
+		return false
+	b.pressed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	return true
+
+
+func _tap_o_beside(p: Vector2) -> void:
+	var ev := InputEventScreenTouch.new()
+	ev.index = 0
+	ev.position = p
+	ev.pressed = true
+	action_bar._gui_input(ev)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+func _tap_o_aim(wp: Vector2) -> Vector2:
+	world.center_on(wp)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	return world.world_to_screen(wp)
+
+
+func _tap_o_wait(cond: Callable, ticks: int) -> bool:
+	var until: int = world.sim.tick() + ticks
+	while world.sim.tick() < until:
+		if cond.call():
+			return true
+		await get_tree().process_frame
+	return bool(cond.call())
+
+
+func _tap_o_free_spot(origin: Vector2i) -> Vector2:
+	var offsets: Array[Vector2i] = [Vector2i(11, 9), Vector2i(12, 11), Vector2i(9, 12),
+			Vector2i(13, 8), Vector2i(8, 13)]
+	for d in offsets:
+		var wp := (Vector2(origin + d) + Vector2(0.5, 0.5)) * ProtoWorld.CELL
+		if world.pick_unit(wp, Dp.px(HIT_RADIUS_DP) / world.zoom) == null:
+			return wp
+	return (Vector2(origin + Vector2i(11, 9)) + Vector2(0.5, 0.5)) * ProtoWorld.CELL
+
+
 func _run_test_tap_orders() -> void:
 	var sim = world.sim
 	var tick: int = sim.tick()
@@ -3587,6 +4531,9 @@ func _run_test_tap_orders() -> void:
 		_tap_o["mate"] = world.spawn_unit("e1", 0, origin + Vector2i(9, 2))
 		_tap_o["bld"] = world.call("_add_building", "powr", 0, origin + Vector2i(6, 6))
 
+		_tap_o["apc"] = world.spawn_unit("apc", 0, origin + Vector2i(3, 1))
+		_tap_o["pax"] = world.spawn_unit("e1", 0, origin + Vector2i(4, 1))
+
 		var foe_cell := origin + Vector2i(0, -9)
 		_tap_o["foe"] = world.call("_add_building", "barr", 1, foe_cell)
 		if _tap_o["foe"] == null:
@@ -3596,118 +4543,186 @@ func _run_test_tap_orders() -> void:
 		_test_tick = tick
 		return
 	if _test_step == 1 and tick >= _test_tick + 20:
-		var cmd = _tap_o.get("cmd")
-		var mate = _tap_o.get("mate")
-		var bld = _tap_o.get("bld")
-		var foe = _tap_o.get("foe")
-		if cmd == null or mate == null or bld == null or foe == null:
-			print("T --test-tap-orders: Aufbau unvollständig (Panzer=%s Kamerad=%s Gebäude=%s Gegner=%s) FEHLER" % [
-					_tap_o_name(cmd), _tap_o_name(mate), _tap_o_name(bld), _tap_o_name(foe)])
-			get_tree().quit()
-			return
-		var fails := 0
+		_test_step = 9
+		_tap_orders_cases()
 
 
-		world.clear_selection()
-		world.center_on(cmd.pos)
-		_on_tap(world.world_to_screen(cmd.pos))
-		var ok1: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
-		fails += 0 if ok1 else 1
-		print("T --test-tap-orders: 1 Tipp ohne Auswahl auf %s → gewählt=%s (%s) %s" % [
-				cmd.type, ok1, _last_gesture, "OK" if ok1 else "FEHLER: keine Auswahl"])
-
-
-		world.select_only(cmd)
-		world.center_on(mate.pos)
-		_on_tap(world.world_to_screen(mate.pos))
-		var keeps2: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
-
-
-		var guard2: bool = keeps2 and cmd.goal_kind == 1
-		fails += 0 if (keeps2 and guard2) else 1
-		print("T --test-tap-orders: 2 Tipp mit Auswahl auf eigene %s → Befehlsart=%d (1=Bewachen), Meldung \"%s\", Auswahl bleibt=%s %s" % [
-				mate.type, cmd.goal_kind, _last_gesture, keeps2,
-				"OK" if keeps2 and guard2 else "FEHLER: Neuauswahl statt Befehl"])
-
-
-		world.select_only(cmd)
-		var bar_before: bool = build_bar.visible
-		world.center_on(bld.pos)
-		_on_tap(world.world_to_screen(bld.pos))
-		var keeps3: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
-		var move3: bool = keeps3 and cmd.goal_kind == 0
-
-		var near3: float = cmd.goal.distance_to(bld.pos) / ProtoWorld.CELL
-		fails += 0 if (keeps3 and move3) else 1
-		print("T --test-tap-orders: 3 Tipp mit Auswahl auf eigenes %s → Befehlsart=%d (0=Bewegen), Ziel %.1f Zellen vom Gebäude, Meldung \"%s\", Auswahl bleibt=%s, Bauleiste %s→%s %s" % [
-				bld.type, cmd.goal_kind, near3, _last_gesture, keeps3, bar_before, build_bar.visible,
-				"OK" if keeps3 and move3 else "FEHLER: Neuauswahl statt Befehl"])
-
-
-		world.select_only(cmd)
-		world.center_on(mate.pos)
-		_on_double_tap(world.world_to_screen(mate.pos))
-		var sel4: bool = world.selection.size() >= 1 and not world.selection.has(cmd) and world.selection[0].type == mate.type
-		fails += 0 if sel4 else 1
-		print("T --test-tap-orders: 4 Doppeltipp auf eigene %s → Auswahl=%d × %s %s" % [
-				mate.type, world.selection.size(),
-				"—" if world.selection.is_empty() else world.selection[0].type,
-				"OK" if sel4 else "FEHLER: keine Neuauswahl"])
-
-
-		world.select_only(cmd)
-		world.center_on(foe.pos)
-		_on_tap(world.world_to_screen(foe.pos))
-		var atk5: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id and cmd.goal_kind == 2
-		fails += 0 if atk5 else 1
-		print("T --test-tap-orders: 5 Tipp auf gegnerisches %s → Befehlsart=%d (2=Angriff), Meldung \"%s\" %s" % [
-				foe.type, cmd.goal_kind, _last_gesture, "OK" if atk5 else "FEHLER: kein Angriff"])
-
-		_tap_o["fails"] = fails
-		_test_step = 2
-		_test_tick = tick
-		return
-
-
-	if (_test_step == 2 or _test_step == 3) and tick >= _test_tick + 4:
-		var foe2 = _tap_o.get("foe")
-		var sp := _tap_slot_point()
-		world.center_on(world.visible_world_rect().get_center() + (foe2.pos - world.screen_to_world(sp)))
-		_test_step += 1
-		_test_tick = tick
-		return
-	if _test_step == 4 and tick >= _test_tick + 4:
-		var foe3 = _tap_o.get("foe")
-		var cmd3 = _tap_o.get("cmd")
-		var sp2 := _tap_slot_point()
-		var under = world.pick_unit(world.screen_to_world(sp2), Dp.px(HIT_RADIUS_DP) / world.zoom)
-		var aligned: bool = under != null and under.id == foe3.id
-
-		world.select_only(cmd3)
-		groups.assign(0)
-		world.clear_selection()
-		world.select_only(cmd3)
-		cmd3.goal_kind = -1
-		_last_gesture = ""
-		var before_sel: int = world.selection.size()
-		for pressed in [true, false]:
-			var ev := InputEventScreenTouch.new()
-			ev.index = 0
-			ev.position = sp2
-			ev.pressed = pressed
-			get_viewport().push_input(ev)
-		groups._press_slot = -1
-		var attacked: bool = cmd3.goal_kind == 2
-		var grouped: bool = world.selection.size() == 1 and world.selection[0].id == cmd3.id
-		var fails2: int = int(_tap_o.get("fails", 0))
-		if not aligned or not attacked or not grouped:
-			fails2 += 1
-		print("T --test-tap-orders: 6 Tipp auf Gruppenknopf 1 über gegnerischem %s bei %s → darunter=%s, Befehlsart=%d (2=Angriff), Meldung \"%s\", Gruppe danach gewählt=%s (vorher %d) %s" % [
-				foe3.type, sp2, _tap_o_name(under), cmd3.goal_kind,
-				_last_gesture if _last_gesture != "" else "kein Befehl", grouped, before_sel,
-				"OK" if aligned and attacked and grouped else "FEHLER"])
-		print("T --test-tap-orders: fertig — %d Fehlschläge" % fails2)
+func _tap_orders_cases() -> void:
+	var cmd = _tap_o.get("cmd")
+	var mate = _tap_o.get("mate")
+	var bld = _tap_o.get("bld")
+	var foe = _tap_o.get("foe")
+	var apc = _tap_o.get("apc")
+	var pax = _tap_o.get("pax")
+	if cmd == null or mate == null or bld == null or foe == null:
+		print("T --test-tap-orders: Aufbau unvollständig (Panzer=%s Kamerad=%s Gebäude=%s Gegner=%s) FEHLER" % [
+				_tap_o_name(cmd), _tap_o_name(mate), _tap_o_name(bld), _tap_o_name(foe)])
 		get_tree().quit()
+		return
+	var fails := 0
+
+
+	world.clear_selection()
+	await _tap_o_map(await _tap_o_aim(cmd.pos))
+	var ok1: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
+	fails += 0 if ok1 else 1
+	print("T --test-tap-orders: 1 Tipp ohne Auswahl auf %s → gewählt=%s (%s) %s" % [
+			cmd.type, ok1, _last_gesture, "OK" if ok1 else "FEHLER: keine Auswahl"])
+
+
+	world.select_only(cmd)
+	cmd.goal_kind = -1
+	await _tap_o_map(await _tap_o_aim(mate.pos))
+	var open2: bool = action_bar.visible
+	var miss2: Array = []
+	for a in ["guard", "force_attack", "move", "info", "cancel"]:
+		if not action_bar.ITEMS.has(a):
+			miss2.append(a)
+	var quiet2: bool = cmd.goal_kind == -1
+	var keeps2: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
+	var ok2: bool = open2 and miss2.is_empty() and quiet2 and keeps2
+	fails += 0 if ok2 else 1
+	print("T --test-tap-orders: 2 Tipp mit Auswahl auf eigene %s → Leiste=%s %s, fehlend %s, Sofortbefehl=%d (−1 = keiner), Auswahl bleibt=%s %s" % [
+			mate.type, open2, str(action_bar.ITEMS), str(miss2), cmd.goal_kind, keeps2,
+			"OK" if ok2 else "FEHLER"])
+
+
+	var hit3: bool = await _tap_o_bar("guard")
+	var ok3: bool = hit3 and cmd.goal_kind == 1 and not action_bar.visible
+	fails += 0 if ok3 else 1
+	print("T --test-tap-orders: 3 Eintrag „Bewachen\" → Befehlsart=%d (1=Bewachen), Leiste zu=%s, Meldung \"%s\" %s" % [
+			cmd.goal_kind, not action_bar.visible, _last_gesture, "OK" if ok3 else "FEHLER"])
+
+
+	world.select_only(cmd)
+	cmd.goal_kind = -1
+	await _tap_o_map(await _tap_o_aim(bld.pos))
+	var items4: bool = action_bar.visible and action_bar.ITEMS.has("move") and not action_bar.ITEMS.has("guard")
+	var list4 := str(action_bar.ITEMS)
+	var hit4: bool = await _tap_o_bar("move")
+	var near4: float = cmd.goal.distance_to(bld.pos) / ProtoWorld.CELL
+	var ok4: bool = items4 and hit4 and cmd.goal_kind == 0 and near4 > 0.5
+	fails += 0 if ok4 else 1
+	print("T --test-tap-orders: 4 Ziel eigenes %s → Leiste %s, Eintrag „Bewegen\" → Befehlsart=%d (0=Bewegen), Ziel %.1f Zellen vom Gebäude %s" % [
+			bld.type, list4, cmd.goal_kind, near4,
+			"OK" if ok4 else "FEHLER"])
+
+
+	world.select_only(cmd)
+	cmd.goal_kind = -1
+	await _tap_o_map(await _tap_o_aim(mate.pos))
+	var was5: bool = action_bar.visible and action_bar.ITEMS.has("guard")
+	await _tap_o_beside(world.world_to_screen(bld.pos))
+	var now5: bool = action_bar.visible and not action_bar.ITEMS.has("guard") and action_bar.ITEMS.has("move")
+	var ok5: bool = was5 and now5 and cmd.goal_kind == -1
+	fails += 0 if ok5 else 1
+	print("T --test-tap-orders: 5 Zielwechsel %s → %s: Leiste erst Einheit=%s, dann Gebäude=%s, Befehl dazwischen=%d (−1 = keiner) %s" % [
+			mate.type, bld.type, was5, now5, cmd.goal_kind, "OK" if ok5 else "FEHLER"])
+
+
+	var void6 := world.world_to_screen(_tap_o_free_spot(_test_origin))
+	await _tap_o_beside(void6)
+	var ok6: bool = not action_bar.visible and cmd.goal_kind == -1
+	fails += 0 if ok6 else 1
+	print("T --test-tap-orders: 6 Tipp ins Leere bei offener Leiste → Leiste zu=%s, Befehlsart=%d (−1 = kein Befehl) %s" % [
+			not action_bar.visible, cmd.goal_kind, "OK" if ok6 else "FEHLER"])
+
+
+	world.select_only(cmd)
+	cmd.goal_kind = -1
+	var spot := _tap_o_free_spot(_test_origin)
+	var p7 := await _tap_o_aim(spot)
+	_on_long_press(p7)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var miss7: Array = []
+	for a in ["move", "attack_move", "force_fire", "stop", "scatter", "clear", "cancel"]:
+		if not action_bar.ITEMS.has(a):
+			miss7.append(a)
+	var items7 := str(action_bar.ITEMS)
+	var hit7: bool = await _tap_o_bar("attack_move")
+	var near7: float = cmd.goal.distance_to(world.screen_to_world(p7)) / ProtoWorld.CELL
+	var ok7: bool = miss7.is_empty() and hit7 and cmd.goal_kind == 1 and near7 < 2.0
+	fails += 0 if ok7 else 1
+	print("T --test-tap-orders: 7 Langdruck auf Boden → Leiste %s, fehlend %s, Eintrag „Angriffszug\" → Befehlsart=%d (1), %.1f Zellen neben der Stelle %s" % [
+			items7, str(miss7), cmd.goal_kind, near7, "OK" if ok7 else "FEHLER"])
+
+
+	if apc != null and pax != null:
+		world.select_only(pax)
+		world.order_enter_transport(apc)
+		var loaded: bool = await _tap_o_wait(func(): return apc.passengers > 0, 900)
+		world.select_only(apc)
+		var drop := (Vector2(_test_origin + Vector2i(9, 8)) + Vector2(0.5, 0.5)) * ProtoWorld.CELL
+		var p8 := await _tap_o_aim(drop)
+		_on_long_press(p8)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var has8: bool = action_bar.ITEMS.has("unload")
+		var hit8: bool = await _tap_o_bar("unload")
+		var queued8: bool = not _unload_ids.is_empty()
+		var done8: bool = await _tap_o_wait(func(): return apc.passengers == 0, 2000)
+		var ok8: bool = loaded and has8 and hit8 and queued8 and done8
+		fails += 0 if ok8 else 1
+		print("T --test-tap-orders: 8 Entladen hier → beladen=%s, Eintrag „Entladen\"=%s, Fahrbefehl gemerkt=%s, ausgestiegen=%s (Rest an Bord %d) %s" % [
+				loaded, has8, queued8, done8, apc.passengers, "OK" if ok8 else "FEHLER"])
+	else:
+		print("T --test-tap-orders: 8 Entladen hier — kein Transporter, übersprungen")
+
+
+	world.select_only(cmd)
+	_on_double_tap(await _tap_o_aim(mate.pos))
+	await get_tree().process_frame
+	var ok9: bool = world.selection.size() >= 1 and not world.selection.has(cmd) and world.selection[0].type == mate.type
+	fails += 0 if ok9 else 1
+	print("T --test-tap-orders: 9 Doppeltipp auf eigene %s → Auswahl=%d × %s %s" % [
+			mate.type, world.selection.size(),
+			"—" if world.selection.is_empty() else world.selection[0].type,
+			"OK" if ok9 else "FEHLER: keine Neuauswahl"])
+
+
+	world.select_only(cmd)
+	cmd.goal_kind = -1
+	await _tap_o_map(await _tap_o_aim(foe.pos))
+	var ok10: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id \
+			and cmd.goal_kind == 2 and not action_bar.visible
+	fails += 0 if ok10 else 1
+	print("T --test-tap-orders: 10 Tipp auf gegnerisches %s → Befehlsart=%d (2=Angriff), Leiste zu=%s, Meldung \"%s\" %s" % [
+			foe.type, cmd.goal_kind, not action_bar.visible, _last_gesture, "OK" if ok10 else "FEHLER"])
+
+
+	for i in 3:
+		var sp := _tap_slot_point()
+		world.center_on(world.visible_world_rect().get_center() + (foe.pos - world.screen_to_world(sp)))
+		await get_tree().process_frame
+		await get_tree().process_frame
+	var sp2 := _tap_slot_point()
+	var under = world.pick_unit(world.screen_to_world(sp2), Dp.px(HIT_RADIUS_DP) / world.zoom)
+	var aligned: bool = under != null and under.id == foe.id
+	world.select_only(cmd)
+	groups.assign(0)
+	world.clear_selection()
+	world.select_only(cmd)
+	cmd.goal_kind = -1
+	_last_gesture = ""
+	var before_sel: int = world.selection.size()
+	for pressed in [true, false]:
+		var ev := InputEventScreenTouch.new()
+		ev.index = 0
+		ev.position = sp2
+		ev.pressed = pressed
+		get_viewport().push_input(ev)
+	groups._press_slot = -1
+	var attacked: bool = cmd.goal_kind == 2
+	var grouped: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
+	var ok11: bool = aligned and attacked and grouped
+	fails += 0 if ok11 else 1
+	print("T --test-tap-orders: 11 Tipp auf Gruppenknopf 1 über gegnerischem %s bei %s → darunter=%s, Befehlsart=%d (2=Angriff), Gruppe danach gewählt=%s (vorher %d) %s" % [
+			foe.type, sp2, _tap_o_name(under), cmd.goal_kind, grouped, before_sel,
+			"OK" if ok11 else "FEHLER"])
+
+	print("T --test-tap-orders: fertig — %d Fehlschläge" % fails)
+	get_tree().quit()
 
 
 func _tap_slot_point() -> Vector2:
@@ -5347,6 +6362,7 @@ var _rotor_air: Array = []
 var _rotor_pads: Array = []
 var _rotor_origin := Vector2i.ZERO
 var _rotor_done := false
+var _rotor_faced := false
 
 const ROTOR_FACINGS := [0, 256, 512, 768]
 const ROTOR_KINDS := ["heli", "hind", "tran"]
@@ -5452,6 +6468,22 @@ func _run_test_rotor() -> void:
 		world.clear_selection()
 		_test_step = 3
 		_test_tick = tick
+	elif _rotor_done and not _rotor_faced and tick >= _test_tick + 20:
+
+
+		_rotor_faced = true
+		var pad_for := {"heli": 0, "hind": 1, "tran": 2, "mig": 3, "yak": 4}
+		var seen := {}
+		for u in _rotor_air:
+			if not u.alive or u.altitude > 0.0 or not pad_for.has(u.type) or seen.has(u.type):
+				continue
+			seen[u.type] = true
+			var pad = _rotor_pads[pad_for[u.type]]
+			var want: int = int(world.types.get(pad.type, {}).get("exit_facing", 0))
+			print("T%d --test-rotor: %s auf %s Richtung %d (Sollwert %d)%s"
+					% [tick, u.type, pad.type, u.facing, want,
+					   "" if u.facing == want else "  FEHLER"])
+		get_tree().quit()
 	elif _test_step == 3 and not _rotor_done:
 		var landed := 0
 		for u in _rotor_air:
@@ -5461,6 +6493,7 @@ func _run_test_rotor() -> void:
 			return
 		print("T%d --test-rotor: %d von 5 Maschinen aufgesetzt" % [tick, landed])
 		_rotor_done = true
+		_test_tick = tick
 		if _screenshot_path != "":
 			world.center_on((Vector2(_rotor_origin) + Vector2(-2.0, 9.5)) * ProtoWorld.CELL)
 			await get_tree().process_frame
@@ -5471,7 +6504,6 @@ func _run_test_rotor() -> void:
 			await get_tree().process_frame
 			get_viewport().get_texture().get_image().save_png(_screenshot_path.get_basename() + "_afld.png")
 			print("Screenshot: ", _screenshot_path.get_basename() + "_luft_*/_pad/_afld.png")
-		get_tree().quit()
 
 
 var _test_turret := false
@@ -7984,11 +9016,12 @@ func _run_test_ui() -> void:
 						print("T: reparieren-abbruch — eigenes Gebäude oder Einheit fehlt")
 				"platzieren":
 
+
 					if world.type_ids.has("gun"):
 						_begin_placement(world.type_ids["gun"])
 						world.move_placement(world.visible_world_rect().get_center())
-						print("T: Reichweite gun=%.0f px, Bauradius fact=%.0f px" % [
-							world.weapon_range_px("gun"), world.base_range_px("fact")])
+						print("T: Reichweite gun=%.0f px, Baufläche im Bild=%s" % [
+							world.weapon_range_px("gun"), world.build_area_in_view()])
 				"superwaffen":
 
 
@@ -8790,7 +9823,8 @@ func _run_test_speed_ui() -> void:
 		print("T: --test-speed-ui: Plus-Knopf im Pausenmenü nicht gefunden")
 		get_tree().quit()
 		return
-	for _n in 2:
+	var taps: int = GameSpeed.TIMESTEPS.size() - 1 - GameSpeed.DEFAULT_INDEX
+	for _n in taps:
 		var pos := plus.global_position + plus.size / 2.0
 		for pressed in [true, false]:
 			var ev := InputEventScreenTouch.new()
@@ -8812,9 +9846,56 @@ func _run_test_speed_ui() -> void:
 	var dt1 := Time.get_ticks_msec() / 1000.0 - t1
 	var dticks1: int = int(world.sim.tick()) - tick1
 	var rate1 := dticks1 / dt1
-	print("T: --test-speed-ui nach 2x Tipp auf Plus Index=%d (Knopf setzte %d) (%d ms) -> %.1f Ticks/s (%.2fs, %d Ticks) - erwartet >= 45 - %s" % [
-		GameSpeed.index(), index_after_taps, GameSpeed.TIMESTEPS[GameSpeed.index()], rate1, dt1, dticks1,
-		"OK" if rate1 >= 45.0 else "FEHLER"])
+
+	var soll := 0.9 * 1000.0 / float(GameSpeed.TIMESTEPS[GameSpeed.index()])
+	print("T: --test-speed-ui nach %dx Tipp auf Plus Index=%d (Knopf setzte %d) (%d ms) -> %.1f Ticks/s (%.2fs, %d Ticks) - erwartet >= %.0f - %s" % [
+		taps, GameSpeed.index(), index_after_taps, GameSpeed.TIMESTEPS[GameSpeed.index()], rate1, dt1, dticks1,
+		soll, "OK" if rate1 >= soll else "FEHLER"])
+	get_tree().quit()
+
+
+func _run_test_ai_start() -> void:
+	while world == null or world.sim == null or world.map_data == null:
+		await get_tree().process_frame
+	var idx := _test_ai_start - 1
+	var spawns: Array = world.map_data.spawns
+	var fehler := 0
+	if idx < 0 or idx >= spawns.size():
+		print("T --test-ai-start: FEHLER — Startpunkt %d gibt es auf %s nicht (%d Startpunkte)" % [
+			_test_ai_start, world.map_data.slug, spawns.size()])
+		print("T --test-ai-start: 1 Befund(e) (Sollwert 0)")
+		get_tree().quit()
+		return
+	var cell: Vector2i = spawns[idx]
+	var ai_player: int = int(ProtoWorld.AI_PLAYER_INDICES[0])
+	var mapped: int = int(world.player_map.get("Multi%d" % idx, -1))
+	print("T --test-ai-start: Startpunkt %d (Zelle %d,%d) → Spieler %d (erwartet KI %d) — %s" % [
+		_test_ai_start, cell.x, cell.y, mapped, ai_player, "OK" if mapped == ai_player else "FEHLER"])
+	fehler += 0 if mapped == ai_player else 1
+
+	var find_at := func(types: Array) -> Vector2i:
+		for u in world.units:
+			if u.alive and u.player == ai_player and u.type in types:
+				return Vector2i(u.pos / ProtoWorld.CELL)
+		return Vector2i(-1, -1)
+	var mcv: Vector2i = find_at.call(["mcv", "fact"])
+	print("T --test-ai-start: Start-Actor der KI auf Zelle %d,%d (erwartet %d,%d) — %s" % [
+		mcv.x, mcv.y, cell.x, cell.y, "OK" if mcv == cell else "FEHLER"])
+	fehler += 0 if mcv == cell else 1
+
+	var fact := Vector2i(-1, -1)
+	for _round in 60:
+		for _t in 10:
+			world.sim.step()
+		await get_tree().process_frame
+		fact = find_at.call(["fact"])
+		if fact.x >= 0:
+			break
+	var nah: bool = fact.x >= 0 and absi(fact.x - cell.x) <= 2 and absi(fact.y - cell.y) <= 2
+	print("T --test-ai-start: KI-Bauhof auf Zelle %d,%d (Startpunkt %d,%d, Abweichung ≤ 2 Zellen) — %s" % [
+		fact.x, fact.y, cell.x, cell.y, "OK" if nah else "FEHLER"])
+	fehler += 0 if nah else 1
+	print("T --test-ai-start: %d Befund(e) (Sollwert 0)" % fehler)
 	get_tree().quit()
 
 
@@ -8908,11 +9989,12 @@ func _run_test_desktop_scroll() -> void:
 		_scroller.probe_on = false
 
 
-	await RenderingServer.frame_post_draw
-	_shot("scroll_vorher")
-	await rand.call(Vector2(vs.x - 2.0, vs.y / 2.0), 40)
-	await RenderingServer.frame_post_draw
-	_shot("scroll_nachher")
+	if _screenshot_path != "":
+		await RenderingServer.frame_post_draw
+		_shot("scroll_vorher")
+		await rand.call(Vector2(vs.x - 2.0, vs.y / 2.0), 40)
+		await RenderingServer.frame_post_draw
+		_shot("scroll_nachher")
 
 
 	await reset.call()
@@ -9044,7 +10126,6 @@ func _run_test_desktop_scroll() -> void:
 		Input.parse_input_event(ev)
 		await get_tree().process_frame
 
-
 	for fall3 in [[KEY_RIGHT, "Pfeil rechts", Vector2(1, 0)], [KEY_UP, "Pfeil hoch", Vector2(0, -1)],
 			[KEY_LEFT, "Pfeil links", Vector2(-1, 0)], [KEY_DOWN, "Pfeil runter", Vector2(0, 1)]]:
 		await reset.call()
@@ -9056,11 +10137,63 @@ func _run_test_desktop_scroll() -> void:
 		fehler += pruefe.call(fall3[1], a0, cam.call(), fall3[2])
 
 
+	var halten := func(code: int, down: bool, shift: bool) -> void:
+		var ev := InputEventKey.new()
+		ev.keycode = code
+		ev.physical_keycode = code
+		ev.pressed = down
+		ev.shift_pressed = shift
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+	var wasd := func(code: int, name2: String, soll: Vector2, shift: bool) -> int:
+		await reset.call()
+		var vor: Vector2 = cam.call()
+		if shift:
+			await halten.call(KEY_SHIFT, true, true)
+		await halten.call(code, true, shift)
+		for _n in 12:
+			await get_tree().process_frame
+		await halten.call(code, false, shift)
+		if shift:
+			await halten.call(KEY_SHIFT, false, false)
+		return pruefe.call(name2, vor, cam.call(), soll)
+
+	var vier: Array = [[KEY_D, Vector2(1, 0), "D"], [KEY_W, Vector2(0, -1), "W"],
+			[KEY_A, Vector2(-1, 0), "A"], [KEY_S, Vector2(0, 1), "S"]]
+	world.select_units([])
+	_end_click_mode()
+	await get_tree().process_frame
+	for fall4 in vier:
+		fehler += await wasd.call(fall4[0], "%s ohne Auswahl" % fall4[2], fall4[1], false)
+	var kein_modus0: bool = _click_mode == "" and _order_mode == "" and _confirm_mode == ""
+	fehler += 0 if kein_modus0 else 1
+	print("T: --test-desktop-scroll WASD ohne Auswahl oeffnet keinen Modus - click_mode='%s' order_mode='%s' - %s" % [
+		_click_mode, _order_mode, "OK" if kein_modus0 else "FEHLER"])
+
+
+	world.select_all_units()
+	await get_tree().process_frame
+	for fall5 in vier:
+		fehler += await wasd.call(fall5[0], "%s mit Auswahl" % fall5[2], fall5[1], false)
+
+	for fall6 in vier:
+		fehler += await wasd.call(fall6[0], "Umschalt+%s mit Auswahl" % fall6[2], fall6[1], true)
+	var kein_modus: bool = _click_mode == "" and _order_mode == "" and _confirm_mode == ""
+	fehler += 0 if kein_modus else 1
+	print("T: --test-desktop-scroll WASD mit Auswahl oeffnet keinen Modus - click_mode='%s' order_mode='%s' confirm_mode='%s' - %s" % [
+		_click_mode, _order_mode, _confirm_mode, "OK" if kein_modus else "FEHLER"])
+	_end_placement("")
+	_end_click_mode()
+	world.select_units([])
+	await get_tree().process_frame
+
+
 	await reset.call()
 	var zeile := LineEdit.new()
 	$UI.add_child(zeile)
 	zeile.grab_focus()
-	await get_tree().process_frame
+	for _n in 10:
+		await get_tree().process_frame
 	a0 = cam.call()
 	await taste.call(KEY_RIGHT, true)
 	for _n in 12:
@@ -9068,8 +10201,8 @@ func _run_test_desktop_scroll() -> void:
 	await taste.call(KEY_RIGHT, false)
 	var chat_ok: bool = cam.call().distance_to(a0) < 1.0
 	fehler += 0 if chat_ok else 1
-	print("T: --test-desktop-scroll Eingabezeile im Fokus - Pfeil rechts bewegt die Karte nicht: %s - %s" % [
-		chat_ok, "OK" if chat_ok else "FEHLER"])
+	print("T: --test-desktop-scroll Eingabezeile im Fokus - Pfeil rechts bewegt die Karte nicht: %s (Weg %.2f px, Richtung=%s) - %s" % [
+		chat_ok, cam.call().distance_to(a0), _scroller.key_direction(), "OK" if chat_ok else "FEHLER"])
 	zeile.queue_free()
 	await get_tree().process_frame
 
@@ -9092,7 +10225,9 @@ func _run_test_desktop_scroll() -> void:
 	var half := get_viewport().get_visible_rect().size / world.zoom / 2.0
 	var area := Rect2(Vector2(world.bounds.position) * ProtoWorld.CELL, Vector2(world.bounds.size) * ProtoWorld.CELL)
 	var soll_ecke := area.position + half
-	world.center_on(soll_ecke + Vector2(40.0, 40.0))
+
+
+	world.center_on(soll_ecke + Vector2(2.0, 2.0))
 	world.end_camera_gesture(Vector2.ZERO)
 	await get_tree().process_frame
 	await rand.call(Vector2(2.0, 2.0), 60)
@@ -9101,6 +10236,65 @@ func _run_test_desktop_scroll() -> void:
 	fehler += 0 if geklemmt else 1
 	print("T: --test-desktop-scroll Kartenrand - Kamera %s, Schranke %s - %s" % [
 		links_oben.round(), soll_ecke.round(), "OK" if geklemmt else "FEHLER"])
+
+
+	_place_test_fact()
+	await get_tree().process_frame
+	var bid: int = world.type_ids.get("powr", -1)
+	if bid < 0:
+		print("T: --test-desktop-scroll Platzierung - kein 'powr' in den Regeln, uebersprungen")
+	else:
+		await reset.call()
+		_begin_placement(bid)
+		world.move_placement(cam.call())
+		await get_tree().process_frame
+		var geist0: Vector2i = world.place_origin
+		var laeuft0: int = world.placing_type
+		a0 = cam.call()
+		await taste.call(KEY_RIGHT, true)
+		for _n in 12:
+			await get_tree().process_frame
+		await taste.call(KEY_RIGHT, false)
+		fehler += pruefe.call("Platzierung: Pfeil rechts", a0, cam.call(), Vector2(1, 0))
+		a0 = cam.call()
+		fehler += await wasd.call(KEY_W, "Platzierung: W", Vector2(0, -1), false)
+		await reset.call()
+		world.move_placement(cam.call())
+		await get_tree().process_frame
+		geist0 = world.place_origin
+		a0 = cam.call()
+		await rand.call(Vector2(vs.x - 2.0, vs.y / 2.0), 20)
+		fehler += pruefe.call("Platzierung: Randscrollen rechts", a0, cam.call(), Vector2(1, 0))
+		a0 = cam.call()
+		for _n in 3:
+			var pg3 := InputEventPanGesture.new()
+			pg3.position = vs / 2.0
+			pg3.delta = Vector2(40.0, 30.0)
+			get_viewport().push_input(pg3)
+			await get_tree().process_frame
+		fehler += pruefe.call("Platzierung: Touchpad-Wisch", a0, cam.call(), Vector2(1, 1))
+		var z1 := world.zoom
+		await rad.call(MOUSE_BUTTON_WHEEL_UP, true, vs / 2.0)
+		await get_tree().process_frame
+		var zoom_ok := world.zoom > z1 + 0.001
+		fehler += 0 if zoom_ok else 1
+		print("T: --test-desktop-scroll Platzierung: Strg+Rad zoomt - %.3f -> %.3f - %s" % [
+			z1, world.zoom, "OK" if zoom_ok else "FEHLER"])
+		var haelt: bool = world.placing_type == laeuft0 and world.place_origin == geist0
+		fehler += 0 if haelt else 1
+		print("T: --test-desktop-scroll Platzierung: Geistbild bleibt auf seiner Zelle %s (vorher %s), placing_type=%d - %s" % [
+			world.place_origin, geist0, world.placing_type, "OK" if haelt else "FEHLER"])
+
+
+		await taste.call(KEY_T, true)
+		await taste.call(KEY_T, false)
+		var gesperrt: bool = _order_mode == "" and world.placing_type == laeuft0
+		fehler += 0 if gesperrt else 1
+		print("T: --test-desktop-scroll Platzierung: T befiehlt nicht - order_mode='%s' placing_type=%d - %s" % [
+			_order_mode, world.placing_type, "OK" if gesperrt else "FEHLER"])
+		world.cancel_placement()
+		_end_placement("")
+		await get_tree().process_frame
 
 	print("T: --test-desktop-scroll Ende: %d Fehler" % fehler)
 	get_tree().quit()
@@ -9146,7 +10340,7 @@ func _run_test_desktop_input() -> void:
 		"keine" if ohne_text.is_empty() else ", ".join(ohne_text)])
 
 
-	for fall in [[KEY_R, "repair", "R"], [KEY_S, "sell", "S"]]:
+	for fall in [[KEY_R, "repair", "R"], [KEY_V, "sell", "V"]]:
 		await taste.call(fall[0])
 		var an: bool = _click_mode == fall[1] and _cmd_buttons[fall[1]].button_pressed
 		await taste.call(fall[0])
@@ -9156,12 +10350,12 @@ func _run_test_desktop_input() -> void:
 
 
 	world.clear_selection()
-	await taste.call(KEY_A)
+	await taste.call(KEY_T)
 	var leer_ok: bool = _order_mode == ""
 	fehler += 0 if leer_ok else 1
-	sagen.call("Taste A ohne Auswahl", leer_ok, " - kein Zielwahl-Modus: %s" % leer_ok)
+	sagen.call("Taste T ohne Auswahl", leer_ok, " - kein Zielwahl-Modus: %s" % leer_ok)
 	var n_all := world.select_all_units()
-	for fall2 in [[KEY_A, "attack_move", "A"], [KEY_D, "guard", "D"]]:
+	for fall2 in [[KEY_T, "attack_move", "T"], [KEY_G, "guard", "G"]]:
 		await taste.call(fall2[0])
 		var gesetzt: bool = _order_mode == fall2[1]
 		await taste.call(KEY_ESCAPE)
@@ -9211,7 +10405,7 @@ func _run_test_desktop_input() -> void:
 	sagen.call("Taste P", p_an and p_aus, " - Pause an %s, wieder aus %s" % [p_an, p_aus])
 
 
-	_place_test_fact()
+	_test_origin = _place_test_fact()
 	for _n in 20:
 		await get_tree().process_frame
 
@@ -9239,22 +10433,230 @@ func _run_test_desktop_input() -> void:
 		", ".join(reiter), build_bar.kind])
 
 
-	world.select_all_units()
 	var vs := get_viewport().get_visible_rect().size
-	var rechts := func(at: Vector2) -> void:
+	var klick := func(btn: int, at: Vector2) -> void:
 		for pressed in [true, false]:
 			var mb := InputEventMouseButton.new()
-			mb.button_index = MOUSE_BUTTON_RIGHT
+			mb.button_index = btn
 			mb.pressed = pressed
 			mb.position = at
 			mb.global_position = at
 			Input.parse_input_event(mb)
 			await get_tree().process_frame
-	await rechts.call(vs * 0.5)
-	var rechts_ok: bool = world.selection.is_empty() and not _menu_panel.visible
-	fehler += 0 if rechts_ok else 1
-	sagen.call("Rechtsklick auf die Karte", rechts_ok, " - Auswahl leer %s, Pausenmenue zu %s" % [
-		world.selection.is_empty(), not _menu_panel.visible])
+			await get_tree().process_frame
+	var rechts := func(at: Vector2) -> void:
+		await klick.call(MOUSE_BUTTON_RIGHT, at)
+	var halten := func(code: int, pressed: bool) -> void:
+		var ev := InputEventKey.new()
+		ev.keycode = code
+		ev.physical_keycode = code
+		ev.pressed = pressed
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+
+
+	var stelle := func(ziel: Vector2) -> Vector2:
+		var frei: Vector2 = vs * 0.5
+		for k in [vs * 0.5, Vector2(vs.x * 0.5, vs.y * 0.35), Vector2(vs.x * 0.35, vs.y * 0.5),
+				Vector2(vs.x * 0.6, vs.y * 0.4)]:
+			if not _over_hud(k):
+				frei = k
+				break
+		world.center_on(ziel + (vs * 0.5 - frei) / world.zoom)
+
+
+		return vs * 0.5 + (ziel - world.visible_world_rect().get_center()) * world.zoom
+
+
+	var dt_ms: int = gestures.double_tap_ms
+	gestures.double_tap_ms = 0
+
+
+	if _menu_panel != null and _menu_panel.visible:
+		_toggle_menu(false)
+	var ui_sichtbar: bool = $UI.visible
+	$UI.visible = false
+	await get_tree().process_frame
+
+	var panzer = world.spawn_unit("2tnk", 0, _test_origin + Vector2i(6, 3))
+	var kamerad = world.spawn_unit("e1", 0, _test_origin + Vector2i(9, 3))
+	var gegner = world.spawn_unit("e1", 1, _test_origin + Vector2i(6, -7))
+	world.sim.set_enemy(0, 1, true)
+	world.sim.set_enemy(1, 0, true)
+	world.sim.reveal(0, _test_origin.x + 6, _test_origin.y - 7, 10)
+	for _n in 20:
+		await get_tree().process_frame
+	if panzer == null or kamerad == null or gegner == null:
+		print("T: --test-desktop-input Maus - Aufbau unvollstaendig, uebersprungen")
+	else:
+
+		world.clear_selection()
+		var p_panzer: Vector2 = stelle.call(panzer.pos)
+		await klick.call(MOUSE_BUTTON_LEFT, p_panzer)
+		var l_a: bool = world.selection.size() == 1 and world.selection[0].id == panzer.id
+		fehler += 0 if l_a else 1
+		sagen.call("Linksklick waehlt", l_a, " - Auswahl %d, Stelle %s (HUD frei %s)" % [
+			world.selection.size(), p_panzer, not _over_hud(p_panzer)])
+
+
+		var leer_pos: Vector2 = (Vector2(_test_origin) + Vector2(14.0, 10.0)) * ProtoWorld.CELL
+		var p_leer: Vector2 = stelle.call(leer_pos)
+		await klick.call(MOUSE_BUTTON_LEFT, p_leer)
+		var l_b: bool = world.selection.is_empty() and not _menu_panel.visible
+		fehler += 0 if l_b else 1
+		sagen.call("Linksklick ins Leere", l_b, " - Auswahl leer %s, Pausenmenue zu %s" % [
+			world.selection.is_empty(), not _menu_panel.visible])
+
+
+		world.select_only(panzer)
+		var p_ziel: Vector2 = stelle.call(leer_pos)
+		await rechts.call(p_ziel)
+		var l_c: bool = world.selection.size() == 1 and panzer.goal_kind == 0 \
+			and panzer.goal.distance_to(leer_pos) < 3.0 * ProtoWorld.CELL
+		fehler += 0 if l_c else 1
+		sagen.call("Rechtsklick bewegt", l_c, " - Befehlsart %d (0=Bewegen), Ziel %.1f Zellen daneben, Auswahl %d" % [
+			panzer.goal_kind, panzer.goal.distance_to(leer_pos) / ProtoWorld.CELL, world.selection.size()])
+
+
+		world.select_only(panzer)
+		var p_gegner: Vector2 = stelle.call(gegner.pos)
+		await rechts.call(p_gegner)
+		var l_d: bool = panzer.goal_kind == 2
+		fehler += 0 if l_d else 1
+		sagen.call("Rechtsklick greift an", l_d, " - Befehlsart %d (2=Angriff)" % panzer.goal_kind)
+
+
+		world.select_only(panzer)
+		var p_kamerad: Vector2 = stelle.call(kamerad.pos)
+		await rechts.call(p_kamerad)
+		var l_e: bool = panzer.goal_kind == 1 and world.selection.size() == 1 \
+			and world.selection[0].id == panzer.id
+		fehler += 0 if l_e else 1
+		sagen.call("Rechtsklick bewacht", l_e, " - Befehlsart %d (1=Bewachen), Auswahl bleibt %s" % [
+			panzer.goal_kind, world.selection.size() == 1 and world.selection[0].id == panzer.id])
+
+
+		var mbf_setzen := func() -> ProtoWorld.Unit:
+			var kandidaten: Array = []
+			for dy in range(-20, 21, 4):
+				for dx in range(-20, 21, 4):
+					if absi(dx) >= 8 or absi(dy) >= 8:
+						kandidaten.append(Vector2i(dx, dy))
+			for off in kandidaten:
+				var m = world.spawn_unit("mcv", 0, _test_origin + off)
+				await get_tree().process_frame
+				if m != null and world.sim.can_deploy(m.id):
+					return m
+				if m != null:
+					world.sim.remove_actor(m.id)
+					await get_tree().process_frame
+			return null
+		var mcv = await mbf_setzen.call()
+		if mcv == null:
+			fehler += 1
+			sagen.call("Linksklick auf gewaehltes MBF klappt aus", false, " - keine freie Stelle gefunden")
+		else:
+			world.select_only(mcv)
+			var facts0: int = _count_type("fact")
+			await klick.call(MOUSE_BUTTON_LEFT, stelle.call(mcv.pos))
+			var t_mcv: int = int(world.sim.tick())
+			for _n in 3000:
+				await get_tree().process_frame
+				if _count_type("fact") > facts0 or int(world.sim.tick()) - t_mcv >= 200:
+					break
+			var l_e2: bool = _count_type("fact") == facts0 + 1
+			fehler += 0 if l_e2 else 1
+			sagen.call("Linksklick auf gewaehltes MBF klappt aus", l_e2, " - Bauhoefe %d -> %d" % [facts0, _count_type("fact")])
+		var mcv2 = await mbf_setzen.call()
+		if mcv2 == null:
+			fehler += 1
+			sagen.call("Rechtsklick auf gewaehltes MBF klappt aus", false, " - keine freie Stelle fuer das zweite MBF gefunden")
+		else:
+			world.select_only(mcv2)
+			var facts1: int = _count_type("fact")
+			await rechts.call(stelle.call(mcv2.pos))
+			var t_mcv2: int = int(world.sim.tick())
+			for _n in 3000:
+				await get_tree().process_frame
+				if _count_type("fact") > facts1 or int(world.sim.tick()) - t_mcv2 >= 200:
+					break
+			var l_e3: bool = _count_type("fact") == facts1 + 1
+			fehler += 0 if l_e3 else 1
+			sagen.call("Rechtsklick auf gewaehltes MBF klappt aus", l_e3, " - Bauhoefe %d -> %d" % [facts1, _count_type("fact")])
+
+
+		world.select_only(panzer)
+		var ziel_a: Vector2 = panzer.pos + Vector2(6.0, 0.0) * ProtoWorld.CELL
+		var ziel_b: Vector2 = panzer.pos - Vector2(6.0, 0.0) * ProtoWorld.CELL
+		var start_x: float = panzer.pos.x
+		await rechts.call(stelle.call(ziel_a))
+		await halten.call(KEY_SHIFT, true)
+		await rechts.call(stelle.call(ziel_b))
+		await halten.call(KEY_SHIFT, false)
+
+
+		var tick0: int = int(world.sim.tick())
+		for _n in 2000:
+			await get_tree().process_frame
+			if absf(panzer.pos.x - start_x) > 0.5 or int(world.sim.tick()) - tick0 >= 150:
+				break
+		var weg: float = panzer.pos.x - start_x
+		var l_f: bool = weg > 0.5 and not world.queue_orders
+		fehler += 0 if l_f else 1
+		sagen.call("Umschalt+Rechtsklick haengt an", l_f, " - Weg %.1f px (>0 = erst zum ersten Ziel), Fahne zurueckgesetzt %s" % [
+			weg, not world.queue_orders])
+
+
+		world.select_only(panzer)
+		panzer.goal_kind = 0
+		var p_frei: Vector2 = stelle.call(kamerad.pos)
+		await halten.call(KEY_CTRL, true)
+		await rechts.call(p_frei)
+		await halten.call(KEY_CTRL, false)
+		var l_g: bool = panzer.goal_kind == 2
+		fehler += 0 if l_g else 1
+		sagen.call("Strg+Rechtsklick zwingt", l_g, " - Befehlsart %d (2=Angriff auf eigene Einheit)" % panzer.goal_kind)
+
+
+		world.clear_selection()
+		await rechts.call(stelle.call(leer_pos))
+		var l_h: bool = world.selection.is_empty() and not _menu_panel.visible and _order_mode == ""
+		fehler += 0 if l_h else 1
+		sagen.call("Rechtsklick ohne Auswahl", l_h, " - nichts passiert: Pausenmenue zu %s, kein Modus %s" % [
+			not _menu_panel.visible, _order_mode == ""])
+
+	gestures.double_tap_ms = dt_ms
+	$UI.visible = ui_sichtbar
+	await get_tree().process_frame
+
+
+	world.select_all_units()
+	await taste.call(KEY_V)
+	var v_an: bool = _click_mode == "sell"
+	await taste.call(KEY_V)
+	await taste.call(KEY_S)
+	var s_leer: bool = _click_mode == "" and _order_mode == "" and _confirm_mode == ""
+	fehler += 0 if (v_an and s_leer) else 1
+	sagen.call("Tasten V / S", v_an and s_leer, " - V oeffnet den Verkauf %s, S oeffnet nichts %s" % [v_an, s_leer])
+
+	var mitte: Vector2 = (Vector2(_test_origin) + Vector2(8.0, 8.0)) * ProtoWorld.CELL
+	var wasd_fehler: Array = []
+	for fall3 in [[KEY_W, Vector2(0.0, -1.0), "W"], [KEY_S, Vector2(0.0, 1.0), "S"],
+			[KEY_A, Vector2(-1.0, 0.0), "A"], [KEY_D, Vector2(1.0, 0.0), "D"]]:
+		world.center_on(mitte)
+		await get_tree().process_frame
+		var vorher3: Vector2 = world.visible_world_rect().get_center()
+		await halten.call(fall3[0], true)
+		for _n in 8:
+			await get_tree().process_frame
+		await halten.call(fall3[0], false)
+		var d3: Vector2 = world.visible_world_rect().get_center() - vorher3
+		if d3.dot(fall3[1]) <= 0.5:
+			wasd_fehler.append("%s (%s)" % [fall3[2], d3])
+	var wasd_ok: bool = wasd_fehler.is_empty() and world.selection.size() > 0 and _click_mode == ""
+	fehler += 0 if wasd_ok else 1
+	sagen.call("W A S D mit voller Auswahl", wasd_ok, " - %d Einheiten gewaehlt, kein Modus offen %s, ohne Wirkung: %s" % [
+		world.selection.size(), _click_mode == "", "keine" if wasd_fehler.is_empty() else ", ".join(wasd_fehler)])
 
 
 	var bar_mitte := build_bar.get_global_rect().get_center()
@@ -11096,9 +12498,9 @@ func _unhandled_input(e: InputEvent) -> void:
 		return
 	if not Desktop.has_keyboard():
 		return
-	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_RIGHT and e.pressed:
-		_on_right_click_map()
-		get_viewport().set_input_as_handled()
+	if e is InputEventMouseButton:
+		if _desktop_mouse_button(e as InputEventMouseButton):
+			get_viewport().set_input_as_handled()
 		return
 	if not (e is InputEventKey) or not e.pressed or e.echo:
 		return
@@ -11123,6 +12525,10 @@ func _unhandled_input(e: InputEvent) -> void:
 			_key_group_time = Time.get_ticks_msec() / 1000.0
 			groups.select(slot)
 		get_viewport().set_input_as_handled()
+		return
+
+
+	if _scroller != null and _scroller.takes_key(e):
 		return
 	var act: Dictionary = Desktop.key_action(e)
 	if act["id"] != "" and _do_key_action(act["id"], act["index"]):
@@ -11162,6 +12568,159 @@ func _clear_selection_toast() -> void:
 	world.clear_selection()
 	_show_selection_info()
 	_toast(tr("toast.selection_cleared"))
+
+
+const DESKTOP_HOLD_MS := 400
+
+var _tap_from_mouse := false
+var _desktop_cmd := false
+var _rmb_down := false
+var _rmb_from := Vector2.ZERO
+var _rmb_time := 0
+var _rmb_consumed := false
+var _radial_mouse := false
+var _radial_sticky := false
+
+
+func _desktop_select_first() -> bool:
+	return Desktop.has_keyboard() and _tap_from_mouse and not _desktop_cmd
+
+
+func _desktop_left_click(p: Vector2, hit: ProtoWorld.Unit) -> void:
+
+
+	if hit != null and hit.alive and hit.player == world.local_player and hit.selected \
+			and world.selection.size() == 1 and world.has_deploy_action(hit.type) \
+			and not Input.is_key_pressed(KEY_SHIFT):
+		_do_deploy_action(world.deploy_action(hit.type))
+		_last_gesture = "Entfalten"
+		return
+	if hit != null and hit.alive and hit.player == world.local_player and world.selectable(hit):
+		var vorher := world.additive_select
+		if Input.is_key_pressed(KEY_SHIFT):
+			world.additive_select = true
+		_select_tapped(hit)
+		world.additive_select = vorher
+		_last_gesture = "Auswahl: %d" % world.selection.size()
+		return
+	if not world.selection.is_empty():
+		world.clear_selection()
+		_show_selection_info()
+	if hit != null:
+		_inspect(hit)
+		_last_gesture = "Infozeile"
+	else:
+		_last_gesture = "Klick ins Leere"
+
+
+func _desktop_right_click(p: Vector2) -> void:
+	if world == null or world.sim == null or _scroll_blocked():
+		return
+	if _sp_panel != null and _sp_panel.expanded():
+		_sp_panel.set_expanded(false)
+		return
+	if _ui_layer_open():
+		_on_right_click_map()
+		return
+	if world.selection.is_empty():
+		return
+	if Input.is_key_pressed(KEY_CTRL) or Input.is_key_pressed(KEY_META):
+		_desktop_force_fire(p)
+		return
+	_desktop_cmd = true
+	world.queue_orders = Input.is_key_pressed(KEY_SHIFT)
+	_on_tap(p)
+	world.queue_orders = false
+	_desktop_cmd = false
+
+
+func _desktop_force_fire(p: Vector2) -> void:
+	var wp := world.screen_to_world(p)
+	var hit := world.pick_unit(wp, Dp.px(HIT_RADIUS_DP) / world.zoom)
+	if hit != null and world.selection_can_force_attack(hit) and world.order_attack(hit, true):
+		_toast(tr("toast.attacking") % [_type_label(hit.type), world.selection.size()])
+		_last_gesture = "Zwangsangriff (%d)" % world.selection.size()
+		return
+	_toast(tr("radial.action.force_fire") if world.order_attack_cell(wp) else tr("toast.force_fire_impossible"))
+	_last_gesture = "Zwangsfeuer"
+
+
+func _desktop_mouse_button(mb: InputEventMouseButton) -> bool:
+	if mb.button_index == MOUSE_BUTTON_MIDDLE:
+		if mb.pressed:
+			_desktop_open_radial(mb.position)
+		elif _radial_mouse:
+			_desktop_close_radial(mb.position, true)
+		return true
+	if mb.button_index == MOUSE_BUTTON_LEFT:
+
+
+		if _radial_sticky and mb.pressed:
+			_desktop_close_radial(mb.position, false)
+			return true
+		return false
+	if mb.button_index != MOUSE_BUTTON_RIGHT:
+		return false
+	if mb.pressed:
+		if _radial_sticky:
+			_desktop_cancel_radial()
+			return true
+		_rmb_down = true
+		_rmb_from = mb.position
+		_rmb_time = Time.get_ticks_msec()
+		_rmb_consumed = false
+		return true
+	if not _rmb_down:
+		return false
+	_rmb_down = false
+	if _radial_mouse:
+		_desktop_close_radial(mb.position, false)
+		return true
+	if _rmb_consumed:
+		return true
+	_desktop_right_click(mb.position)
+	return true
+
+
+func _desktop_mouse_tick() -> void:
+	if _radial_sticky and not radial.visible:
+		_radial_sticky = false
+		gestures.input_blocked = false
+	if not _rmb_down or _rmb_consumed or radial.visible:
+		return
+	if Time.get_ticks_msec() - _rmb_time < DESKTOP_HOLD_MS:
+		return
+	_desktop_open_radial(_rmb_from)
+
+
+func _desktop_open_radial(p: Vector2) -> void:
+	if world == null or world.sim == null or _scroll_blocked() or radial.visible:
+		return
+	if world.placing_type >= 0 or _order_mode != "" or _click_mode != "":
+		return
+	_rmb_from = p
+	_rmb_consumed = true
+	_on_long_press(p)
+	_radial_mouse = radial.visible
+
+
+func _desktop_close_radial(p: Vector2, allow_sticky: bool) -> void:
+	_radial_mouse = false
+	if allow_sticky and radial.visible and p.distance_to(_rmb_from) <= Dp.px(gestures.tap_slop_dp):
+		_radial_sticky = true
+		gestures.input_blocked = true
+		return
+	_radial_sticky = false
+	gestures.input_blocked = false
+	if radial.visible:
+		radial.close(p)
+
+
+func _desktop_cancel_radial() -> void:
+	_radial_sticky = false
+	_radial_mouse = false
+	gestures.input_blocked = false
+	radial.cancel()
 
 
 const KEYS_WHILE_BUSY := ["zoom_in", "zoom_out", "zoom_reset", "base", "last_event", "to_selection", "pause", "music"]
@@ -11219,7 +12778,7 @@ func _do_key_action(id: String, index: int) -> bool:
 
 			_zoom_step(3.0 / maxf(world.zoom, 0.001))
 		"build_bar":
-			build_bar.visible = not build_bar.visible
+			_toggle_build_bar()
 		"tabs":
 			return build_bar.select_tab(index)
 		"pause":
@@ -11328,7 +12887,11 @@ func _process(delta: float) -> void:
 	_update_mission_ui()
 	_update_toasts()
 	_update_info()
+	if Desktop.has_keyboard():
+		_desktop_mouse_tick()
 	_edge_scroll(delta)
+	_step_pending_unload()
+	_tick_auto_build_bar(delta)
 	if _test_sell and world.sim != null:
 		_run_test_sell()
 	if _test_defense and world.sim != null:
@@ -11429,8 +12992,8 @@ func _process(delta: float) -> void:
 		_run_test_c4()
 	if _test_wall and world.sim != null:
 		_run_test_wall()
-	if _test_bauradius and world.sim != null:
-		_run_test_bauradius()
+	if _test_build_area and world.sim != null:
+		_run_test_build_area()
 	if _test_retreat and world.sim != null:
 		_run_test_retreat()
 	if _test_placement_cancel and world.sim != null and _test_step == 0 and world.sim.tick() >= 10:

@@ -467,12 +467,22 @@ enum Notification {
     NOTIFY_BUILDING_CAPTURED,
     NOTIFY_UNIT_STOLEN,
     NOTIFY_UNIT_LOST,
+
+
+    NOTIFY_PLACE_PENDING,
 };
 
 
 constexpr uint32_t NOTIFY_NEVER = 0xFFFFFFFFu;
 
 enum WinState { WIN_UNDEFINED = 0, WIN_WON = 1, WIN_LOST = 2 };
+
+
+struct PendingPlace {
+    int32_t type = -1;
+    CPos origin{0, 0};
+    int32_t ticks = 0;
+};
 
 struct BuildItem {
     int32_t type = 0;
@@ -750,6 +760,9 @@ struct PlayerState {
 
     int32_t handicap = 0;
     SupportPowerState powers[SP_COUNT];
+
+
+    PendingPlace pending[2];
 };
 
 
@@ -1365,6 +1378,17 @@ struct Harvest {
 };
 
 
+constexpr WAngle AIRCRAFT_INITIAL_FACING = 0;
+
+
+enum LandPhase : int32_t {
+    LAND_NONE = 0,
+    LAND_TOUCHDOWN = 1,
+    LAND_APPROACH = 2,
+    LAND_TURN = 3,
+};
+
+
 struct Air {
     enum State { CRUISING = 0, LANDING, LANDED, TAKING_OFF, FALLING };
     int32_t state = CRUISING;
@@ -1828,7 +1852,12 @@ public:
     WVec dock_pos(size_t base) const;
 
 
-    void snap_dock_facing(Actor& a, const Air& air) const;
+    WAngle landing_facing(size_t i, WVec touchdown) const;
+
+
+    WVec approach_point(size_t i, WVec touchdown) const;
+
+    int pad_below(size_t i) const;
 
     void order_land(const int32_t* ids, size_t n, CPos cell);
 
@@ -1966,6 +1995,20 @@ public:
     bool has_prerequisite(int32_t owner, const std::string& token) const;
     bool has_prerequisite(int32_t owner, const std::string& token, int depth) const;
     bool can_place(int32_t owner, int32_t type, CPos origin, std::vector<uint8_t>* cell_ok) const;
+
+
+    bool footprint_clear(int32_t type, CPos origin) const;
+
+    bool cell_clearable(CPos c, int32_t owner) const;
+
+    bool cell_reserved(CPos c, int32_t owner, int32_t self_type, CPos self_origin) const;
+
+    int32_t pending_place_type(int32_t owner, int32_t kind) const;
+    CPos pending_place_origin(int32_t owner, int32_t kind) const;
+    void cancel_pending_place(int32_t owner, int32_t kind);
+
+
+    void buildable_area(int32_t owner, int32_t adjacent, std::vector<uint8_t>& out) const;
     bool place_building(int32_t owner, int32_t type, CPos origin);
     int32_t power_provided(int32_t owner) const;
     int32_t power_drained(int32_t owner) const;
@@ -2297,6 +2340,12 @@ private:
     void notify_blocker(size_t i, int32_t blocker);
     bool is_nudgeable(size_t k) const;
     bool nudge(size_t k, CPos avoid, int depth);
+
+
+    void nudge_footprint(int32_t owner, int32_t type, CPos origin);
+
+    void step_pending_places();
+    bool place_building_now(int32_t owner, int32_t type, CPos origin);
     void set_move(size_t i, CPos goal, int32_t near_enough);
     void step_mobile(size_t i);
     bool step_mobile_part(size_t i, bool carry_only);
@@ -2390,6 +2439,10 @@ private:
     int nearest_base(size_t i) const;
     int32_t park_rank(size_t i) const;
     void release_claim(size_t i);
+
+
+    bool allow_resource_at(int32_t type, CPos c) const;
+    bool can_add_resource(int32_t type, CPos c) const;
 
     int32_t resource_value_at(CPos c) const;
     int64_t field_value(CPos c) const;

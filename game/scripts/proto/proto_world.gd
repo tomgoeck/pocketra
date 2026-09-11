@@ -122,7 +122,10 @@ const NOTIFY_SOUNDS := ["abldgin1", "progres1", "conscmp1", "unitrdy1", "nofunds
 						"satlnch1",
 
 
-						"strucap1", "unitsto", "unitlst1"]
+						"strucap1", "unitsto", "unitlst1",
+
+
+						""]
 
 const ENTER_NONE := 0
 const ENTER_DEMOLISH := 3
@@ -199,6 +202,9 @@ var place_origin := Vector2i.ZERO
 var place_armed := false
 var _place_cells := PackedByteArray()
 var _place_ok := false
+
+
+var _place_area_ok := false
 var _ghost: ImageTexture
 var _ghost_overlay: ImageTexture
 
@@ -347,6 +353,27 @@ func _apply_cmdline_args() -> void:
 		for s in str(args[asl + 1]).split(","):
 			next_ai_slots.append({"faction": "random", "team": 0,
 					"level": next_ai_difficulty, "strategy": s if AI_STRATEGIES.has(s) else "normal"})
+
+
+	var ast := args.find("--ai-starts")
+	if ast >= 0 and ast + 1 < args.size():
+		var nums := str(args[ast + 1]).split(",")
+		while next_ai_slots.size() < nums.size():
+			next_ai_slots.append({"faction": "random", "team": 0,
+					"level": next_ai_difficulty, "strategy": "normal"})
+		for i in nums.size():
+			next_ai_slots[i]["spawn"] = maxi(int(nums[i]), 0) - 1
+
+	var tas := args.find("--test-ai-start")
+	if tas >= 0:
+		var n := 3
+		if tas + 1 < args.size() and str(args[tas + 1]).is_valid_int():
+			n = int(args[tas + 1])
+		next_ai_players = maxi(next_ai_players, 1)
+		while next_ai_slots.size() < next_ai_players:
+			next_ai_slots.append({"faction": "random", "team": 0,
+					"level": next_ai_difficulty, "strategy": "normal"})
+		next_ai_slots[0]["spawn"] = maxi(n, 1) - 1
 
 
 func _ready() -> void:
@@ -1701,13 +1728,22 @@ func _place_players() -> void:
 		var slot: Dictionary = next_ai_slots[i] if i < next_ai_slots.size() else {}
 		var team := int(slot.get("team", 0))
 
-		var k := 0
-		if team > 0 and team == next_player_team:
-			k = _pick_team_spawn(spawns, player_spawn, true)
-		elif next_player_team > 0 or team > 0:
-			k = _pick_team_spawn(spawns, player_spawn, false)
-		else:
-			k = _pick_spawn(spawns, taken, rng)
+
+		var want_spawn := int(slot.get("spawn", -1))
+		var k := -1
+		if want_spawn >= 0:
+			for j in spawns.size():
+				if int(spawn_index.get(spawns[j], -1)) == want_spawn:
+					k = j
+					break
+		if k < 0:
+
+			if team > 0 and team == next_player_team:
+				k = _pick_team_spawn(spawns, player_spawn, true)
+			elif next_player_team > 0 or team > 0:
+				k = _pick_team_spawn(spawns, player_spawn, false)
+			else:
+				k = _pick_spawn(spawns, taken, rng)
 		var idx: int = AI_PLAYER_INDICES[i]
 		var want: String = str(slot.get("faction", next_ai_faction if i == 0 else ("allies" if next_ai_faction == "soviet" else "soviet")))
 		var ai_faction := _resolve_faction(want, rng)
@@ -2479,6 +2515,13 @@ func _cell_of(world_pos: Vector2) -> Vector2i:
 	return Vector2i(world_pos / CELL)
 
 
+var queue_orders := false
+
+
+func _queued() -> int:
+	return 1 if queue_orders else 0
+
+
 func order_move_ids(ids: PackedInt32Array, cell: Vector2i) -> void:
 	if sim != null and ids.size() > 0:
 		issue(NetOrders.make(NetOrders.OP_MOVE, cell.x, cell.y, 0, 0, ids))
@@ -2488,7 +2531,7 @@ func order_attack_move(world_target: Vector2) -> void:
 	if sim == null or selection.is_empty():
 		return
 	var cell := _cell_of(world_target)
-	issue(NetOrders.make(NetOrders.OP_ATTACK_MOVE, cell.x, cell.y, 0, 0, _selection_ids()))
+	issue(NetOrders.make(NetOrders.OP_ATTACK_MOVE, cell.x, cell.y, _queued(), 0, _selection_ids()))
 	_set_goals((Vector2(cell) + Vector2(0.5, 0.5)) * CELL, 1)
 	_voice("attack_move")
 
@@ -2497,7 +2540,7 @@ func order_move(world_target: Vector2) -> void:
 	if sim == null or selection.is_empty():
 		return
 	var cell := _cell_of(world_target)
-	issue(NetOrders.make(NetOrders.OP_MOVE, cell.x, cell.y, 0, 0, _selection_ids()))
+	issue(NetOrders.make(NetOrders.OP_MOVE, cell.x, cell.y, _queued(), 0, _selection_ids()))
 	_set_goals((Vector2(cell) + Vector2(0.5, 0.5)) * CELL)
 	_voice("move")
 
@@ -2560,12 +2603,12 @@ func has_disguiser() -> bool:
 	return false
 
 
-func order_enter_transport(target: Unit) -> bool:
-	if target == null or not target.alive or target.player != local_player or sim == null:
-		return false
-	if not sim.has_method("order_enter_transport") or int(types[target.type].get("cargo_max_weight", 0)) <= 0:
-		return false
+func board_ids(target: Unit) -> PackedInt32Array:
 	var ids := PackedInt32Array()
+	if target == null or not target.alive or target.player != local_player or sim == null:
+		return ids
+	if not sim.has_method("order_enter_transport") or int(types[target.type].get("cargo_max_weight", 0)) <= 0:
+		return ids
 	for u in selection:
 		if u == target or not u.alive:
 			continue
@@ -2574,6 +2617,15 @@ func order_enter_transport(target: Unit) -> bool:
 		if not sim.can_load(target.id, u.id):
 			continue
 		ids.append(u.id)
+	return ids
+
+
+func can_board(target: Unit) -> bool:
+	return not board_ids(target).is_empty()
+
+
+func order_enter_transport(target: Unit) -> bool:
+	var ids := board_ids(target)
 	if ids.is_empty():
 		return false
 	issue(NetOrders.make(NetOrders.OP_ENTER_TRANSPORT, target.id, 0, 0, 0, ids))
@@ -2598,26 +2650,34 @@ func selection_unload_blocked() -> bool:
 	return true
 
 
-func unload_selected() -> bool:
-	if sim == null or not sim.has_method("order_unload"):
-		return false
+func loaded_ids(ready_only: bool = true) -> PackedInt32Array:
 	var ids := PackedInt32Array()
+	if sim == null or not sim.has_method("order_unload"):
+		return ids
 	for u in selection:
 		if u.alive and u.player == local_player and u.passengers > 0:
-			if sim.has_method("can_unload") and not sim.can_unload(u.id):
+			if ready_only and sim.has_method("can_unload") and not sim.can_unload(u.id):
 				continue
 			ids.append(u.id)
-	if ids.is_empty():
+	return ids
+
+
+func unload_ids(ids: PackedInt32Array) -> bool:
+	if sim == null or ids.is_empty() or not sim.has_method("order_unload"):
 		return false
 	issue(NetOrders.make(NetOrders.OP_UNLOAD, 0, 0, 0, 0, ids))
 	_voice("move")
 	return true
 
 
+func unload_selected() -> bool:
+	return unload_ids(loaded_ids())
+
+
 func order_attack(target: Unit, force: bool = false) -> bool:
 	if sim == null or selection.is_empty() or target == null:
 		return false
-	issue(NetOrders.make(NetOrders.OP_ATTACK, target.id, 0, 1 if force else 0, 0, _selection_ids()))
+	issue(NetOrders.make(NetOrders.OP_ATTACK, target.id, _queued(), 1 if force else 0, 0, _selection_ids()))
 	_set_goals(target.pos, 2)
 	_voice("attack")
 	return true
@@ -2698,8 +2758,17 @@ func begin_placement(type_id: int) -> void:
 
 
 func placement_origin_for(world_pos: Vector2) -> Vector2i:
-	var rows: PackedStringArray = types[type_names[placing_type]]["footprint"].split(" ")
-	return Vector2i(floor(world_pos.x / CELL - rows[0].length() / 2.0), floor(world_pos.y / CELL - rows.size() / 2.0))
+	return placement_origin_of(type_names[placing_type], world_pos)
+
+
+func placement_origin_of(type_name: String, world_pos: Vector2) -> Vector2i:
+	var bounds_v: Vector2 = types[type_name].get("bounds", Vector2(CELL, CELL))
+	var p: Vector2 = (world_pos - bounds_v / 2.0) / CELL + Vector2(0.5, 0.5)
+	return Vector2i(floori(p.x), floori(p.y))
+
+
+func placement_pos_for(type_name: String, origin: Vector2i) -> Vector2:
+	return Vector2(origin) * CELL + types[type_name].get("bounds", Vector2(CELL, CELL)) / 2.0
 
 
 func ghost_draw_pos(type_name: String, origin: Vector2i, texture_size: Vector2) -> Vector2:
@@ -2717,6 +2786,83 @@ func move_placement(world_pos: Vector2) -> void:
 	var res: PackedByteArray = sim.can_place(local_player, placing_type, place_origin.x, place_origin.y)
 	_place_ok = res.size() > 0 and res[0] == 1
 	_place_cells = res.slice(1)
+	_place_area_ok = footprint_in_build_area(placing_type, place_origin)
+
+
+const BUILD_AREA_TTL := 0.5
+
+var _area_mask := PackedByteArray()
+var _area_adjacent := -1
+var _area_time := -100.0
+var _area_outline := PackedVector2Array()
+
+
+func build_adjacent(type_id: int) -> int:
+	return int(types[type_names[type_id]].get("adjacent", 2))
+
+
+func build_area_mask(adjacent: int) -> PackedByteArray:
+	if sim == null:
+		return PackedByteArray()
+	var now := Time.get_ticks_msec() / 1000.0
+	if adjacent != _area_adjacent or now - _area_time > BUILD_AREA_TTL:
+		_area_adjacent = adjacent
+		_area_time = now
+		_area_mask = sim.build_area(local_player, adjacent)
+		_area_outline = _build_area_outline(_area_mask)
+	return _area_mask
+
+
+func footprint_in_build_area(type_id: int, origin: Vector2i) -> bool:
+	var t: Dictionary = types[type_names[type_id]]
+	var rows: PackedStringArray = t["footprint"].split(" ")
+	var mask := build_area_mask(build_adjacent(type_id))
+	if mask.size() != map_w * map_h:
+		return false
+	for y in rows.size():
+		for x in rows[0].length():
+			var c := origin + Vector2i(x, y)
+			if c.x >= 0 and c.y >= 0 and c.x < map_w and c.y < map_h and mask[c.y * map_w + c.x] == 1:
+				return true
+	return false
+
+
+func build_area_in_view(adjacent: int = 2) -> bool:
+	var mask := build_area_mask(adjacent)
+	if mask.size() != map_w * map_h:
+		return false
+	var view := visible_world_rect()
+	var x0 := maxi(0, int(floor(view.position.x / CELL)))
+	var y0 := maxi(0, int(floor(view.position.y / CELL)))
+	var x1 := mini(map_w - 1, int(floor(view.end.x / CELL)))
+	var y1 := mini(map_h - 1, int(floor(view.end.y / CELL)))
+	for y in range(y0, y1 + 1):
+		var row := y * map_w
+		for x in range(x0, x1 + 1):
+			if mask[row + x] == 1:
+				return true
+	return false
+
+
+func _build_area_outline(mask: PackedByteArray) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if mask.size() != map_w * map_h:
+		return out
+	for y in map_h:
+		var row := y * map_w
+		for x in map_w:
+			if mask[row + x] != 1:
+				continue
+			var p := Vector2(x, y) * CELL
+			if x == 0 or mask[row + x - 1] != 1:
+				out.append(p); out.append(p + Vector2(0, CELL))
+			if x == map_w - 1 or mask[row + x + 1] != 1:
+				out.append(p + Vector2(CELL, 0)); out.append(p + Vector2(CELL, CELL))
+			if y == 0 or mask[row - map_w + x] != 1:
+				out.append(p); out.append(p + Vector2(CELL, 0))
+			if y == map_h - 1 or mask[row + map_w + x] != 1:
+				out.append(p + Vector2(0, CELL)); out.append(p + Vector2(CELL, CELL))
+	return out
 
 
 func _play_build_sounds() -> void:
@@ -2780,6 +2926,37 @@ func cancel_placement() -> void:
 	placing_type = -1
 
 
+var _pending_ghost: ImageTexture
+var _pending_ghost_type := -1
+
+
+func _draw_pending_place() -> void:
+	if sim == null:
+		return
+	for k in 2:
+		var pp: PackedInt32Array = sim.pending_place(local_player, k)
+		if pp.size() < 3:
+			continue
+		var type_id: int = pp[0]
+		if type_id < 0 or type_id >= type_names.size():
+			continue
+		var origin := Vector2i(pp[1], pp[2])
+		var name: String = type_names[type_id]
+		var t: Dictionary = types[name]
+		if _pending_ghost_type != type_id:
+			_pending_ghost_type = type_id
+			_pending_ghost = _atlas.make_rgba_texture(t.get("body", name), 0)
+		var rows: PackedStringArray = t["footprint"].split(" ")
+		for y in rows.size():
+			for x in rows[0].length():
+				var r := Rect2(Vector2(origin + Vector2i(x, y)) * CELL, Vector2(CELL, CELL))
+				_overlay.draw_rect(r, Color(1.0, 0.85, 0.25, 0.18), true)
+				_overlay.draw_rect(r, Color(1.0, 0.85, 0.25, 0.35), false, 1.0)
+		if _pending_ghost != null:
+			_overlay.draw_texture(_pending_ghost,
+					ghost_draw_pos(name, origin, Vector2(_pending_ghost.get_size())), Color(1, 1, 1, 0.35))
+
+
 func _draw_placement() -> void:
 	if placing_type < 0:
 		return
@@ -2787,9 +2964,17 @@ func _draw_placement() -> void:
 	var rows: PackedStringArray = t["footprint"].split(" ")
 	var w := rows[0].length()
 
+
+	build_area_mask(build_adjacent(placing_type))
+	if not _area_outline.is_empty():
+		_overlay.draw_multiline(_area_outline, Color(1, 1, 1, 0.30), 1.0 / zoom)
+
+
 	for y in rows.size():
 		for x in w:
-			var col := Color(0.2, 1.0, 0.3, 0.4) if _place_ok else Color(1.0, 0.2, 0.2, 0.45)
+			var i := y * w + x
+			var cell_ok: bool = _place_area_ok and (i >= _place_cells.size() or _place_cells[i] == 1)
+			var col := Color(0.2, 1.0, 0.3, 0.4) if cell_ok else Color(1.0, 0.2, 0.2, 0.45)
 			_overlay.draw_rect(Rect2(Vector2(place_origin + Vector2i(x, y)) * CELL, Vector2(CELL, CELL)), col, true)
 			_overlay.draw_rect(Rect2(Vector2(place_origin + Vector2i(x, y)) * CELL, Vector2(CELL, CELL)), Color(1, 1, 1, 0.35), false, 1.0)
 
@@ -2809,12 +2994,6 @@ func _draw_placement() -> void:
 	var lw := 2.0 / zoom
 	if t.get("defense", false):
 		_draw_range_circle(center, weapon_range_px(name), Color(0.95, 0.25, 0.20, 0.5), lw)
-	if t.get("base_provider", false):
-		_draw_range_circle(center, base_range_px(name), Color(1, 1, 1, 0.5), lw)
-	for u in units:
-
-		if u.alive and u.player == local_player and types[u.type].get("base_provider", false):
-			_draw_range_circle(unit_rect(u).get_center(), base_range_px(u.type), Color(1, 1, 1, 0.5), lw)
 
 
 func display_credits() -> int:
@@ -3014,13 +3193,22 @@ func deploy_ready(u: Unit, action: String) -> bool:
 	return false
 
 
-func order_deliver(refinery: Unit) -> bool:
-	if sim == null or refinery == null or refinery.player != local_player or not types[refinery.type].get("refinery", false):
-		return false
+func deliver_ids(refinery: Unit) -> PackedInt32Array:
 	var ids := PackedInt32Array()
+	if sim == null or refinery == null or refinery.player != local_player or not types[refinery.type].get("refinery", false):
+		return ids
 	for u in selection:
 		if u.alive and types[u.type].get("harvester", false):
 			ids.append(u.id)
+	return ids
+
+
+func can_deliver_to(refinery: Unit) -> bool:
+	return not deliver_ids(refinery).is_empty()
+
+
+func order_deliver(refinery: Unit) -> bool:
+	var ids := deliver_ids(refinery)
 	if ids.is_empty():
 		return false
 	if sim.has_method("order_deliver"):
@@ -3035,13 +3223,22 @@ func order_deliver(refinery: Unit) -> bool:
 	return true
 
 
-func order_land_at(pad: Unit) -> bool:
-	if sim == null or pad == null or pad.player != local_player or not sim.has_method("order_resupply"):
-		return false
+func land_ids(pad: Unit) -> PackedInt32Array:
 	var ids := PackedInt32Array()
+	if sim == null or pad == null or pad.player != local_player or not sim.has_method("order_resupply"):
+		return ids
 	for u in selection:
 		if u.alive and types[u.type].get("aircraft", false) and sim.can_resupply_at(u.id, pad.id):
 			ids.append(u.id)
+	return ids
+
+
+func can_land_at(pad: Unit) -> bool:
+	return not land_ids(pad).is_empty()
+
+
+func order_land_at(pad: Unit) -> bool:
+	var ids := land_ids(pad)
 	if ids.is_empty():
 		return false
 	issue(NetOrders.make(NetOrders.OP_RESUPPLY, pad.id, 0, 0, 0, ids))
@@ -3050,10 +3247,14 @@ func order_land_at(pad: Unit) -> bool:
 	return true
 
 
-func order_repair(depot: Unit) -> bool:
-	if sim == null or depot == null or not types[depot.type].get("repairs_units", false):
-		return false
+func can_repair_at(depot: Unit) -> bool:
+	return not repair_ids(depot).is_empty()
+
+
+func repair_ids(depot: Unit) -> PackedInt32Array:
 	var ids := PackedInt32Array()
+	if sim == null or depot == null or not types[depot.type].get("repairs_units", false):
+		return ids
 	for u in selection:
 		if not u.alive or not types[u.type].get("repairable", false):
 			continue
@@ -3063,6 +3264,11 @@ func order_repair(depot: Unit) -> bool:
 		if not depots.is_empty() and not depots.has(depot.type):
 			continue
 		ids.append(u.id)
+	return ids
+
+
+func order_repair(depot: Unit) -> bool:
+	var ids := repair_ids(depot)
 	if ids.is_empty():
 		return false
 	issue(NetOrders.make(NetOrders.OP_REPAIR, depot.id, 0, 0, 0, ids))
@@ -3113,7 +3319,7 @@ func world_difficulties() -> Array:
 func order_guard(target: Unit) -> bool:
 	if sim == null or target == null or selection.is_empty() or not sim.has_method("order_guard"):
 		return false
-	issue(NetOrders.make(NetOrders.OP_GUARD, target.id, 0, 0, 0, _selection_ids()))
+	issue(NetOrders.make(NetOrders.OP_GUARD, target.id, _queued(), 0, 0, _selection_ids()))
 	_set_goals(target.pos, 1)
 	_voice("attack_move")
 	return true
@@ -3211,11 +3417,14 @@ func _process(delta: float) -> void:
 		var steps := 0
 
 
+		var max_steps := GameSpeed.max_catchup()
+
+
 		if net_session != null:
 			_sim_accum = 0.0
 			steps = net_session.pump(delta)
 		else:
-			while _sim_accum >= _tick_len and steps < 8:
+			while _sim_accum >= _tick_len and steps < max_steps:
 				sim.step()
 				_sim_accum -= _tick_len
 				steps += 1
@@ -3293,7 +3502,8 @@ func _process(delta: float) -> void:
 				eva(NOTIFY_SOUNDS[n], 0.0, true)
 				notify_event.emit(n)
 				continue
-			eva(NOTIFY_SOUNDS[n])
+			if NOTIFY_SOUNDS[n] != "":
+				eva(NOTIFY_SOUNDS[n])
 			notify_event.emit(n)
 		var dead_selected := false
 
@@ -3645,6 +3855,7 @@ func _draw_overlay() -> void:
 		var r := Rect2(_box_a, Vector2.ZERO).expand(_box_b).abs()
 		_overlay.draw_rect(r, Color(1, 1, 1, 0.12), true)
 		_overlay.draw_rect(r, Color.WHITE, false, w)
+	_draw_pending_place()
 	_draw_placement()
 
 
@@ -3677,11 +3888,6 @@ func weapon_range_px(type_name: String) -> float:
 	var rng: float = float(rules.weapons.get(wname, {}).get("range", 0)) / 1024.0 * CELL if wname != "" else 0.0
 	_range_px[type_name] = rng
 	return rng
-
-
-func base_range_px(type_name: String) -> float:
-	var t: Dictionary = types.get(type_name, {})
-	return float(t.get("base_range", 0)) / 1024.0 * CELL if t.get("base_provider", false) else 0.0
 
 
 func _draw_range_circle(center: Vector2, radius: float, col: Color, w: float) -> void:
@@ -3814,9 +4020,8 @@ func _draw_building_decorations(w: float) -> void:
 		if ut.get("defense", false):
 			_draw_range_circle(r.get_center(), weapon_range_px(u.type),
 					Color(0.95, 0.25, 0.20, 0.5 if u.selected else 0.25), w)
-		if ut.get("base_provider", false):
-			_draw_range_circle(r.get_center(), base_range_px(u.type),
-					Color(1, 1, 1, 0.35 if u.selected else 0.2), w * 0.8)
+
+
 		if u.repairing:
 			_draw_repair_icon(r.get_center())
 		if u.primary and u.selected:

@@ -5,6 +5,7 @@ extends Control
 const GAME_SCENE := "res://scenes/gesture_proto.tscn"
 
 const LogView := preload("res://scripts/ui/log_view.gd")
+const MapPreview := preload("res://scripts/ui/map_preview.gd")
 
 
 const MultiplayerPage := preload("res://scripts/menu/multiplayer_page.gd")
@@ -1525,6 +1526,10 @@ func _run_test_lobby() -> void:
 	_ai_slots[0]["faction"] = "soviet"
 	_ai_slots[1]["faction"] = "allies"
 	_ai_slots[2]["faction"] = "random"
+
+
+	for slot in _ai_slots:
+		slot["spawn"] = -1
 	_faction = "random"
 	_update_factions()
 	for _i in 4:
@@ -1551,8 +1556,47 @@ func _run_test_lobby() -> void:
 		print("Screenshot: ", _shot_path)
 	_spawn_choice = 0
 	_close_map_overlay()
+
+
+	_show_map_overlay(0)
+	for _i in 6:
+		await get_tree().process_frame
+	var overlay := MapPreview.overlay_host(self).get_node_or_null("MapOverlay")
+	var marker: Button = null
+	if overlay != null:
+		var btns: Array = []
+		_collect_buttons(overlay, btns)
+		for b in btns:
+			if (b as Button).text == "3":
+				marker = b
+	if marker == null:
+		print("T: Lobby — FEHLER: keine Startpunkt-Nummer 3 in der Karte für KI 1")
+	else:
+		print("T: Lobby — Nummer 3 für KI 1 gesperrt: %s (Sollwert false)" % marker.disabled)
+		marker.pressed.emit()
+	for _i in 4:
+		await get_tree().process_frame
+	_close_map_overlay()
+	print("T: Lobby — KI-Startpunkte %s, belegt %s (Spieler %d)" % [
+		[int(_ai_slots[0].get("spawn", -1)), int(_ai_slots[1].get("spawn", -1)),
+			int(_ai_slots[2].get("spawn", -1))], _taken_spawns(-1), _spawn_choice])
+
+
+	_ai_slots[0]["spawn"] = -1
 	print("T: Lobby — Spieler Team %d, KI-Teams %s, Startpunkt %d" % [_player_team,
 		[_ai_slots[0]["team"], _ai_slots[1]["team"], _ai_slots[2]["team"]], _spawn_choice])
+
+
+	_set_ai(_max_ai())
+	await get_tree().process_frame
+	var widest := 0.0
+	for c in _slot_box.get_children():
+		if c is Control:
+			widest = maxf(widest, (c as Control).get_combined_minimum_size().x)
+	print("T: Lobby — breiteste Platzzeile %.0f dp (Hochformat rund 490 dp nutzbar)" % [
+		widest / maxf(Dp.px(1.0), 0.001)])
+	_set_ai(3)
+	await get_tree().process_frame
 	_start_skirmish()
 
 
@@ -2562,108 +2606,53 @@ var _map_scroll: ScrollContainer
 var _slot_box: VBoxContainer
 var _player_team := 0
 var _spawn_choice := -1
-var _map_overlay: Control
 
 
-func _map_json(slug: String) -> Dictionary:
-	var path := "res://assets/maps/%s.json" % slug
-	if not FileAccess.file_exists(path):
-		return {}
-	var d = JSON.parse_string(FileAccess.get_file_as_string(path))
-	return d if d is Dictionary else {}
-
-
-func _show_map_overlay() -> void:
-	if _selected < 0 or _map_overlay != null:
+func _show_map_overlay(target: int = -1) -> void:
+	if _selected < 0:
 		return
 	var m: Dictionary = _skirmish[_selected]
 	var slug := str(m.get("slug", ""))
-	var data := _map_json(slug)
-	var bounds: Array = data.get("bounds", [0, 0, int(data.get("width", 64)), int(data.get("height", 64))])
-	var spawns: Array = data.get("spawns", [])
-	var safe := Dp.safe_rect()
-	_map_overlay = Control.new()
-	_map_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_map_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	_map_overlay.gui_input.connect(func(e):
-		if e is InputEventScreenTouch and e.pressed:
-			_close_map_overlay())
-	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.85)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_map_overlay.add_child(bg)
-	var head := Label.new()
 	var size_arr: Array = m.get("size", [0, 0])
-	head.text = "%s — %d×%d — %d %s" % [m.get("title", slug), int(size_arr[0]), int(size_arr[1]),
+	var head := "%s — %d×%d — %d %s" % [m.get("title", slug), int(size_arr[0]), int(size_arr[1]),
 			int(m.get("players", 0)), tr("lobby.slots")]
-	head.add_theme_font_size_override("font_size", int(Dp.px(16)))
-	head.add_theme_color_override("font_color", HudTheme.GOLD)
-	head.position = Vector2(safe.position.x + Dp.px(16), safe.position.y + Dp.px(8))
-	head.size = Vector2(safe.size.x - Dp.px(32), Dp.px(24))
-	_map_overlay.add_child(head)
-	var hint := Label.new()
-	hint.text = tr("lobby.map_hint")
-	hint.add_theme_font_size_override("font_size", int(Dp.px(12)))
-	hint.add_theme_color_override("font_color", HudTheme.TEXT)
-	hint.position = Vector2(safe.position.x + Dp.px(16), safe.position.y + Dp.px(32))
-	hint.size = Vector2(safe.size.x - Dp.px(32), Dp.px(20))
-	_map_overlay.add_child(hint)
+	var hint := tr("lobby.map_hint") if target < 0 \
+			else tr("lobby.map_hint_ai") % (tr("lobby.ai") % (target + 1))
+	var mine := _spawn_of(target)
+	MapPreview.open_overlay(self, slug, head, hint, _taken_spawns(target), mine,
+			func(idx): _set_spawn(target, -1 if idx == mine else idx))
 
-	var area := Rect2(safe.position + Vector2(Dp.px(16), Dp.px(58)),
-			safe.size - Vector2(Dp.px(32), Dp.px(58 + 60)))
-	var tex: Texture2D = _preview.texture
-	var ar := 1.0
-	if tex != null and tex.get_height() > 0:
-		ar = float(tex.get_width()) / float(tex.get_height())
-	var draw_size := Vector2(area.size.y * ar, area.size.y)
-	if draw_size.x > area.size.x:
-		draw_size = Vector2(area.size.x, area.size.x / ar)
-	var draw_pos := area.position + (area.size - draw_size) / 2.0
-	var pic := TextureRect.new()
-	pic.texture = tex
-	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	pic.stretch_mode = TextureRect.STRETCH_SCALE
-	pic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pic.position = draw_pos
-	pic.size = draw_size
-	_map_overlay.add_child(pic)
 
-	var bx := float(bounds[0])
-	var by := float(bounds[1])
-	var bw := maxf(float(bounds[2]), 1.0)
-	var bh := maxf(float(bounds[3]), 1.0)
-	for i in spawns.size():
-		var sp: Array = spawns[i]
-		var rel := Vector2((float(sp[0]) - bx) / bw, (float(sp[1]) - by) / bh)
-		var b := Button.new()
-		b.text = str(i + 1)
-		b.custom_minimum_size = Vector2(Dp.px(44), Dp.px(44))
-		b.size = b.custom_minimum_size
-		HudTheme.style_button(b, 14.0)
-		if i == _spawn_choice:
-			b.add_theme_color_override("font_color", HudTheme.GOLD)
-		b.position = draw_pos + rel * draw_size - b.size / 2.0
-		var idx := i
-		b.pressed.connect(func():
-			Sfx.click(self)
-			_spawn_choice = -1 if _spawn_choice == idx else idx
-			_close_map_overlay()
-			_update_factions())
-		_map_overlay.add_child(b)
-	var back := _button(tr("ui.back"), func(): _close_map_overlay(), 140, 44)
-	back.position = Vector2(safe.position.x + (safe.size.x - Dp.px(140)) / 2.0,
-			safe.position.y + safe.size.y - Dp.px(52))
-	back.size = Vector2(Dp.px(140), Dp.px(44))
-	_map_overlay.add_child(back)
-	add_child(_map_overlay)
+func _taken_spawns(target: int) -> Dictionary:
+	var out := {}
+	if target != -1 and _spawn_choice >= 0:
+		out[_spawn_choice] = 0
+	for i in _ai_players:
+		if i == target or i >= _ai_slots.size():
+			continue
+		var sp := int(_ai_slots[i].get("spawn", -1))
+		if sp >= 0:
+			out[sp] = i + 1
+	return out
+
+
+func _spawn_of(target: int) -> int:
+	if target < 0:
+		return _spawn_choice
+	return int(_ai_slots[target].get("spawn", -1)) if target < _ai_slots.size() else -1
+
+
+func _set_spawn(target: int, idx: int) -> void:
+	if target < 0:
+		_spawn_choice = idx
+	elif target < _ai_slots.size():
+		_ai_slots[target]["spawn"] = idx
+	_update_factions()
 
 
 func _close_map_overlay() -> void:
-	if _map_overlay != null:
-		_map_overlay.queue_free()
-		_map_overlay = null
+	MapPreview.close_overlay(self)
+
 
 var _ai_slots: Array = []
 
@@ -2678,6 +2667,9 @@ func _slot_defaults() -> void:
 	for slot in _ai_slots:
 		if slot is Dictionary and not slot.has("strategy"):
 			slot["strategy"] = "normal"
+
+		if slot is Dictionary and not slot.has("spawn"):
+			slot["spawn"] = -1
 
 
 func _rebuild_slots() -> void:
@@ -2725,26 +2717,40 @@ func _rebuild_slots() -> void:
 
 		r.add_child(_button(_faction_name(str(slot.get("faction", "random"))), func():
 			_ai_slots[idx]["faction"] = _next_faction_value(str(_ai_slots[idx].get("faction", "random")))
-			_update_factions(), 96, 34))
+			_update_factions(), 92, 34))
 		r.add_child(_button(_team_name(int(slot.get("team", 0))), func():
 			_ai_slots[idx]["team"] = (int(_ai_slots[idx].get("team", 0)) + 1) % 5
 			_update_factions(), 76, 34))
 		r.add_child(_button(tr(AI_DIFFICULTY_KEYS.get(str(slot.get("level", "normal")), "menu.skirmish.ai_normal")), func():
 			var d: Array = ProtoWorld.AI_DIFFICULTIES
 			_ai_slots[idx]["level"] = d[(d.find(str(_ai_slots[idx].get("level", "normal"))) + 1) % d.size()]
-			_update_factions(), 96, 34))
+			_update_factions(), 92, 34))
 
 
 		r.add_child(_button(tr(AI_STRATEGY_KEYS.get(str(slot.get("strategy", "normal")), "menu.skirmish.strat_normal")), func():
 			var s: Array = ProtoWorld.AI_STRATEGIES
 			_ai_slots[idx]["strategy"] = s[(s.find(str(_ai_slots[idx].get("strategy", "normal"))) + 1) % s.size()]
-			_update_factions(), 96, 34))
+			_update_factions(), 92, 34))
+
+
+		var sp := int(slot.get("spawn", -1))
+		var sp_btn := _button(tr("lobby.spawn_short") % (str(sp + 1) if sp >= 0 else "?"), func():
+			_show_map_overlay(idx), 46, 34)
+		sp_btn.tooltip_text = tr("lobby.spawn_ai_tip")
+		if sp >= 0:
+			sp_btn.add_theme_color_override("font_color", HudTheme.GOLD)
+		r.add_child(sp_btn)
 		_slot_box.add_child(r)
 
 
 func _on_map_selected(i: int) -> void:
 	if i != _selected:
+
+
 		_spawn_choice = -1
+		for slot in _ai_slots:
+			if slot is Dictionary:
+				slot["spawn"] = -1
 	_selected = i
 	for k in _map_buttons.size():
 		_map_buttons[k].button_pressed = k == i

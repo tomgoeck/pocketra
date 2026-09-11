@@ -401,6 +401,9 @@ void World::step_production() {
 
                     actors_[idx].pos = WVec{p.pos.x + pt.exit_ox, p.pos.y + pt.exit_oy};
                     prev_pos_[size_t(idx)] = actors_[idx].pos;
+
+
+                    prev_facing_[size_t(idx)] = actors_[idx].facing;
                 }
 
 
@@ -414,6 +417,52 @@ void World::step_production() {
     }
 }
 
+
+bool World::cell_clearable(CPos c, int32_t owner) const {
+    if (!map_.in_bounds(c)) return false;
+    const int idx = map_.index(c);
+    bool any = false;
+    for (int s = 0; s < CELL_SLOTS; ++s) {
+        const int32_t o = slot_at(idx, s);
+        if (o < 0) continue;
+        const Actor& a = actors_[size_t(o)];
+        if (!a.alive) continue;
+        any = true;
+        const UnitType& at = types_[a.type];
+        if (!allied(a.owner, owner)) return false;
+        if (at.building || at.wall || at.husk || at.speed <= 0) return false;
+    }
+    return any;
+}
+
+
+bool World::footprint_clear(int32_t type, CPos origin) const {
+    const UnitType& t = types_[size_t(type)];
+    for (int y = 0; y < t.foot_h; ++y)
+        for (int x = 0; x < t.foot_w; ++x) {
+            const CPos c{origin.x + x, origin.y + y};
+            const bool blocks = t.build_block.size() > size_t(y * t.foot_w + x)
+                    ? t.build_block[size_t(y * t.foot_w + x)] != 0
+                    : t.footprint[size_t(y * t.foot_w + x)] != 0;
+            if (blocks && !cell_empty(c)) return false;
+        }
+    return true;
+}
+
+
+bool World::cell_reserved(CPos c, int32_t owner, int32_t self_type, CPos self_origin) const {
+    for (int p = 0; p < MAX_PLAYERS; ++p) {
+        for (int k = 0; k < 2; ++k) {
+            const PendingPlace& pp = players_[size_t(p)].pending[k];
+            if (pp.type < 0) continue;
+            if (p == owner && pp.type == self_type && pp.origin == self_origin) continue;
+            const UnitType& t = types_[size_t(pp.type)];
+            if (c.x >= pp.origin.x && c.x < pp.origin.x + t.foot_w &&
+                c.y >= pp.origin.y && c.y < pp.origin.y + t.foot_h) return true;
+        }
+    }
+    return false;
+}
 
 bool World::can_place(int32_t owner, int32_t type, CPos origin, std::vector<uint8_t>* cell_ok) const {
     const UnitType& t = types_[type];
@@ -430,8 +479,12 @@ bool World::can_place(int32_t owner, int32_t type, CPos origin, std::vector<uint
 
             if (ok && blocks) {
                 const uint32_t mask = t.terrain_mask != 0 ? t.terrain_mask : ((1u << TER_CLEAR) | (1u << TER_ROAD));
-                ok = map_.passable(c, building_move_class(t)) && cell_empty(c) && bib_owner_[map_.index(c)] == -1 &&
-                     res_density_[map_.index(c)] == 0 && ((mask >> map_.base_terrain(c)) & 1u) != 0;
+
+
+                ok = map_.passable(c, building_move_class(t)) && (cell_empty(c) || cell_clearable(c, owner)) &&
+                     bib_owner_[map_.index(c)] == -1 &&
+                     res_density_[map_.index(c)] == 0 && ((mask >> map_.base_terrain(c)) & 1u) != 0 &&
+                     !cell_reserved(c, owner, type, origin);
             }
             if (!ok) all_ok = false;
             if (cell_ok) (*cell_ok)[size_t(y * t.foot_w + x)] = ok ? 1 : 0;
@@ -439,30 +492,32 @@ bool World::can_place(int32_t owner, int32_t type, CPos origin, std::vector<uint
     }
     if (!all_ok) return false;
 
-    bool adjacent = false, in_base = false, any_provider = false;
-    for (const Actor& a : actors_) {
 
+    for (const Actor& a : actors_) {
         if (!a.alive || a.owner != owner || !types_[a.type].building || !types_[a.type].gives_buildable_area) continue;
         const UnitType& bt = types_[a.type];
 
+
         const int dx = std::max({a.origin.x - (origin.x + t.foot_w), origin.x - (a.origin.x + bt.foot_w), 0});
         const int dy = std::max({a.origin.y - (origin.y + t.foot_h), origin.y - (a.origin.y + bt.foot_h), 0});
-        if (std::max(dx, dy) < t.adjacent) adjacent = true;
-        if (bt.base_provider) {
-            any_provider = true;
-
-
-            const WVec center{origin.x * CELL + t.foot_w * CELL / 2, origin.y * CELL + t.foot_h * CELL / 2};
-            if (length(center - a.pos) <= bt.base_range) in_base = true;
-        }
+        if (std::max(dx, dy) < t.adjacent) return true;
     }
+    return false;
+}
 
 
-    if (t.wall && in_base) adjacent = true;
-
-
-    if (t.requires_base_provider && any_provider && !in_base) return false;
-    return adjacent;
+void World::buildable_area(int32_t owner, int32_t adjacent, std::vector<uint8_t>& out) const {
+    out.assign(size_t(map_.width()) * size_t(map_.height()), 0);
+    for (const Actor& a : actors_) {
+        if (!a.alive || a.owner != owner || !types_[a.type].building || !types_[a.type].gives_buildable_area) continue;
+        const UnitType& bt = types_[a.type];
+        const int x0 = std::max(0, a.origin.x - adjacent);
+        const int y0 = std::max(0, a.origin.y - adjacent);
+        const int x1 = std::min(map_.width() - 1, a.origin.x + bt.foot_w - 1 + adjacent);
+        const int y1 = std::min(map_.height() - 1, a.origin.y + bt.foot_h - 1 + adjacent);
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x) out[size_t(map_.index({x, y}))] = 1;
+    }
 }
 
 bool World::place_building(int32_t owner, int32_t type, CPos origin) {
@@ -473,6 +528,25 @@ bool World::place_building(int32_t owner, int32_t type, CPos origin) {
         notify(owner, NOTIFY_CANNOT_PLACE);
         return false;
     }
+
+
+    const int32_t kind = types_[size_t(type)].queue_kind == QUEUE_DEFENSE ? 1 : 0;
+    if (!footprint_clear(type, origin)) {
+        PendingPlace& pp = players_[size_t(owner)].pending[kind];
+        pp.type = type;
+        pp.origin = origin;
+        pp.ticks = 0;
+        nudge_footprint(owner, type, origin);
+        notify(owner, NOTIFY_PLACE_PENDING);
+        return true;
+    }
+    players_[size_t(owner)].pending[kind] = PendingPlace{};
+    return place_building_now(owner, type, origin);
+}
+
+
+bool World::place_building_now(int32_t owner, int32_t type, CPos origin) {
+    std::vector<BuildItem>& q = players_[owner].queues[types_[type].queue_kind == QUEUE_DEFENSE ? QUEUE_DEFENSE : QUEUE_BUILDING];
 
     const int32_t buildables_before = buildable_total(owner);
     const int32_t id = spawn_building(type, owner, origin);
@@ -1311,5 +1385,65 @@ int64_t World::storage_room(int32_t owner) const {
     if (owner < 0 || owner >= MAX_PLAYERS || !has_storage_) return INT64_MAX;
     return std::max<int64_t>(0, storage_capacity(owner) - resources_[owner]);
 }
+
+
+void World::nudge_footprint(int32_t owner, int32_t type, CPos origin) {
+    const UnitType& t = types_[size_t(type)];
+    const CPos mid{origin.x + t.foot_w / 2, origin.y + t.foot_h / 2};
+    for (int y = 0; y < t.foot_h; ++y) {
+        for (int x = 0; x < t.foot_w; ++x) {
+            const CPos c{origin.x + x, origin.y + y};
+            if (!map_.in_bounds(c)) continue;
+            const int idx = map_.index(c);
+            for (int sl = 0; sl < CELL_SLOTS; ++sl) {
+                const int32_t o = slot_at(idx, sl);
+                if (o < 0 || !actors_[size_t(o)].alive) continue;
+                if (!allied(actors_[size_t(o)].owner, owner)) continue;
+                if (types_[actors_[size_t(o)].type].building) continue;
+
+
+                nudge(size_t(o), mid, 4);
+            }
+        }
+    }
+}
+
+
+void World::step_pending_places() {
+    for (int p = 0; p < MAX_PLAYERS; ++p) {
+        for (int k = 0; k < 2; ++k) {
+            PendingPlace& pp = players_[size_t(p)].pending[k];
+            if (pp.type < 0) continue;
+            std::vector<BuildItem>& q = players_[size_t(p)].queues[k == 1 ? QUEUE_DEFENSE : QUEUE_BUILDING];
+
+            if (q.empty() || !q.front().done || q.front().type != pp.type) { pp = PendingPlace{}; continue; }
+            ++pp.ticks;
+            if (footprint_clear(pp.type, pp.origin) && can_place(p, pp.type, pp.origin, nullptr)) {
+                const int32_t type = pp.type;
+                const CPos origin = pp.origin;
+                pp = PendingPlace{};
+                place_building_now(p, type, origin);
+                continue;
+            }
+            if (pp.ticks % 25 == 0) nudge_footprint(p, pp.type, pp.origin);
+        }
+    }
+}
+
+int32_t World::pending_place_type(int32_t owner, int32_t kind) const {
+    if (owner < 0 || owner >= MAX_PLAYERS || kind < 0 || kind > 1) return -1;
+    return players_[size_t(owner)].pending[kind].type;
+}
+
+CPos World::pending_place_origin(int32_t owner, int32_t kind) const {
+    if (owner < 0 || owner >= MAX_PLAYERS || kind < 0 || kind > 1) return CPos{0, 0};
+    return players_[size_t(owner)].pending[kind].origin;
+}
+
+void World::cancel_pending_place(int32_t owner, int32_t kind) {
+    if (owner < 0 || owner >= MAX_PLAYERS || kind < 0 || kind > 1) return;
+    players_[size_t(owner)].pending[kind] = PendingPlace{};
+}
+
 
 }
