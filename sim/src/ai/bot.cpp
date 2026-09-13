@@ -660,6 +660,7 @@ void World::bot_tick(int32_t owner) {
 
     bot_repair(owner);
     bot_repair_units(owner);
+    bot_saboteurs(owner);
     bot_base_builder(owner);
     bot_unit_builder(owner);
     bot_harvesters(owner);
@@ -895,6 +896,72 @@ void World::bot_repair_units(int32_t owner) {
     if (worst >= actors_.size()) return;
     const int32_t id = actors_[worst].id;
     order_repair(&id, 1, actors_[worst_depot].id);
+}
+
+
+constexpr int32_t SABOTEUR_INTERVAL = 375;
+constexpr int32_t SABOTEUR_TARGET_OPTIONS = 10;
+
+void World::bot_saboteurs(int32_t owner) {
+    BotState& b = players_[owner].bot;
+    if (--b.saboteur_ticks > 0) return;
+    b.saboteur_ticks = SABOTEUR_INTERVAL;
+    for (size_t i = 0; i < actors_.size(); ++i) {
+        const Actor& a = actors_[i];
+        if (!a.alive || a.owner != owner) continue;
+        const UnitType& t = types_[a.type];
+        if (t.building || t.aircraft || t.husk || t.harvester) continue;
+
+        if (!t.captures && t.demolition_delay < 0 && t.infiltrates == 0) continue;
+        if (a.transport >= 0 || a.enter_target >= 0 || a.enter_kind != ENTER_NONE) continue;
+
+        std::vector<uint8_t> reach;
+        bot_land_reach(mobiles_[i].cell, reach);
+
+        struct Cand { int32_t id; int64_t value; int64_t dist; };
+        std::vector<Cand> cands;
+        for (size_t k = 0; k < actors_.size(); ++k) {
+            const Actor& e = actors_[k];
+            if (!e.alive || e.owner == owner) continue;
+            const UnitType& et = types_[e.type];
+            if (!et.building || et.husk) continue;
+            if (!actor_visible_to(owner, k)) continue;
+            const int32_t kind = enter_kind_for(i, k);
+            if (kind == ENTER_NONE || kind == ENTER_REPAIR || kind == ENTER_REPAIR_BRIDGE) continue;
+
+            bool can_walk = false;
+            for (int y = -1; y <= et.foot_h && !can_walk; ++y) {
+                for (int x = -1; x <= et.foot_w; ++x) {
+                    const CPos c{e.origin.x + x, e.origin.y + y};
+                    if (!map_.in_bounds(c)) continue;
+                    if (reach[size_t(map_.index(c))]) { can_walk = true; break; }
+                }
+            }
+            if (!can_walk) continue;
+            const int64_t value = et.sell_value >= 0 ? et.sell_value : et.cost;
+            cands.push_back({e.id, value, length_sq(e.pos - a.pos)});
+        }
+        if (cands.empty()) continue;
+
+
+        std::sort(cands.begin(), cands.end(), [](const Cand& x, const Cand& y) {
+            if (x.value != y.value) return x.value > y.value;
+            return x.id < y.id;
+        });
+        if (cands.size() > size_t(SABOTEUR_TARGET_OPTIONS)) cands.resize(size_t(SABOTEUR_TARGET_OPTIONS));
+        const Cand* best = &cands[0];
+        for (const Cand& c : cands) if (c.dist < best->dist) best = &c;
+        const int32_t id = a.id;
+        order_enter(&id, 1, best->id);
+
+
+        for (BotSquad& sq : b.squads)
+            sq.units.erase(std::remove(sq.units.begin(), sq.units.end(), id), sq.units.end());
+        b.idle_base_units.erase(std::remove(b.idle_base_units.begin(), b.idle_base_units.end(), id),
+                                b.idle_base_units.end());
+        if (std::find(b.active_units.begin(), b.active_units.end(), id) == b.active_units.end())
+            b.active_units.push_back(id);
+    }
 }
 
 

@@ -1100,6 +1100,75 @@ static UtilityWorld build_utility_world(World& w, int size = 64) {
 }
 
 
+static void test_bot_saboteurs() {
+    World w;
+    UtilityWorld t = build_utility_world(w, 64);
+
+    UnitType tanya;
+    tanya.speed = 56; tanya.turn_rate = 1024; tanya.infantry = true; tanya.locomotor = LOCO_FOOT;
+    tanya.hp = 10000; tanya.demolition_delay = 45; tanya.cost = 1800;
+    tanya.target_types = TT_GROUND_ACTOR | TT_INFANTRY;
+    const int t_tanya = w.define_type(tanya);
+
+    UnitType eng;
+    eng.speed = 56; eng.turn_rate = 1024; eng.infantry = true; eng.locomotor = LOCO_FOOT;
+    eng.hp = 5000; eng.captures = true; eng.capture_delay = 20; eng.cost = 500;
+    eng.target_types = TT_GROUND_ACTOR | TT_INFANTRY;
+    const int t_eng = w.define_type(eng);
+
+
+    UnitType cheap;
+    cheap.building = true; cheap.foot_w = 2; cheap.foot_h = 2; cheap.footprint = {1, 1, 1, 1};
+    cheap.build_block = cheap.footprint; cheap.hp = 40000; cheap.cost = 300; cheap.sell_value = 300;
+    cheap.demolishable = true; cheap.capturable = true;
+    cheap.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    const int t_cheap = w.define_type(cheap);
+    UnitType rich = cheap;
+    rich.cost = 2500; rich.sell_value = 2500;
+    const int t_rich = w.define_type(rich);
+
+
+    UnitType cap = cheap;
+    cap.demolishable = false; cap.capturable = true; cap.cost = 800; cap.sell_value = 800;
+    const int t_cap = w.define_type(cap);
+
+    w.spawn_building(t.fact, 0, {10, 10});
+    const int32_t cheap_id = w.spawn_building(t_cheap, 1, {30, 10});
+    const int32_t rich_id = w.spawn_building(t_rich, 1, {34, 10});
+    w.set_enemy(0, 1, true);
+    w.set_enemy(1, 0, true);
+    w.reveal(0, CPos{32, 32}, 64);
+    const int32_t saboteur = w.spawn(t_tanya, 0, {14, 10});
+    BotParams p;
+    w.bot_apply_personality(p, BOT_P_NORMAL);
+    w.enable_bot(0, p);
+
+    bool blown = false;
+    for (int i = 0; i < 6000 && !blown; ++i) {
+        w.step();
+        const int ri = w.index_of(rich_id);
+        if (ri < 0 || !w.actor(size_t(ri)).alive) blown = true;
+    }
+    const int ci = w.index_of(cheap_id);
+    std::printf("KI-Spezialisten: teures Gebäude zuerst gesprengt=%s (billiges danach: %s)\n",
+                blown ? "ja" : "nein", (ci >= 0 && w.actor(size_t(ci)).alive) ? "steht noch" : "auch weg");
+    CHECK(blown);
+    CHECK(w.index_of(saboteur) >= 0);
+
+
+    const int32_t cap_id = w.spawn_building(t_cap, 1, {30, 16});
+    w.spawn(t_eng, 0, {14, 12});
+    bool captured = false;
+    for (int i = 0; i < 6000 && !captured; ++i) {
+        w.step();
+        const int k = w.index_of(cap_id);
+        if (k >= 0 && w.actor(size_t(k)).alive && w.actor(size_t(k)).owner == 0) captured = true;
+    }
+    std::printf("KI-Spezialisten: Pionier hat das Gebäude erobert=%s\n", captured ? "ja" : "nein");
+    CHECK(captured);
+}
+
+
 static void test_bot_repair() {
     World w;
     UtilityWorld t = build_utility_world(w, 64);
@@ -8442,6 +8511,7 @@ int main() {
     test_bot();
     test_bot_repair();
     test_bot_naval();
+    test_bot_saboteurs();
     test_bot_difficulty();
     test_bot_personality();
     test_bot_target_value();

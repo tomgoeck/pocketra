@@ -1466,6 +1466,15 @@ def main() -> int:
         out["units_to_build"].pop("lst", None)
 
 
+        if "e7" in out["units_to_build"]:
+            out["units_to_build"].setdefault("volk", out["units_to_build"]["e7"])
+
+
+        if "e1" in out["units_to_build"]:
+            out["units_to_build"].setdefault("e6", 3)
+            out["unit_limits"].setdefault("e6", 2)
+
+
     air_bot = copy.deepcopy(ai_bots["normal"])
     for name in ("hpad", "afld", "afld.ukraine"):
         if name in air_bot["building_fractions"]:

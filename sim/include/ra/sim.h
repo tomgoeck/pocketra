@@ -732,6 +732,9 @@ struct BotState {
 
     int32_t unit_repair_ticks = 0;
 
+
+    int32_t saboteur_ticks = 0;
+
     int32_t personality = BOT_P_NORMAL;
     int32_t plan = PLAN_ECONOMY;
     int32_t plan_score = 0;
@@ -2081,6 +2084,7 @@ public:
     void bot_idle_harvesters(int32_t owner);
     void bot_repair(int32_t owner);
     void bot_repair_units(int32_t owner);
+    void bot_saboteurs(int32_t owner);
     bool bot_water_building_ok(int32_t owner, int32_t type) const;
     void bot_naval_squads(int32_t owner);
     void bot_update_naval_squad(int32_t owner, BotSquad& s);
