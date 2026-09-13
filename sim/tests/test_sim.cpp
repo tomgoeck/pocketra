@@ -794,6 +794,128 @@ static void test_bot() {
 }
 
 
+static void test_bot_naval() {
+    World w;
+    const int size = 64;
+    std::vector<uint8_t> cost(size_t(size) * size_t(size), 1);
+    std::vector<uint8_t> terrain(size_t(size) * size_t(size), uint8_t(TER_CLEAR));
+    for (int y = 0; y < size; ++y) {
+        for (int x = 24; x < 36; ++x) {
+            cost[size_t(y * size + x)] = 0;
+            terrain[size_t(y * size + x)] = uint8_t(TER_WATER);
+        }
+    }
+    w.set_map(size, size, cost.data());
+    w.set_terrain(size, size, terrain.data());
+    w.init_layers();
+
+    Weapon gun; gun.range = 5 * CELL; gun.reload = 40; gun.damage = 3000; gun.speed = 0;
+    gun.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_VEHICLE | TT_INFANTRY;
+    const int w_gun = w.define_weapon(gun);
+
+    UnitType fact;
+    fact.building = true; fact.foot_w = 3; fact.foot_h = 3; fact.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    fact.build_block = fact.footprint; fact.sprite_h = 3; fact.hp = 150000; fact.cost = 2500;
+    fact.produces = 1u << QUEUE_BUILDING; fact.base_provider = true; fact.provides = {"fact"};
+    fact.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    const int t_fact = w.define_type(fact);
+
+    UnitType powr;
+    powr.building = true; powr.foot_w = 2; powr.foot_h = 2; powr.footprint = {1, 1, 1, 1};
+    powr.build_block = powr.footprint; powr.sprite_h = 2; powr.hp = 40000; powr.power = 300;
+    powr.cost = 300; powr.make_ticks = 10; powr.queue_kind = QUEUE_BUILDING;
+    powr.provides = {"powr", "anypower"}; powr.ai_building_fraction = 2;
+    powr.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    const int t_powr = w.define_type(powr);
+
+
+    UnitType syrd;
+    syrd.building = true; syrd.foot_w = 3; syrd.foot_h = 3; syrd.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    syrd.build_block = syrd.footprint; syrd.sprite_h = 3; syrd.hp = 100000; syrd.cost = 1000;
+    syrd.make_ticks = 10; syrd.queue_kind = QUEUE_BUILDING; syrd.power = -30;
+    syrd.terrain_mask = 1u << TER_WATER; syrd.produces = 1u << QUEUE_SHIP;
+    syrd.prerequisites = {"anypower"}; syrd.ai_building_fraction = 20; syrd.provides = {"syrd"};
+    syrd.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    const int t_syrd = w.define_type(syrd);
+
+    UnitType dd;
+    dd.speed = 56; dd.turn_rate = 20; dd.hp = 60000; dd.cost = 1000; dd.weapon = w_gun;
+    dd.locomotor = LOCO_NAVAL; dd.queue_kind = QUEUE_SHIP; dd.prerequisites = {"syrd"};
+    dd.ai_unit_share = 30; dd.hit_radius = 426; dd.auto_target_mask = TT_GROUND_ACTOR | TT_STRUCTURE | TT_VEHICLE;
+    dd.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+    const int t_dd = w.define_type(dd);
+
+
+    UnitType hut;
+    hut.building = true; hut.foot_w = 2; hut.foot_h = 2; hut.footprint = {1, 1, 1, 1};
+    hut.build_block = hut.footprint; hut.sprite_h = 2; hut.hp = 40000;
+    hut.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    const int t_hut = w.define_type(hut);
+
+    w.spawn_building(t_fact, 0, {20, 30});
+    w.spawn_building(t_powr, 0, {24, 34});
+    const int32_t coast = w.spawn_building(t_hut, 1, {37, 30});
+    w.set_enemy(0, 1, true);
+    w.set_enemy(1, 0, true);
+    w.give_credits(0, 60000);
+    w.reveal(0, CPos{32, 32}, 64);
+    BotParams p;
+    w.bot_apply_personality(p, BOT_P_NAVAL);
+    p.max_base_radius = 20;
+    w.enable_bot(0, p);
+
+    bool yard = false, ship = false;
+    for (int t = 0; t < 20000 && !ship; ++t) {
+        w.step();
+        for (size_t i = 0; i < w.actor_count(); ++i) {
+            const Actor& a = w.actor(i);
+            if (!a.alive || a.owner != 0) continue;
+            if (a.type == t_syrd && a.make_ticks <= 0) yard = true;
+            if (a.type == t_dd) ship = true;
+        }
+    }
+    std::printf("Marine-KI: Werft gebaut=%s, Schiff gebaut=%s\n", yard ? "ja" : "nein", ship ? "ja" : "nein");
+    CHECK(yard);
+    CHECK(ship);
+
+
+    bool hurt = false;
+    for (int t = 0; t < 20000 && !hurt; ++t) {
+        w.step();
+        const int ci = w.index_of(coast);
+        if (ci < 0 || !w.actor(size_t(ci)).alive || w.actor(size_t(ci)).hp < 40000) hurt = true;
+    }
+    std::printf("Marine-KI: Küstenziel unter Beschuss=%s\n", hurt ? "ja" : "nein");
+    CHECK(hurt);
+
+
+    {
+        World dry;
+        std::vector<uint8_t> dcost(size_t(size) * size_t(size), 1);
+        dry.set_map(size, size, dcost.data());
+        std::vector<uint8_t> dterrain(size_t(size) * size_t(size), uint8_t(TER_CLEAR));
+        dry.set_terrain(size, size, dterrain.data());
+        dry.init_layers();
+        dry.define_weapon(gun);
+        const int d_fact = dry.define_type(fact);
+        dry.define_type(powr);
+        const int d_syrd = dry.define_type(syrd);
+        dry.spawn_building(d_fact, 0, {20, 30});
+        dry.give_credits(0, 60000);
+        BotParams dp;
+        dry.bot_apply_personality(dp, BOT_P_NAVAL);
+        dry.enable_bot(0, dp);
+        bool dry_yard = false;
+        for (int t = 0; t < 6000 && !dry_yard; ++t) {
+            dry.step();
+            for (size_t i = 0; i < dry.actor_count(); ++i)
+                if (dry.actor(i).alive && dry.actor(i).owner == 0 && dry.actor(i).type == d_syrd) dry_yard = true;
+        }
+        CHECK(!dry_yard);
+        std::printf("Marine-KI: auf trockener Karte keine Werft gewählt\n");
+    }
+}
+
 static void test_bot_difficulty() {
     World w;
     std::vector<uint8_t> cost(64 * 64, 1);
@@ -977,6 +1099,95 @@ static UtilityWorld build_utility_world(World& w, int size = 64) {
     return t;
 }
 
+
+static void test_bot_repair() {
+    World w;
+    UtilityWorld t = build_utility_world(w, 64);
+    UnitType fix;
+
+    fix.building = true; fix.foot_w = 3; fix.foot_h = 3;
+    fix.footprint = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    fix.build_block = {0, 1, 0, 1, 1, 1, 0, 1, 0};
+    fix.sprite_h = 3; fix.hp = 60000; fix.cost = 1200; fix.repairs_units = true;
+    fix.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    const int t_fix = w.define_type(fix);
+
+
+    UnitType veh;
+    veh.speed = 72; veh.turn_rate = 20; veh.hp = 40000; veh.hit_radius = 426;
+    veh.repairable = true; veh.repair_actors = {t_fix};
+    veh.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+    const int t_veh = w.define_type(veh);
+
+    const int32_t hq = w.spawn_building(t.fact, 0, {20, 20});
+    w.spawn_building(t.powr, 0, {26, 20});
+    const int32_t depot = w.spawn_building(t_fix, 0, {24, 26});
+    const int32_t hurt = w.spawn(t_veh, 0, {30, 30});
+    const int32_t foe = w.spawn(t.tank, 1, {40, 40});
+    w.set_enemy(0, 1, true);
+    w.set_enemy(1, 0, true);
+    w.give_credits(0, 20000);
+    BotParams p;
+    w.bot_apply_personality(p, BOT_P_NORMAL);
+    w.enable_bot(0, p);
+
+
+    const size_t hi = size_t(w.index_of(hq));
+    w.damage_for_test(hi, 60000, foe);
+    CHECK(w.actor(hi).hp < 150000);
+    const int32_t after_hit = w.actor(hi).hp;
+    CHECK(w.actor(hi).repairing);
+    for (int i = 0; i < 600; ++i) w.step();
+    const int32_t healed = w.actor(size_t(w.index_of(hq))).hp;
+    CHECK(healed > after_hit);
+    std::printf("KI-Reparatur: Gebäude %d → %d Trefferpunkte (geschaltet=%s)\n",
+                after_hit, healed, w.actor(size_t(w.index_of(hq))).repairing ? "ja" : "fertig");
+
+
+    size_t vi = size_t(w.index_of(hurt));
+    w.damage_for_test(vi, 30000, foe);
+    const int32_t veh_after_hit = w.actor(vi).hp;
+    bool sent = false;
+    for (int i = 0; i < 300 && !sent; ++i) {
+        w.step();
+        vi = size_t(w.index_of(hurt));
+        if (w.actor(vi).repair_depot == depot) sent = true;
+    }
+    CHECK(sent);
+    bool fixed = false;
+    for (int i = 0; i < 4000 && !fixed; ++i) {
+        w.step();
+        vi = size_t(w.index_of(hurt));
+        if (w.actor(vi).hp >= 40000) fixed = true;
+    }
+    CHECK(fixed);
+    std::printf("KI-Reparatur: Fahrzeug %d → %d Trefferpunkte im Depot\n",
+                veh_after_hit, w.actor(size_t(w.index_of(hurt))).hp);
+
+
+    const int32_t far_away = w.spawn(t_veh, 0, {58, 58});
+    w.damage_for_test(size_t(w.index_of(far_away)), 30000, foe);
+
+    const int32_t home1 = w.spawn(t_veh, 0, {21, 24});
+    const int32_t home2 = w.spawn(t_veh, 0, {22, 24});
+    w.damage_for_test(size_t(w.index_of(home1)), 30000, foe);
+    w.damage_for_test(size_t(w.index_of(home2)), 30000, foe);
+    int max_underway = 0;
+    for (int i = 0; i < 600; ++i) {
+        w.step();
+        int underway = 0;
+        for (const int32_t id : {home1, home2, far_away}) {
+            const int k = w.index_of(id);
+            if (k >= 0 && w.actor(size_t(k)).repair_depot >= 0) ++underway;
+        }
+        max_underway = std::max(max_underway, underway);
+        const int fi = w.index_of(far_away);
+        CHECK(fi < 0 || w.actor(size_t(fi)).repair_depot < 0);
+    }
+    CHECK(max_underway <= 1);
+    std::printf("KI-Reparatur: gleichzeitig unterwegs höchstens %d (Sollwert 1), das Fahrzeug beim Gegner blieb stehen\n",
+                max_underway);
+}
 
 static void test_bot_personality() {
     BotParams rush, turtle, air;
@@ -4631,6 +4842,43 @@ static void test_aircraft() {
     CHECK(w.air(size_t(hi)).ammo == 8);
 
 
+    {
+        const int32_t ghost = w.spawn(t_tank, 1, {30, 30});
+        w.order_attack(&h, 1, ghost);
+        for (int t = 0; t < 400; ++t) {
+            w.step();
+            if (w.air(size_t(w.index_of(h))).alt >= 1280) break;
+        }
+        w.destroy(ghost);
+        int idle_hi = w.index_of(h);
+        CHECK(w.air(size_t(idle_hi)).ammo > 0);
+        bool went_home = false;
+        int idle_from = -1, laps_ticks = 0;
+        for (int t = 0; t < 900; ++t) {
+            w.step();
+            idle_hi = w.index_of(h);
+            if (idle_hi < 0) break;
+            const Air& ai = w.air(size_t(idle_hi));
+
+
+            if (idle_from < 0 && !ai.has_goal && !ai.returning) idle_from = t;
+            if (ai.returning) { went_home = true; laps_ticks = t - idle_from; break; }
+        }
+
+        CHECK(went_home);
+        CHECK(idle_from >= 0);
+        CHECK(laps_ticks >= 120 && laps_ticks <= 140);
+        std::printf("Leerlauf: Flieger kreiste %d Ticks im Leerlauf (zwei Platzrunden = 128) und flog dann zurück\n",
+                    laps_ticks);
+        for (int t = 0; t < 2000; ++t) {
+            w.step();
+            idle_hi = w.index_of(h);
+            if (idle_hi >= 0 && w.air(size_t(idle_hi)).state == Air::LANDED) break;
+        }
+        CHECK(w.air(size_t(w.index_of(h))).state == Air::LANDED);
+    }
+
+
     w.spawn_building(t_agun, 1, {10, 10});
     for (int t = 0; t < 200; ++t) w.step();
     CHECK(w.index_of(h) >= 0 && w.actor(size_t(w.index_of(h))).alive);
@@ -8192,6 +8440,8 @@ int main() {
     test_barrels_owned_by_player();
     test_auto_target_tanya();
     test_bot();
+    test_bot_repair();
+    test_bot_naval();
     test_bot_difficulty();
     test_bot_personality();
     test_bot_target_value();

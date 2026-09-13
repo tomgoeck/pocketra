@@ -113,6 +113,8 @@ void World::release_pad(int32_t pad_id) {
 }
 
 
+constexpr int32_t IDLE_LAPS_BEFORE_RETURN = 2;
+
 int World::find_rearm_base(size_t i) const {
     const Actor& a = actors_[i];
     const UnitType& t = types_[a.type];
@@ -515,6 +517,14 @@ void World::step_aircraft(size_t i) {
         m.cell = to_cell(a.pos);
         m.to_cell = m.cell;
         return;
+    }
+
+
+    if (air.has_goal || air.returning || combats_[i].target >= 0 || combats_[i].attack_move) {
+        air.idle_ticks = 0;
+    } else if (air.state == Air::CRUISING && air.land_at_goal == LAND_NONE && find_rearm_base(i) >= 0) {
+        const int32_t lap = FULL_TURN / std::max(1, t.turn_rate);
+        if (++air.idle_ticks >= IDLE_LAPS_BEFORE_RETURN * lap) air_return_to_base(i);
     }
 
     WAngle want_face = a.facing;

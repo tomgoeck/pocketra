@@ -636,7 +636,7 @@ struct BotParams {
 struct BotSquad {
 
 
-    enum Type { ASSAULT, RUSH, PROTECTION, AIR, RAID };
+    enum Type { ASSAULT, RUSH, PROTECTION, AIR, RAID, NAVAL };
     enum State { IDLE, ATTACK_MOVE, ATTACK, FLEE };
     Type type = ASSAULT;
     State state = IDLE;
@@ -728,6 +728,9 @@ struct BotState {
     int32_t mcv_respond_cooldown = 0;
 
     int32_t rally_ticks = 0;
+
+
+    int32_t unit_repair_ticks = 0;
 
     int32_t personality = BOT_P_NORMAL;
     int32_t plan = PLAN_ECONOMY;
@@ -1408,6 +1411,9 @@ struct Air {
     bool has_goal = false;
     int32_t land_at_goal = 0;
     int32_t spin = 0;
+
+
+    int32_t idle_ticks = 0;
 };
 
 struct Projectile {
@@ -2074,6 +2080,11 @@ public:
     void bot_low_effect_harvesters(int32_t owner);
     void bot_idle_harvesters(int32_t owner);
     void bot_repair(int32_t owner);
+    void bot_repair_units(int32_t owner);
+    bool bot_water_building_ok(int32_t owner, int32_t type) const;
+    void bot_naval_squads(int32_t owner);
+    void bot_update_naval_squad(int32_t owner, BotSquad& s);
+    void bot_naval_reach(CPos from, std::vector<uint8_t>& out) const;
     bool bot_base_center(int32_t owner, CPos& out) const;
     uint32_t rand_peek() const { return rng_; }
     void bot_rally_points(int32_t owner);

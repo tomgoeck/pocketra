@@ -26,9 +26,9 @@ namespace {
 constexpr uint32_t SAVE_MAGIC = 0x5653'4152u;
 
 
-constexpr uint32_t SAVE_VERSION = 10;
+constexpr uint32_t SAVE_VERSION = 11;
 
-constexpr uint32_t SAVE_VERSION_MIN = 10;
+constexpr uint32_t SAVE_VERSION_MIN = 11;
 
 
 enum Section : uint32_t {
@@ -277,6 +277,7 @@ template <class V> void visit_fields(V& v, Actor& a) {
 template <class V> void visit_fields(V& v, Air& a) {
     v(a.state); v(a.alt); v(a.ammo); v(a.reload); v(a.base);
     v(a.returning); v(a.goal); v(a.has_goal); v(a.land_at_goal); v(a.spin);
+    v(a.idle_ticks);
 }
 
 

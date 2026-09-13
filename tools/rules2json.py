@@ -1463,10 +1463,7 @@ def main() -> int:
                     del out[table][name]
 
 
-        for name in ("syrd", "spen"):
-            out["building_fractions"].pop(name, None)
-        for name in ("ss", "msub", "dd", "ca", "pt", "lst"):
-            out["units_to_build"].pop(name, None)
+        out["units_to_build"].pop("lst", None)
 
 
     air_bot = copy.deepcopy(ai_bots["normal"])

@@ -656,6 +656,10 @@ void World::bot_tick(int32_t owner) {
     bot_best_resource_conyard(owner);
     bot_sell_refineries(owner);
     bot_rally_points(owner);
+
+
+    bot_repair(owner);
+    bot_repair_units(owner);
     bot_base_builder(owner);
     bot_unit_builder(owner);
     bot_harvesters(owner);
@@ -805,6 +809,95 @@ void World::bot_base_builder_queue(int32_t owner, int32_t kind) {
 }
 
 
+bool World::bot_water_building_ok(int32_t owner, int32_t type) const {
+    const UnitType& t = types_[size_t(type)];
+    if (!t.building || t.terrain_mask == 0) return true;
+
+    if ((t.terrain_mask & (1u << TER_WATER)) == 0) return true;
+    CPos center{-1, -1};
+    if (find_base_center(actors_, types_, owner, 0, center) < 0 || center.x < 0) return true;
+    const int32_t r = std::max(8, players_[size_t(owner)].bot.p.max_base_radius);
+    for (int dy = -r; dy <= r; ++dy) {
+        for (int dx = -r; dx <= r; ++dx) {
+            const CPos cc{center.x + dx, center.y + dy};
+            if (!map_.in_bounds(cc)) continue;
+            if (((t.terrain_mask >> map_.base_terrain(cc)) & 1u) != 0) return true;
+        }
+    }
+    return false;
+}
+
+
+constexpr int32_t UNIT_REPAIR_HP_PERMILLE = 500;
+constexpr int32_t UNIT_REPAIR_INTERVAL = 97;
+constexpr int32_t UNIT_REPAIR_NO_FIGHT_CELLS = 10;
+
+void World::bot_repair_units(int32_t owner) {
+    BotState& b = players_[owner].bot;
+    if (--b.unit_repair_ticks > 0) return;
+    b.unit_repair_ticks = UNIT_REPAIR_INTERVAL;
+
+    for (const Actor& a : actors_)
+        if (a.alive && a.owner == owner && a.repair_depot >= 0 && !types_[a.type].building) return;
+
+    std::vector<size_t> depots;
+    for (size_t i = 0; i < actors_.size(); ++i) {
+        const Actor& d = actors_[i];
+        if (d.alive && d.owner == owner && types_[d.type].repairs_units && d.make_ticks <= 0 && d.sell_ticks < 0)
+            depots.push_back(i);
+    }
+    if (depots.empty()) return;
+
+    CPos base{-1, -1};
+    if (find_base_center(actors_, types_, owner, 0, base) < 0 || base.x < 0) return;
+    const int64_t home_r2 = int64_t(b.p.max_base_radius) * b.p.max_base_radius;
+
+    std::vector<int32_t> busy;
+    for (const BotSquad& sq : b.squads) {
+        if (sq.state == BotSquad::IDLE) continue;
+        busy.insert(busy.end(), sq.units.begin(), sq.units.end());
+    }
+    size_t worst = actors_.size();
+    int32_t worst_permille = UNIT_REPAIR_HP_PERMILLE;
+    size_t worst_depot = 0;
+    for (size_t i = 0; i < actors_.size(); ++i) {
+        const Actor& a = actors_[i];
+        if (!a.alive || a.owner != owner) continue;
+        const UnitType& t = types_[a.type];
+        if (t.building || !t.repairable || a.transport >= 0 || a.repair_depot >= 0) continue;
+        if (combats_[i].target >= 0 || combats_[i].attack_move) continue;
+        if (std::find(busy.begin(), busy.end(), a.id) != busy.end()) continue;
+        if (bot_cell_d2(mobiles_[i].cell, base) > home_r2) continue;
+        const int32_t permille = t.hp > 0 ? int32_t(int64_t(a.hp) * 1000 / t.hp) : 1000;
+        if (permille >= worst_permille) continue;
+
+        bool enemy_near = false;
+        for (size_t k = 0; k < actors_.size() && !enemy_near; ++k) {
+            const Actor& e = actors_[k];
+            if (!e.alive || !hostile(owner, e.owner) || types_[e.type].husk) continue;
+            if (length(e.pos - a.pos) <= int64_t(UNIT_REPAIR_NO_FIGHT_CELLS) * CELL) enemy_near = true;
+        }
+        if (enemy_near) continue;
+
+        int64_t best_d = INT64_MAX;
+        size_t best_depot = 0;
+        bool found = false;
+        for (size_t d : depots) {
+            if (!t.may_repair_at(actors_[d].type)) continue;
+            const int64_t dist = length_sq(actors_[d].pos - a.pos);
+            if (dist < best_d) { best_d = dist; best_depot = d; found = true; }
+        }
+        if (!found) continue;
+        worst = i;
+        worst_permille = permille;
+        worst_depot = best_depot;
+    }
+    if (worst >= actors_.size()) return;
+    const int32_t id = actors_[worst].id;
+    order_repair(&id, 1, actors_[worst_depot].id);
+}
+
+
 int32_t World::bot_choose_building(int32_t owner, int32_t kind) {
     BotState& b = players_[owner].bot;
     const BotParams& p = b.p;
@@ -886,6 +979,9 @@ int32_t World::bot_choose_building(int32_t owner, int32_t kind) {
         const UnitType& ut = types_[t];
         if (bot_table(p.building_delay, size_t(t), ut.ai_building_delay) > int32_t(tick_)) continue;
         if (std::find(buildable_list.begin(), buildable_list.end(), t) == buildable_list.end()) continue;
+
+
+        if (!bot_water_building_ok(owner, t)) continue;
         if (count[t] * 100 > bot_table(p.building_fraction, size_t(t), ut.ai_building_fraction) * buildings) continue;
         if (!under_limit(t)) continue;
         if (excess < b.min_excess_power || !sufficient_power(t)) {
@@ -1083,8 +1179,8 @@ void World::bot_unit_builder(int32_t owner) {
     if (++b.unit_ticks % std::max(1, p.unit_feedback_time) != 0) return;
 
 
-    static const int32_t UNIT_QUEUES[] = {QUEUE_VEHICLE, QUEUE_INFANTRY, QUEUE_AIRCRAFT};
-    constexpr int NUM_UNIT_QUEUES = 3;
+    static const int32_t UNIT_QUEUES[] = {QUEUE_VEHICLE, QUEUE_INFANTRY, QUEUE_AIRCRAFT, QUEUE_SHIP};
+    constexpr int NUM_UNIT_QUEUES = 4;
 
     if (!b.build_requests.empty()) {
         const int32_t type = b.build_requests.front();
@@ -1436,6 +1532,7 @@ void World::bot_squads(int32_t owner) {
             if (b.squads[i].units.empty()) continue;
 
             if (b.squads[i].type == BotSquad::AIR) bot_update_air_squad(owner, b.squads[i]);
+            else if (b.squads[i].type == BotSquad::NAVAL) bot_update_naval_squad(owner, b.squads[i]);
             else if (b.squads[i].type == BotSquad::RAID) bot_update_raid_squad(owner, b.squads[i]);
             else bot_update_squad(owner, b.squads[i]);
         }
@@ -1448,6 +1545,8 @@ void World::bot_squads(int32_t owner) {
 
 
         bot_air_squads(owner);
+
+        bot_naval_squads(owner);
         for (const Actor& a : actors_) {
             if (!a.alive || a.owner != owner) continue;
             const UnitType& t = types_[a.type];

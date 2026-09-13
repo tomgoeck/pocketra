@@ -225,6 +225,113 @@ void World::bot_update_raid_squad(int32_t owner, BotSquad& s) {
 }
 
 
+void World::bot_naval_reach(CPos from, std::vector<uint8_t>& out) const {
+    out.assign(size_t(map_.cells()), 0);
+    if (map_.cells() <= 0) return;
+    const int32_t mc = move_class_of(LOCO_NAVAL);
+    std::vector<int32_t> stack;
+    for (int dy = -4; dy <= 4; ++dy) {
+        for (int dx = -4; dx <= 4; ++dx) {
+            const CPos c{from.x + dx, from.y + dy};
+            if (!map_.in_bounds(c) || !map_.passable(c, mc)) continue;
+            const int32_t i = map_.index(c);
+            if (out[size_t(i)]) continue;
+            out[size_t(i)] = 1;
+            stack.push_back(i);
+        }
+    }
+    while (!stack.empty()) {
+        const CPos c = map_.cell_at(stack.back());
+        stack.pop_back();
+        for (int dir = 0; dir < NUM_DIRS; ++dir) {
+            const CPos nb{c.x + DIR_DX[dir], c.y + DIR_DY[dir]};
+            if (!map_.in_bounds(nb) || !map_.passable(nb, mc)) continue;
+            const int32_t ni = map_.index(nb);
+            if (out[size_t(ni)]) continue;
+            out[size_t(ni)] = 1;
+            stack.push_back(ni);
+        }
+    }
+}
+
+
+void World::bot_naval_squads(int32_t owner) {
+    BotState& b = players_[size_t(owner)].bot;
+    BotSquad* navy = nullptr;
+    for (BotSquad& s : b.squads) if (s.type == BotSquad::NAVAL) { navy = &s; break; }
+    std::vector<int32_t> fresh;
+    for (const Actor& a : actors_) {
+        if (!a.alive || a.owner != owner) continue;
+        const UnitType& t = types_[a.type];
+        if (t.building || t.aircraft || t.husk || t.harvester || t.exclude_from_squads) continue;
+        if (t.locomotor != LOCO_NAVAL || t.weapon < 0) continue;
+        if (std::find(b.active_units.begin(), b.active_units.end(), a.id) != b.active_units.end()) continue;
+        fresh.push_back(a.id);
+    }
+    if (fresh.empty()) return;
+    if (!navy) {
+        BotSquad ns;
+        ns.type = BotSquad::NAVAL;
+        b.squads.push_back(ns);
+        navy = &b.squads.back();
+    }
+    for (int32_t id : fresh) {
+        navy->units.push_back(id);
+        b.active_units.push_back(id);
+    }
+}
+
+
+void World::bot_update_naval_squad(int32_t owner, BotSquad& s) {
+    if (s.units.empty()) return;
+    int li = -1;
+    for (int32_t id : s.units) { li = index_of(id); if (li >= 0) break; }
+    if (li < 0) return;
+    const int ti = index_of(s.target);
+    const bool valid = ti >= 0 && actors_[size_t(ti)].alive && hostile(owner, actors_[size_t(ti)].owner);
+    if (!valid) {
+        std::vector<uint8_t> reach;
+        bot_naval_reach(mobiles_[size_t(li)].cell, reach);
+
+        int32_t range_cells = 1;
+        for (int32_t id : s.units) {
+            const int i = index_of(id);
+            if (i < 0) continue;
+            const UnitType& ut = types_[actors_[size_t(i)].type];
+            if (ut.weapon >= 0 && size_t(ut.weapon) < weapons_.size())
+                range_cells = std::max(range_cells, weapons_[size_t(ut.weapon)].range / CELL);
+        }
+        const WVec from = actors_[size_t(li)].pos;
+        int64_t best = INT64_MAX;
+        int32_t best_id = -1;
+        for (size_t i = 0; i < actors_.size(); ++i) {
+            const Actor& a = actors_[i];
+            if (!a.alive || !hostile(owner, a.owner) || types_[a.type].husk) continue;
+            if (!actor_visible_to(owner, i)) continue;
+            const CPos tc = types_[a.type].building ? a.origin : mobiles_[i].cell;
+            bool shootable = false;
+            for (int dy = -range_cells; dy <= range_cells && !shootable; ++dy) {
+                for (int dx = -range_cells; dx <= range_cells; ++dx) {
+                    const CPos c{tc.x + dx, tc.y + dy};
+                    if (!map_.in_bounds(c)) continue;
+                    if (reach[size_t(map_.index(c))]) { shootable = true; break; }
+                }
+            }
+            if (!shootable) continue;
+            const int64_t d = length_sq(a.pos - from);
+            if (d < best) { best = d; best_id = a.id; }
+        }
+        s.target = best_id;
+        if (best_id < 0) return;
+    }
+    const int t2 = index_of(s.target);
+    if (t2 < 0) return;
+    const UnitType& tt = types_[actors_[size_t(t2)].type];
+    const CPos goal = tt.building ? actors_[size_t(t2)].origin : mobiles_[size_t(t2)].cell;
+    order_attack_move(s.units.data(), s.units.size(), goal);
+}
+
+
 bool World::bot_squad_siege(int32_t owner, BotSquad& s) {
     const int ti = index_of(s.target);
     if (ti < 0 || !actors_[size_t(ti)].alive) return false;
