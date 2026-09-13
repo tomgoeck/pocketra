@@ -1067,6 +1067,11 @@ def extract_actor(name: str, r: Node, seqs: dict, fluent: dict) -> dict:
             "footprint": str(c.get("Footprint", "") or ""),
             "on_fire_sound": Path(str(c.get("OnFireSound", "") or "")).stem.lower(),
             "missile_weapon": str(c.get("MissileWeapon", "") or "").lower(),
+
+
+            "missile_image": str(c.get("MissileImage", "") or "").lower(),
+            "missile_up": str(c.get("MissileUp", "up") or "up").lower(),
+            "missile_down": str(c.get("MissileDown", "down") or "down").lower(),
             "missile_delay": int(c.get("MissileDelay", "0") or 0),
             "flight_delay": int(c.get("FlightDelay", "400") or 400),
             "begin_notification": str(c.get("BeginChargeSpeechNotification", "") or ""),
@@ -1523,6 +1528,11 @@ def main() -> int:
                     "valid_ground": csv(c.get("ValidGround", "Clear,Rough,Road,Ore,Beach")),
                     "crate_actors": [x.lower() for x in csv(c.get("CrateActors", "crate"))],
                     "enabled": (c.get("CheckboxEnabled", "true") or "true").lower() != "false",
+
+
+                    "delivery_aircraft": str(c.get("DeliveryAircraft", "") or "").lower(),
+                    "quantized_facings": int(c.get("QuantizedFacings", "32") or 32),
+                    "cordon": wdist(c.get("Cordon", "5120") or "5120"),
                 }
 
     a.out.parent.mkdir(parents=True, exist_ok=True)

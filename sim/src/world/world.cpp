@@ -1886,7 +1886,7 @@ void World::support_power_state(int32_t owner, int32_t kind, int& available, int
 }
 
 
-constexpr int32_t NUKE_EFFECT_REPEAT = 20;
+constexpr int32_t NUKE_DOOR_TICKS = 14;
 
 
 void World::step_support_powers() {
@@ -1939,10 +1939,6 @@ void World::step_support_powers() {
         const UnitType& t = types_[n.type];
         const int32_t elapsed = n.total - n.ticks;
         const int32_t turn = std::max(1, n.total / 2);
-        if (elapsed % NUKE_EFFECT_REPEAT == 0) {
-            if (elapsed < turn) { if (t.sp_launch_effect >= 0) spawn_effect(n.launch_pos, t.sp_launch_effect, 0, 0); }
-            else if (t.sp_impact_effect >= 0) spawn_effect(n.target, t.sp_impact_effect, 0, 0);
-        }
         if (elapsed >= turn && n.reveal_id < 0 && t.sp_camera_range > 0)
             n.reveal_id = reveal_source(n.owner, to_cell(n.target), std::max(1, t.sp_camera_range / CELL));
         if (--n.ticks > 0) { ++k; continue; }
@@ -2025,6 +2021,9 @@ bool World::activate_support_power(int32_t owner, int32_t kind, CPos cell, CPos 
 
         if (t.sp_weapon < 0) return false;
         const int32_t flight = std::max(1, t.sp_flight);
+
+        actors_[size_t(b)].active_ticks = NUKE_DOOR_TICKS;
+        actors_[size_t(b)].active_anim = 0;
         pending_nukes_.push_back(PendingNuke{owner, bld.type, cell_center(cell), flight, bld.pos, flight, -1});
         for (int32_t p = 0; p < MAX_PLAYERS; ++p) if (players_[p].participant) notify(p, NOTIFY_ABOMB_LAUNCH_DETECTED);
     }

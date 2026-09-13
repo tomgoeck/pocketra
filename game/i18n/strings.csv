@@ -46,6 +46,9 @@ toast.nobody_aboard,Niemand an Bord,Nobody aboard
 toast.unload_blocked,Hier ist kein Platz zum Aussteigen,No room to unload here
 toast.target_picked,"Ziel: %s — jetzt Aktion wählen","Target: %s — now pick an action"
 toast.target_dropped,Zielwahl verworfen,Target dropped
+toast.selected_target,%s ausgewählt,%s selected
+toast.added_to_selection,"%s dazu — Auswahl: %d","%s added — selection: %d"
+toast.already_selected,Schon in der Auswahl,Already selected
 toast.order_impossible,Das geht hier nicht,Not possible here
 toast.unload_ordered,Hinfahren und dort entladen,Moving there to unload
 toast.rally_set,Sammelpunkt gesetzt,Rally point set
@@ -186,6 +189,8 @@ radial.action.attack,Angriff,Attack
 radial.action.force_fire,Zwangsfeuer,Force Fire
 radial.action.force_attack,Zwangsangriff,Force Attack
 radial.action.info,Infokarte,Info card
+radial.action.select,Auswählen,Select
+radial.action.add,Hinzufügen,Add
 radial.action.guard,Bewachen,Guard
 radial.action.scatter,Zerstreuen,Scatter
 radial.action.stop,Stopp,Stop

@@ -1312,6 +1312,12 @@ func _build_type(name: String, a: Dictionary) -> Dictionary:
 			t["sp_one_shot"] = bool(sp.get("one_shot", false))
 
 			t["sp_camera_range"] = int(sp.get("camera_range", 0))
+
+
+			var mimg := str(sp.get("missile_image", ""))
+			if mimg != "":
+				t["sp_launch_effect"] = effect_key(mimg, str(sp.get("missile_up", "up")))
+				t["sp_impact_effect"] = effect_key(mimg, str(sp.get("missile_down", "down")))
 		if a.has("cash_trickler"):
 			t["cash_interval"] = int(a["cash_trickler"].get("interval", 50))
 			t["cash_amount"] = int(a["cash_trickler"].get("amount", 15))

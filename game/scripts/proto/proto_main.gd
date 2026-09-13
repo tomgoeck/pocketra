@@ -275,6 +275,7 @@ func _ready() -> void:
 	_test_placement_cancel = args.has("--test-placement-cancel")
 	_test_deploy = args.has("--test-deploy")
 	_test_crate = args.has("--test-crate")
+	_test_cratedrop = args.has("--test-cratedrop")
 	_test_forcefire = args.has("--test-forcefire")
 	_test_c4 = args.has("--test-c4")
 	_test_wall = args.has("--test-wall")
@@ -1092,8 +1093,11 @@ func _on_tap(p: Vector2) -> void:
 		_last_gesture = "Tippen ins Leere"
 
 
-func _select_tapped(hit: ProtoWorld.Unit) -> void:
-	world.select_only(hit)
+func _select_tapped(hit: ProtoWorld.Unit, mode: String = "") -> void:
+	if mode == "only":
+		world.select_exclusive(hit)
+	else:
+		world.select_only(hit)
 	_show_selection_info()
 	var kind := world.producer_kind(hit)
 	if kind >= 0:
@@ -1192,6 +1196,12 @@ func _target_items(hit: ProtoWorld.Unit) -> Array:
 		items.append("move")
 	items.append("info")
 	items.append("cancel")
+
+
+	if own and world.selectable(hit):
+		if not world.selection.is_empty():
+			items.push_front("add")
+		items.push_front("select")
 	return items
 
 
@@ -1336,6 +1346,18 @@ func _on_action_bar(action: String) -> void:
 			var what := world.order_enter(target)
 			_toast(tr(what) % _type_label(target.type) if what != "" else tr("toast.order_impossible"))
 			_last_gesture = "Enter (%s)" % action
+		"select":
+			if target != null:
+				_select_tapped(target, "only")
+				_toast(tr("toast.selected_target") % _type_label(target.type))
+				_last_gesture = "Auswählen: %s" % target.type
+		"add":
+			if target != null and world.select_append(target):
+				_show_selection_info()
+				_toast(tr("toast.added_to_selection") % [_type_label(target.type), world.selection.size()])
+				_last_gesture = "Hinzugefügt: %s (%d)" % [target.type, world.selection.size()]
+			else:
+				_toast(tr("toast.already_selected"))
 		"info":
 			if target != null:
 				_show_info_card(target, press)
@@ -2605,14 +2627,69 @@ func _run_test_nuke() -> void:
 			print("T --test-nuke: Silo nicht rechtzeitig geladen")
 			get_tree().quit()
 			return
+
+
+		var silo0: ProtoWorld.Unit = null
+		for u in world.units:
+			if u.alive and u.player == 0 and u.type == "mslo":
+				silo0 = u
+				break
+		if silo0 != null:
+			world.center_on(silo0.pos)
+			build_bar.visible = false
+			if _sp_panel != null:
+				_sp_panel.visible = false
+			_test_step = 25
+			_cd_wait = 30
+			return
+	elif _test_step == 25:
+		if _cd_wait > 0:
+			_cd_wait -= 1
+			return
+		_shot("silo-vorher")
 		if not world.activate_support_power(2, (Vector2(_test_nuke_target) + Vector2(0.5, 0.5)) * ProtoWorld.CELL):
 			print("T --test-nuke: Abfeuern fehlgeschlagen")
 			get_tree().quit()
 			return
 		print("T%d --test-nuke: Rakete gestartet, Ziel %s, sichtbare Superwaffen=%s" % [
 			sim.tick(), _test_nuke_target, _sp_panel.visible_kinds() if _sp_panel != null else []])
+
+
+		var silo: ProtoWorld.Unit = null
+		for u in world.units:
+			if u.alive and u.player == 0 and u.type == "mslo":
+				silo = u
+				break
+		if silo != null:
+			world.center_on(silo.pos)
+
+
+			build_bar.visible = false
+			if _sp_panel != null:
+				_sp_panel.visible = false
+			print("T%d --test-nuke: Silo bei %s (Bildschirm %s), Kamera auf %s" % [
+					sim.tick(), silo.pos / ProtoWorld.CELL, world.world_to_screen(silo.pos),
+					world.visible_world_rect().get_center() / ProtoWorld.CELL])
+		else:
+			print("T --test-nuke: kein Silo gefunden (Kamera bleibt am Ziel)")
+
 		_test_step = 3
+		_cd_wait = 1
 	elif _test_step == 3:
+		if _cd_wait > 0:
+			_cd_wait -= 1
+			return
+		if _screenshot_path != "":
+			var start_path: String = _screenshot_path.get_basename() + "_start.png"
+			get_viewport().get_texture().get_image().save_png(start_path)
+			print("T%d --test-nuke: Start am Silo (Klappe + aufsteigende Rakete), Screenshot %s" % [
+					sim.tick(), start_path])
+		build_bar.visible = true
+		if _sp_panel != null:
+			_sp_panel.visible = true
+		world.center_on((Vector2(_test_nuke_target) + Vector2(0.5, 0.5)) * ProtoWorld.CELL)
+		_test_step = 4
+	elif _test_step == 4:
 		var nukes: PackedInt32Array = sim.pending_nukes()
 		if nukes.size() < 4:
 			print("T%d --test-nuke: kein pending_nukes()-Eintrag während des Flugs" % tick)
@@ -2622,17 +2699,24 @@ func _run_test_nuke() -> void:
 			var flight_path: String = _screenshot_path.get_basename() + "_flug.png"
 			get_viewport().get_texture().get_image().save_png(flight_path)
 			print("T%d --test-nuke: im Flug (Restticks %d), Screenshot %s" % [tick, nukes[3], flight_path])
-		_test_step = 4
-	elif _test_step == 4:
+		_test_step = 5
+	elif _test_step == 5:
 		var nukes: PackedInt32Array = sim.pending_nukes()
 		if nukes.is_empty():
-			if _screenshot_path != "":
-				var impact_path: String = _screenshot_path.get_basename() + "_einschlag.png"
-				get_viewport().get_texture().get_image().save_png(impact_path)
-				print("T%d --test-nuke: Einschlag, Screenshot %s" % [tick, impact_path])
-			else:
-				print("T%d --test-nuke: Einschlag" % tick)
-			get_tree().quit()
+
+
+			_test_step = 6
+	elif _test_step == 6:
+		var flash: float = world.nuke_flash()
+		if _screenshot_path != "":
+			var impact_path: String = _screenshot_path.get_basename() + "_einschlag.png"
+			get_viewport().get_texture().get_image().save_png(impact_path)
+			print("T%d --test-nuke: Einschlag, weißer Blitz=%.2f s (Sollwert > 0), Screenshot %s %s" % [
+					tick, flash, impact_path, "OK" if flash > 0.0 else "FEHLER"])
+		else:
+			print("T%d --test-nuke: Einschlag, weißer Blitz=%.2f s (Sollwert > 0) %s" % [
+					tick, flash, "OK" if flash > 0.0 else "FEHLER"])
+		get_tree().quit()
 
 
 const PLACEMENT_TEST_TYPES := ["tsla", "gap", "apwr", "powr", "dome", "atek", "stek", "mslo", "iron",
@@ -3713,6 +3797,10 @@ var _force_hp0 := 1.0
 
 
 var _test_crate := false
+var _test_cratedrop := false
+
+
+var _cd_wait := 0
 var _crate_hp_before: Dictionary = {}
 var _crate_names: Dictionary = {}
 var _crate_collector: ProtoWorld.Unit = null
@@ -3724,6 +3812,129 @@ func _crate_note(u: ProtoWorld.Unit, role: String) -> void:
 		return
 	_crate_hp_before[u.id] = u.hp
 	_crate_names[u.id] = role
+
+
+func _run_test_cratedrop() -> void:
+	var sim = world.sim
+	var tick: int = sim.tick()
+	if _test_step == 0 and tick >= 10:
+		_screenshot_tick = 1 << 30
+		if not world.type_ids.has("crate") or not world.type_ids.has("badr"):
+			print("T --test-cratedrop: crate/badr fehlt in rules.json — übersprungen")
+			get_tree().quit()
+			return
+
+		var cs: Dictionary = RulesDb.data().get("world", {}).get("crate_spawner", {})
+		var ground := 0
+		for tn in cs.get("valid_ground", []):
+			var ti: int = ProtoWorld.TERRAIN_ORDER.find(str(tn))
+			if ti >= 0:
+				ground |= 1 << ti
+		sim.set_crate_spawner({
+			"enabled": true, "crate_type": world.type_ids["crate"],
+			"minimum": 1, "maximum": 1, "spawn_interval": 100000, "initial_delay": 1,
+			"valid_ground": ground, "delivery_type": world.type_ids["badr"],
+			"quantized_facings": int(cs.get("quantized_facings", 16)),
+			"cordon": int(cs.get("cordon", 5120)),
+		})
+		print("T --test-cratedrop: Spawner scharf (Lieferflugzeug badr=%d)" % world.type_ids["badr"])
+		_test_step = 1
+	elif _test_step == 1:
+		var plane := _cratedrop_plane()
+		if plane == null:
+			if tick > 400:
+				var on_map0 := 0
+				for u in world.units:
+					if u.alive and u.type == "crate":
+						on_map0 += 1
+				print("T --test-cratedrop: kein Badger erschienen FEHLER (Kisten gesamt %d, davon auf der Karte %d, Actors %d)" % [
+						sim.crate_count(), on_map0, world.units.size()])
+				get_tree().quit()
+			return
+
+
+		var on_map := 0
+		var aboard := 0
+		for u in world.units:
+			if u.alive and u.type == "crate":
+				if u.visible:
+					on_map += 1
+				else:
+					aboard += 1
+		world.center_on(plane.pos)
+		print("T%d --test-cratedrop: Badger bei %s, Kiste an Bord=%d (Sollwert 1), auf der Karte=%d %s" % [
+				tick, plane.pos / ProtoWorld.CELL, aboard, on_map, "OK" if aboard == 1 else "FEHLER"])
+		_test_step = 11
+		_cd_wait = 3
+	elif _test_step == 11:
+		if _cd_wait > 0:
+			_cd_wait -= 1
+			var pl := _cratedrop_plane()
+			if pl != null:
+				world.center_on(pl.pos)
+			return
+		_shot("anflug")
+		_test_step = 2
+	elif _test_step == 2:
+
+
+		for u in world.units:
+			if u.alive and u.type == "crate" and u.altitude > 0.0:
+				world.center_on(u.pos)
+				print("T%d --test-cratedrop: Kiste abgeworfen bei %s, Höhe %d px (Fallschirm)" % [
+						tick, u.pos / ProtoWorld.CELL, u.altitude])
+				_test_step = 21
+				_cd_wait = 3
+				_test_tick = tick
+				return
+		if tick > 3000:
+			print("T --test-cratedrop: kein Abwurf FEHLER")
+			get_tree().quit()
+	elif _test_step == 21:
+
+		for u in world.units:
+			if u.alive and u.type == "crate" and u.altitude > 0.0:
+				world.center_on(u.pos)
+		if _cd_wait > 0:
+			_cd_wait -= 1
+			return
+		_shot("fallschirm")
+		_test_step = 3
+	elif _test_step == 3:
+		for u in world.units:
+			if u.alive and u.type == "crate" and u.visible and u.altitude <= 0.0:
+				print("T%d --test-cratedrop: Kiste gelandet bei %s (Fallzeit %d Ticks) OK" % [
+						tick, u.pos / ProtoWorld.CELL, tick - _test_tick])
+				world.center_on(u.pos)
+				_test_step = 31
+				_cd_wait = 3
+				_test_tick = tick
+				return
+		if tick > _test_tick + 600:
+			print("T --test-cratedrop: Kiste kam nicht am Boden an FEHLER")
+			get_tree().quit()
+	elif _test_step == 31:
+		if _cd_wait > 0:
+			_cd_wait -= 1
+			return
+		_shot("gelandet")
+		_test_step = 4
+	elif _test_step == 4:
+
+		if _cratedrop_plane() == null:
+			print("T%d --test-cratedrop: Badger verschwunden, Kisten auf der Karte=%d — fertig" % [
+					tick, sim.crate_count()])
+			get_tree().quit()
+		elif tick > _test_tick + 3000:
+			print("T --test-cratedrop: Badger blieb auf der Karte FEHLER")
+			get_tree().quit()
+
+
+func _cratedrop_plane() -> ProtoWorld.Unit:
+	for u in world.units:
+		if u.alive and u.type == "badr":
+			return u
+	return null
 
 
 func _run_test_crate() -> void:
@@ -4727,6 +4938,33 @@ func _tap_orders_cases() -> void:
 	print("T --test-tap-orders: 11 Tipp auf Gruppenknopf 1 über gegnerischem %s bei %s → darunter=%s, Befehlsart=%d (2=Angriff), Gruppe danach gewählt=%s (vorher %d) %s" % [
 			foe.type, sp2, _tap_o_name(under), cmd.goal_kind, grouped, before_sel,
 			"OK" if ok11 else "FEHLER"])
+
+
+	world.select_only(cmd)
+	world.additive_select = true
+	await _tap_o_map(await _tap_o_aim(mate.pos))
+	var first12: bool = action_bar.ITEMS.size() >= 2 and action_bar.ITEMS[0] == "select" \
+			and action_bar.ITEMS[1] == "add"
+	var list12 := str(action_bar.ITEMS)
+	var hit12: bool = await _tap_o_bar("select")
+	world.additive_select = false
+	var ok12: bool = first12 and hit12 and world.selection.size() == 1 \
+			and world.selection[0].id == mate.id
+	fails += 0 if ok12 else 1
+	print("T --test-tap-orders: 12 Ziel eigene %s → Leiste %s (》Auswählen《 zuerst, 》Hinzufügen《 danach=%s), nach 》Auswählen《 Auswahl=%d × %s %s" % [
+			mate.type, list12, first12, world.selection.size(),
+			"—" if world.selection.is_empty() else world.selection[0].type,
+			"OK" if ok12 else "FEHLER"])
+
+
+	world.select_exclusive(cmd)
+	await _tap_o_map(await _tap_o_aim(mate.pos))
+	var hit13: bool = await _tap_o_bar("add")
+	var ok13: bool = hit13 and world.selection.size() == 2 and world.selection.has(cmd) \
+			and world.selection.has(mate)
+	fails += 0 if ok13 else 1
+	print("T --test-tap-orders: 13 Eintrag „Hinzufügen\" → Auswahl=%d (%s + %s erwartet) %s" % [
+			world.selection.size(), cmd.type, mate.type, "OK" if ok13 else "FEHLER"])
 
 	print("T --test-tap-orders: fertig — %d Fehlschläge" % fails)
 	get_tree().quit()
@@ -9097,6 +9335,24 @@ func _run_test_ui() -> void:
 							_click_mode, add_b.button_pressed])
 				"ziele": _show_objectives()
 				"radial": radial.open(get_viewport().get_visible_rect().size / 2.0, _unit_items())
+				"zielleiste":
+
+
+					var zo := Vector2i(10, 10)
+					for u in world.units:
+						if u.alive and u.player == 0:
+							zo = Vector2i(u.pos / ProtoWorld.CELL)
+							break
+					var za := world.spawn_unit("2tnk", 0, zo + Vector2i(-3, 4))
+					var zb := world.spawn_unit("2tnk", 0, zo + Vector2i(2, 4))
+					if za != null and zb != null:
+						world.select_only(za)
+						world.center_on((za.pos + zb.pos) / 2.0)
+						_on_tap(world.world_to_screen(zb.pos))
+						print("T: Zielleiste offen=%s, Einträge=%s (Sollwert: 》Auswählen《 zuerst)" % [
+							action_bar.visible, str(action_bar.ITEMS)])
+					else:
+						print("T: Zielleiste — konnte keine zwei Einheiten setzen")
 				"win": world.sim.set_win_state(0, 1)
 				"lose":
 
@@ -13074,6 +13330,8 @@ func _process(delta: float) -> void:
 		_run_test_deploy()
 	if _test_crate and world.sim != null:
 		_run_test_crate()
+	if _test_cratedrop and world.sim != null:
+		_run_test_cratedrop()
 	if _test_forcefire and world.sim != null:
 		_run_test_forcefire()
 	if _test_c4 and world.sim != null:

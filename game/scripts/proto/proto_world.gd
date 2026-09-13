@@ -255,6 +255,13 @@ var _nuke_layer: Node2D
 
 
 var _nukes: Array = []
+
+
+const NUKE_FLASH_SEC := 0.8
+var _nuke_flash := 0.0
+
+
+var _nuke_seen := {}
 var _fog: Sprite2D
 var _fog_img: Image
 var _fog_tex: ImageTexture
@@ -888,8 +895,9 @@ func _start_sim() -> void:
 
 			"sp_weapon": weapon_ids.get(t.get("sp_weapon", ""), -1),
 			"sp_sound": sfx.register(t["sp_sound"]) if t.has("sp_sound") else -1,
-			"sp_launch_effect": effect_ids.get("atomic/up", -1),
-			"sp_impact_effect": effect_ids.get("atomic/down", -1),
+
+			"sp_launch_effect": effect_ids.get(str(t.get("sp_launch_effect", "")), -1),
+			"sp_impact_effect": effect_ids.get(str(t.get("sp_impact_effect", "")), -1),
 			"crush_sound": sfx.register(t["crush_sound"]) if t.has("crush_sound") else -1,
 			"charge_sound": sfx.register(t["charge_sound"]) if t.has("charge_sound") else -1,
 			"facings": t.get("facings", 1), "classic": t.get("classic", false),
@@ -1077,12 +1085,18 @@ func _start_sim() -> void:
 			var ti: int = TERRAIN_ORDER.find(str(tn))
 			if ti >= 0:
 				ground |= 1 << ti
+
+
+		var deliver: int = type_ids.get(str(cs.get("delivery_aircraft", "")), -1)
 		sim.set_crate_spawner({
 			"enabled": next_crates and next_mission == "",
 			"crate_type": type_ids["crate"],
 			"minimum": int(cs.get("minimum", 1)), "maximum": int(cs.get("maximum", 3)),
 			"spawn_interval": int(cs.get("spawn_interval", 3000)),
 			"initial_delay": int(cs.get("initial_delay", 1500)), "valid_ground": ground,
+			"delivery_type": deliver,
+			"quantized_facings": int(cs.get("quantized_facings", 16)),
+			"cordon": int(cs.get("cordon", 5120)),
 		})
 
 
@@ -2159,6 +2173,24 @@ func select_only(u: Unit) -> void:
 		u.selected = true
 		selection.append(u)
 	_voice("select")
+
+
+func select_exclusive(u: Unit) -> void:
+	clear_selection()
+	if u == null or not selectable(u):
+		return
+	u.selected = true
+	selection.append(u)
+	_voice("select")
+
+
+func select_append(u: Unit) -> bool:
+	if u == null or not selectable(u) or u.selected:
+		return false
+	u.selected = true
+	selection.append(u)
+	_voice("select")
+	return true
 
 
 func select_all_units() -> int:
@@ -3489,10 +3521,19 @@ func _process(delta: float) -> void:
 
 		var nukes_raw: PackedInt32Array = sim.pending_nukes()
 		_nukes.clear()
+		var nuke_now := {}
 		var nk := 0
 		while nk + 3 < nukes_raw.size():
-			_nukes.append({"owner": nukes_raw[nk], "pos": Vector2(nukes_raw[nk + 1], nukes_raw[nk + 2]), "ticks": nukes_raw[nk + 3]})
+			var npos := Vector2(nukes_raw[nk + 1], nukes_raw[nk + 2])
+			_nukes.append({"owner": nukes_raw[nk], "pos": npos, "ticks": nukes_raw[nk + 3]})
+			nuke_now["%d:%d:%d" % [nukes_raw[nk], nukes_raw[nk + 1], nukes_raw[nk + 2]]] = nukes_raw[nk + 3]
 			nk += 4
+
+
+		for key in _nuke_seen:
+			if not nuke_now.has(key) and int(_nuke_seen[key]) <= 2:
+				_nuke_flash = NUKE_FLASH_SEC
+		_nuke_seen = nuke_now
 		_nuke_layer.queue_redraw()
 
 
@@ -3757,8 +3798,18 @@ func gps_dots() -> Array:
 	return _gps_dots
 
 
+func nuke_flash() -> float:
+	return _nuke_flash
+
+
 func _draw_nuke_beacons() -> void:
 	_draw_gps_dots()
+
+	if _nuke_flash > 0.0:
+		_nuke_flash = maxf(0.0, _nuke_flash - get_process_delta_time())
+		_nuke_layer.draw_rect(visible_world_rect().grow(CELL),
+				Color(1, 1, 1, clampf(_nuke_flash / NUKE_FLASH_SEC, 0.0, 1.0)))
+		_nuke_layer.queue_redraw()
 	if _nukes.is_empty():
 		return
 	var now := Time.get_ticks_msec() / 1000.0

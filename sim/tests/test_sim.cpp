@@ -2018,13 +2018,19 @@ static void test_support_powers() {
     iron.support_power = SP_IRON_CURTAIN; iron.sp_charge = 20; iron.sp_duration = 50; iron.sp_dim_w = 3; iron.sp_dim_h = 3;
     iron.sp_footprint = {0, 1, 0, 1, 1, 1, 0, 1, 0}; iron.sp_notify_ready = NOTIFY_IRON_READY;
     UnitType pdox = iron; pdox.support_power = SP_CHRONOSHIFT; pdox.sp_duration = 30; pdox.sp_notify_ready = NOTIFY_CHRONO_READY;
+
+    EffectSeq up; up.first_frame = 0; up.length = 4; up.ticks_per_frame = 1;
+    EffectSeq down; down.first_frame = 10; down.length = 4; down.ticks_per_frame = 1;
+    const int fx_up = w.define_effect(up);
+    const int fx_down = w.define_effect(down);
     UnitType mslo = iron; mslo.support_power = SP_NUKE; mslo.sp_weapon = w_nuke; mslo.sp_flight = 40; mslo.sp_notify_ready = -1;
+    mslo.sp_launch_effect = fx_up; mslo.sp_impact_effect = fx_down;
     const int t_iron = w.define_type(iron), t_pdox = w.define_type(pdox), t_mslo = w.define_type(mslo);
     UnitType tank; tank.speed = 72; tank.turn_rate = 1024; tank.hp = 10000;
     const int t_tank = w.define_type(tank);
     w.spawn_building(t_iron, 0, {2, 2});
     w.spawn_building(t_pdox, 0, {2, 6});
-    w.spawn_building(t_mslo, 0, {2, 10});
+    const int32_t silo_id = w.spawn_building(t_mslo, 0, {2, 10});
     const int32_t my_tank = w.spawn(t_tank, 0, {15, 15});
     const size_t ti = w.actor_count() - 1;
     int av, rd, pm, ps;
@@ -2055,13 +2061,46 @@ static void test_support_powers() {
     w.set_alliance(0, 1, false);
     w.spawn(t_tank, 1, {25, 25});
     const size_t ei = w.actor_count() - 1;
+    const size_t si = size_t(w.index_of(silo_id));
     CHECK(w.activate_support_power(0, SP_NUKE, {25, 25}, {0, 0}));
-    for (int t = 0; t < 39; ++t) w.step();
+
+    CHECK(w.actor(si).active_ticks > 0);
+
+
+    auto nuke_sprite = [&](int32_t seq, WVec& pos, WDist& alt) {
+        std::vector<RenderSprite> rs;
+        w.render_sprites(0, rs);
+        for (const RenderSprite& r : rs)
+            if (r.weapon < 0 && r.seq == seq) { pos = WVec{r.x, r.y}; alt = r.alt; return true; }
+        return false;
+    };
+    WVec up_pos{}, down_pos{};
+    WDist up_alt0 = 0, up_alt1 = 0, down_alt0 = 0, down_alt1 = 0;
+    CHECK(nuke_sprite(fx_up, up_pos, up_alt0));
+    CHECK(up_pos.x == w.actor(si).pos.x && up_pos.y == w.actor(si).pos.y);
+    CHECK(up_alt0 == 0);
+    for (int t = 0; t < 10; ++t) w.step();
+    CHECK(nuke_sprite(fx_up, up_pos, up_alt1));
+    CHECK(up_alt1 > up_alt0);
+    for (int t = 0; t < 15; ++t) w.step();
+    CHECK(nuke_sprite(fx_down, down_pos, down_alt0));
+    CHECK(down_pos.x / CELL == 25 && down_pos.y / CELL == 25);
+    for (int t = 0; t < 10; ++t) w.step();
+    CHECK(nuke_sprite(fx_down, down_pos, down_alt1));
+    CHECK(down_alt1 < down_alt0);
+    CHECK(w.actor(ei).hp == 10000);
+    for (int t = 0; t < 4; ++t) w.step();
     CHECK(w.actor(ei).hp == 10000);
     w.step();
     CHECK(w.actor(ei).hp < 10000);
+    {
+        std::vector<RenderSprite> rs;
+        w.render_sprites(0, rs);
+        for (const RenderSprite& r : rs) CHECK(!(r.weapon < 0 && (r.seq == fx_up || r.seq == fx_down)));
+    }
     (void)my_tank;
-    std::printf("Superwaffen OK (Gegner nach Atomschlag %d HP)\n", w.actor(ei).hp);
+    std::printf("Superwaffen OK (Gegner nach Atomschlag %d HP; Rakete stieg auf %d, sank von %d, Silo-Klappe lief)\n",
+                w.actor(ei).hp, up_alt1, down_alt0);
 }
 
 
@@ -2478,6 +2517,9 @@ static void test_crates() {
         t_inf = w.define_type(inf);
         UnitType crate; crate.crate = true; crate.crate_duration = 0; crate.targetable = false;
         crate.crush_classes = CRUSH_CRATE; crate.hp = 1;
+
+
+        crate.passenger_weight = 1; crate.fall_rate = 26;
         CrateAction cash; cash.kind = CRATE_CASH; cash.shares = cash_shares; cash.amount = 1000;
         CrateAction give; give.kind = CRATE_UNIT; give.shares = unit_shares; give.units = {t_inf};
         crate.crate_actions = {cash, give};
@@ -2552,6 +2594,63 @@ static void test_crates() {
         for (int t = 0; t < 400; ++t) w.step();
         std::printf("Kisten: Spawner hält %u Kisten (Maximum 3)\n", w.crate_count());
         CHECK(w.crate_count() == 3);
+    }
+
+
+    {
+        World w;
+        std::vector<uint8_t> cost(40 * 40, 1);
+        w.set_map(40, 40, cost.data());
+        int32_t tc = 0, tt = 0, ti = 0;
+        make(w, tc, tt, ti, 100, 0);
+        UnitType badr;
+        badr.speed = 180; badr.turn_rate = 20; badr.hp = 10000; badr.aircraft = true;
+        badr.cruise_altitude = 2560; badr.altitude_velocity = 43; badr.cargo_max_weight = 10;
+        const int t_badr = w.define_type(badr);
+        CrateSpawnerParams p;
+        p.enabled = true; p.crate_type = tc; p.minimum = 1; p.maximum = 1;
+        p.spawn_interval = 100000; p.initial_delay = 1;
+        p.delivery_type = t_badr; p.quantized_facings = 16;
+        w.set_crate_spawner(p);
+        w.step();
+
+        int planes = 0;
+        for (size_t i = 0; i < w.actor_count(); ++i)
+            if (w.actor(i).alive && w.actor(i).type == t_badr) ++planes;
+        CHECK(planes == 1);
+        CHECK(w.crate_count() == 1);
+        int in_transport = 0;
+        for (size_t i = 0; i < w.actor_count(); ++i)
+            if (w.actor(i).alive && w.actor(i).type == tc && w.actor(i).transport >= 0) ++in_transport;
+        CHECK(in_transport == 1);
+
+        bool dropped = false, landed = false;
+        int alt_seen = 0;
+        for (int t = 0; t < 4000 && !landed; ++t) {
+            w.step();
+            for (size_t i = 0; i < w.actor_count(); ++i) {
+                const Actor& a = w.actor(i);
+                if (!a.alive || a.type != tc || a.transport >= 0) continue;
+                dropped = true;
+                if (w.air(i).alt > 0) alt_seen = w.air(i).alt;
+                else if (dropped) landed = true;
+            }
+        }
+        CHECK(dropped);
+        CHECK(alt_seen > 0);
+        CHECK(landed);
+
+        int left = 0;
+        for (int t = 0; t < 3000; ++t) {
+            w.step();
+            left = 0;
+            for (size_t i = 0; i < w.actor_count(); ++i)
+                if (w.actor(i).alive && w.actor(i).type == t_badr) ++left;
+            if (left == 0) break;
+        }
+        CHECK(left == 0);
+        CHECK(w.crate_count() == 1);
+        std::printf("Kisten: Badger warf die Kiste am Fallschirm ab (Höhe %d), flog weiter und verschwand\n", alt_seen);
     }
 
 

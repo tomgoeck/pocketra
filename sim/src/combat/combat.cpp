@@ -1277,10 +1277,34 @@ void World::dispose(size_t i) {
     if (t.storage > 0) clamp_storage(a.owner);
 }
 
+
+constexpr int32_t NUKE_FLIGHT_VELOCITY = 512;
+
 void World::render_sprites(int32_t alpha, std::vector<RenderSprite>& out) const {
     (void)alpha;
     for (const Projectile& p : projectiles_) out.push_back({p.pos.x, p.pos.y, p.alt, p.weapon, -1, 0, p.facing});
     for (const Effect& e : effects_) out.push_back({e.pos.x, e.pos.y, e.alt, -1, e.seq, e.frame, e.facing, e.owner});
+
+
+    for (const PendingNuke& n : pending_nukes_) {
+        if (n.type < 0 || size_t(n.type) >= types_.size()) continue;
+        const UnitType& t = types_[size_t(n.type)];
+        const int32_t total = std::max(1, n.total);
+        const int32_t turn = std::max(1, total / 2);
+        const int32_t elapsed = std::max(0, total - n.ticks);
+        const bool ascending = elapsed < turn;
+        const int32_t seq = ascending ? t.sp_launch_effect : t.sp_impact_effect;
+        if (seq < 0 || size_t(seq) >= effects_def_.size()) continue;
+        const int32_t peak = NUKE_FLIGHT_VELOCITY * (total - turn);
+        WVec pos = ascending ? n.launch_pos : n.target;
+        WDist alt = ascending
+            ? WDist(int64_t(peak) * elapsed / turn)
+            : WDist(peak - int64_t(peak) * (elapsed - turn) / std::max(1, total - turn));
+        const EffectSeq& es = effects_def_[size_t(seq)];
+        const int32_t len = std::max(1, es.length);
+        const int32_t frame = (elapsed / std::max(1, es.ticks_per_frame)) % len;
+        out.push_back({pos.x, pos.y, alt, -1, seq, frame, 0, -1});
+    }
 }
 
 uint32_t World::alive_count(int32_t owner) const {

@@ -549,6 +549,11 @@ struct CrateSpawnerParams {
     int32_t minimum = 1, maximum = 3;
     int32_t spawn_interval = 3000, initial_delay = 1500;
     uint32_t valid_ground = 0;
+
+
+    int32_t delivery_type = -1;
+    int32_t quantized_facings = 16;
+    WDist cordon = 5 * 1024;
 };
 
 
@@ -2468,6 +2473,8 @@ private:
     int32_t crate_shares(const CrateAction& ca, size_t collector) const;
     void run_crate_action(const CrateAction& ca, size_t collector, WVec at);
     bool spawn_crate();
+
+    bool deliver_crate(CPos target);
 
 
     void step_production();

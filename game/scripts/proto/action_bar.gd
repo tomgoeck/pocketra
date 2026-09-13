@@ -72,15 +72,7 @@ func open(items: Array, anchor: Vector2, title: String, ring: Vector2 = Vector2.
 	var cols: int = clampi(ITEMS.size(), 1, mini(MAX_COLS, fit))
 	_flow.custom_minimum_size = Vector2(cols * bw + (cols - 1) * gap, 0)
 	for id in ITEMS:
-		var b := Button.new()
-		b.text = tr("radial.action.%s" % id)
-		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		b.custom_minimum_size = Vector2(bw, Dp.px(BTN_H_DP))
-		HudTheme.plate_button_style(b, 12.0, 6.0)
-		var key := str(id)
-		b.pressed.connect(func(): _pick(key))
-		_flow.add_child(b)
-		_buttons[key] = b
+		_flow.add_child(_make_button(str(id), bw))
 	show()
 	_panel.reset_size()
 	_place(anchor, safe, min_y)
@@ -91,6 +83,17 @@ func open(items: Array, anchor: Vector2, title: String, ring: Vector2 = Vector2.
 		_panel.reset_size()
 		_place(anchor, safe, min_y)
 	queue_redraw()
+
+
+func _make_button(key: String, bw: float) -> Button:
+	var b := Button.new()
+	b.text = tr("radial.action.%s" % key)
+	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	b.custom_minimum_size = Vector2(bw, Dp.px(BTN_H_DP))
+	HudTheme.plate_button_style(b, 12.0, 6.0)
+	b.pressed.connect(func(): _pick(key))
+	_buttons[key] = b
+	return b
 
 
 func _place(anchor: Vector2, safe: Rect2, min_y: float) -> void:

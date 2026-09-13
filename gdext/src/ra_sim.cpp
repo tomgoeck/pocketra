@@ -1264,6 +1264,9 @@ void RaSim::set_crate_spawner(const Dictionary& params) {
     p.spawn_interval = int(params.get("spawn_interval", p.spawn_interval));
     p.initial_delay = int(params.get("initial_delay", p.initial_delay));
     p.valid_ground = uint32_t(int64_t(params.get("valid_ground", 0)));
+    p.delivery_type = int(params.get("delivery_type", -1));
+    p.quantized_facings = int(params.get("quantized_facings", p.quantized_facings));
+    p.cordon = int(params.get("cordon", p.cordon));
     world_.set_crate_spawner(p);
 }
 int RaSim::crate_count() const { return int(world_.crate_count()); }

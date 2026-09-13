@@ -39,6 +39,8 @@ bool World::spawn_crate() {
         if (((crate_p_.valid_ground >> map_.base_terrain(c)) & 1u) == 0) continue;
         if (!cell_empty(c)) continue;
         if (res_density_[size_t(idx)] > 0) continue;
+
+        if (crate_p_.delivery_type >= 0 && deliver_crate(c)) return true;
         const int32_t id = spawn(crate_p_.crate_type, neutral_player_ >= 0 ? neutral_player_ : 0, c, 0);
         const int i = index_of(id);
         if (i >= 0) actors_[size_t(i)].life_ticks = types_[crate_p_.crate_type].crate_duration;
@@ -48,11 +50,61 @@ bool World::spawn_crate() {
 }
 
 
+bool World::deliver_crate(CPos target) {
+    const int32_t plane_type = crate_p_.delivery_type;
+    if (plane_type < 0 || plane_type >= int32_t(types_.size())) return false;
+    const UnitType& pt = types_[size_t(plane_type)];
+    const int32_t owner = neutral_player_ >= 0 ? neutral_player_ : 0;
+
+    const int32_t facings = std::max(1, crate_p_.quantized_facings);
+    const WAngle drop_facing = WAngle((FULL_TURN * int32_t(rand() % uint32_t(facings))) / facings);
+
+
+    const WVec delta = direction_of(drop_facing);
+
+    auto edge_cell = [&](int sign) {
+        CPos last = target;
+        for (int step = 1; step <= map_.width() + map_.height(); ++step) {
+
+            const WVec p = cell_center(target) + WVec{int32_t(int64_t(delta.x) * sign * step * CELL / 1024),
+                                                      int32_t(int64_t(delta.y) * sign * step * CELL / 1024)};
+            const CPos c = to_cell(p);
+            if (!map_.in_bounds(c)) break;
+            last = c;
+        }
+        return last;
+    };
+    const CPos entry = edge_cell(-1);
+    const CPos exit_cell = edge_cell(1);
+    const int32_t plane_id = spawn(plane_type, owner, entry, drop_facing, 100, true);
+    const int pi = index_of(plane_id);
+    if (pi < 0) return false;
+
+
+    const int32_t crate_id = spawn(crate_p_.crate_type, owner, target, 0);
+    const int ci = index_of(crate_id);
+    if (ci < 0 || !load_passenger(plane_id, crate_id)) {
+        if (ci >= 0) dispose(size_t(ci));
+        dispose(size_t(pi));
+        return false;
+    }
+    actors_[size_t(ci)].life_ticks = types_[size_t(crate_p_.crate_type)].crate_duration;
+    order_move(&plane_id, 1, exit_cell, 0);
+    order_paradrop(plane_id, target);
+
+    const int32_t dist = length(cell_center(exit_cell) - cell_center(entry));
+    const int32_t speed = std::max(1, pt.speed);
+    actors_[size_t(pi)].life_ticks = std::max(1, (dist / speed) * 5 / 4);
+    return true;
+}
+
+
 void World::step_crates() {
+
 
     for (size_t i = 0; i < actors_.size(); ++i) {
         Actor& a = actors_[i];
-        if (!a.alive || !types_[a.type].crate || a.life_ticks <= 0) continue;
+        if (!a.alive || a.life_ticks <= 0) continue;
         if (--a.life_ticks <= 0) dispose(i);
     }
     if (!crate_p_.enabled) return;
