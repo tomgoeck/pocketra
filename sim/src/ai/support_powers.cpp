@@ -12,6 +12,13 @@ namespace {
 constexpr int32_t SP_RETRY_HIT = 10;
 
 
+constexpr uint32_t SP_STORM_DELAY = 300;
+
+
+constexpr int64_t SP_GATHER_NEAR_D2 = 16;
+constexpr int32_t SP_GATHER_READY_PERCENT = 80;
+
+
 constexpr int32_t SP_TARGET_RADIUS[SP_COUNT] = {3, 3, 5, 0};
 
 }
@@ -124,9 +131,25 @@ bool World::bot_sp_target(int32_t owner, int32_t kind, CPos& out, CPos& out2, in
 }
 
 
+bool World::bot_squad_at_gather(const BotSquad& s) const {
+    if (s.gather.x < 0 || s.units.empty()) return false;
+    int32_t ready = 0, alive = 0;
+    for (int32_t id : s.units) {
+        const int i = index_of(id);
+        if (i < 0) continue;
+        ++alive;
+        if (cell_dist_sq(mobiles_[size_t(i)].cell, s.gather) <= SP_GATHER_NEAR_D2) ++ready;
+    }
+    return alive > 0 && ready * 100 >= alive * SP_GATHER_READY_PERCENT;
+}
+
+
 void World::bot_support_powers(int32_t owner) {
     BotState& b = players_[size_t(owner)].bot;
     const BotParams& p = b.p;
+
+
+    if (!p.allow_support_powers) return;
     for (int32_t kind = 0; kind < SP_COUNT; ++kind) {
         if (b.sp_wait[kind] > 0) --b.sp_wait[kind];
         if (kind == SP_GPS) continue;
@@ -135,10 +158,22 @@ void World::bot_support_powers(int32_t owner) {
         if (!available || !ready || b.sp_wait[kind] > 0) continue;
 
 
+        BotSquad* waiting = nullptr;
+        for (BotSquad& s : b.squads) {
+            const bool fits = (s.vorhaben == VH_NUKE_PUSH && kind == SP_NUKE) ||
+                              (s.vorhaben == VH_CURTAIN_PUSH && (kind == SP_IRON_CURTAIN || kind == SP_CHRONOSHIFT));
+            if (fits && !s.units.empty()) { waiting = &s; break; }
+        }
+        if (waiting != nullptr && !bot_squad_at_gather(*waiting)) {
+            b.sp_wait[kind] = std::max(1, p.sp_scan_interval / 4);
+            continue;
+        }
+
+
         int32_t base = p.nuke_min_attractiveness;
         if (kind == SP_IRON_CURTAIN) base = p.iron_min_attractiveness;
         else if (kind == SP_CHRONOSHIFT) base = p.chrono_min_attractiveness;
-        const int64_t threshold = bot_plan_sp_threshold(owner, base);
+        const int64_t threshold = bot_vorhaben_sp_threshold(owner, base);
 
         CPos target{-1, -1}, target2{-1, -1};
         int64_t attraction = 0;
@@ -149,6 +184,7 @@ void World::bot_support_powers(int32_t owner) {
         if (activate_support_power(owner, kind, target, target2)) {
             ++b.stat_sp_fired;
             b.sp_wait[kind] = SP_RETRY_HIT;
+            if (waiting != nullptr) waiting->storm_at = tick_ + SP_STORM_DELAY;
         } else {
             b.sp_wait[kind] = std::max(1, p.sp_scan_interval);
         }

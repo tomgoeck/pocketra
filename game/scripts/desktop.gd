@@ -145,6 +145,9 @@ class Scroller extends Node:
 	const HARD_EDGE_DP := 6.0
 
 
+	const NOTCH_DP := 48.0
+
+
 	var pan := Callable()
 
 	var zoom := Callable()
@@ -306,6 +309,13 @@ class Scroller extends Node:
 				return Vector2.ZERO
 			if not DisplayServer.window_is_focused():
 				return Vector2.ZERO
+
+
+			if m.y < 0.0 and m.y >= -Dp.px(NOTCH_DP) and m.x >= 0.0 and m.x <= vs.x \
+					and OS.get_name() == "macOS" and not _confined:
+				var wm := DisplayServer.window_get_mode()
+				if wm == DisplayServer.WINDOW_MODE_FULLSCREEN or wm == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+					m.y = 0.0
 			if m.x < 0.0 or m.y < 0.0 or m.x > vs.x or m.y > vs.y:
 				return Vector2.ZERO
 		var edge := Dp.px(EDGE_DP)
@@ -336,7 +346,9 @@ class Scroller extends Node:
 			return
 		var m := DisplayServer.window_get_mode()
 		var full: bool = m == DisplayServer.WINDOW_MODE_FULLSCREEN or m == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
-		var want: bool = full and not _off()
+
+
+		var want: bool = full and not _off() and OS.get_name() != "macOS"
 		if want == _confined:
 			return
 		_confined = want

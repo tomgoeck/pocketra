@@ -18,6 +18,99 @@ STRATEGIES = ["normal", "rush", "turtle", "air", "naval"]
 ROW = re.compile(r"^TURNIER\s+(.*)$")
 
 
+SPALTEN = [
+    "gebaut", "superwaffen", "trupps", "erster_angriff", "lebend", "ertrag",
+    "armee", "bargeld", "belagerer_verloren", "in_turmreichweite", "tuerme", "trupp_verluste",
+    "schwere_verluste",
+]
+
+
+TITEL = {
+    "gebaut": ("Einheiten", 11), "superwaffen": ("Superw.", 9), "trupps": ("Trupps", 8),
+    "erster_angriff": ("1. Angriff", 12), "lebend": ("lebend", 8), "ertrag": ("Ertrag", 9),
+    "armee": ("Armee", 9), "bargeld": ("Bargeld", 9),
+    "belagerer_verloren": ("Belag.verl.", 12), "in_turmreichweite": ("i.Turmrw.", 11),
+    "tuerme": ("Türme", 7), "trupp_verluste": ("Tr.verl.", 10),
+    "schwere_verluste": ("schw.Verl.", 11),
+}
+
+
+def zahl(r: dict, spalte: str) -> int:
+
+    try:
+        return int(r.get(spalte, 0) or 0)
+    except ValueError:
+        return 0
+
+
+def mittel(rows: list[dict]) -> dict[str, dict]:
+
+    zusammen: dict[str, dict] = {}
+    for r in rows:
+        z = zusammen.setdefault(r.get("strategie", "?"), {"laeufe": 0, **{c: 0 for c in SPALTEN}})
+        z["laeufe"] += 1
+        for c in SPALTEN:
+            z[c] += zahl(r, c)
+    for z in zusammen.values():
+        n = max(1, z["laeufe"])
+        for c in SPALTEN:
+            z[c] //= n
+    return zusammen
+
+
+def bestenliste(rows: list[dict]) -> dict[str, dict]:
+
+    zusammen = mittel(rows)
+    kopf = f"{'Spielweise':<12}{'Läufe':>6}" + "".join(f"{TITEL[c][0]:>{TITEL[c][1]}}" for c in SPALTEN)
+    print()
+    print(kopf)
+    print("-" * len(kopf))
+    for name in sorted(zusammen, key=lambda k: -zusammen[k]["lebend"]):
+        z = zusammen[name]
+        print(f"{name:<12}{z['laeufe']:>6}" + "".join(f"{z[c]:>{TITEL[c][1]}}" for c in SPALTEN))
+
+    for name in sorted(zusammen):
+        z = zusammen[name]
+        if z["belagerer_verloren"] > 0:
+            anteil = 100 * z["in_turmreichweite"] // z["belagerer_verloren"]
+            print(f"  {name}: {anteil} % der verlorenen Belagerer starben in Turmreichweite "
+                  f"(Ziel < 20 %, docs/KI-STRATEGIE.md §5)")
+    return zusammen
+
+
+def lies_csv(pfad: Path) -> list[dict]:
+    with pfad.open(newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def vergleich(alt: Path, neu: Path) -> int:
+
+    for p in (alt, neu):
+        if not p.exists():
+            sys.stderr.write(f"FEHLER: {p} gibt es nicht\n")
+            return 1
+    a_rows, n_rows = lies_csv(alt), lies_csv(neu)
+    if not a_rows or not n_rows:
+        sys.stderr.write("FEHLER: eine der beiden Dateien ist leer\n")
+        return 1
+    a_mit, n_mit = mittel(a_rows), mittel(n_rows)
+    a_mit["ALLE"] = mittel([{**r, "strategie": "ALLE"} for r in a_rows])["ALLE"]
+    n_mit["ALLE"] = mittel([{**r, "strategie": "ALLE"} for r in n_rows])["ALLE"]
+    print(f"alt: {alt} ({len(a_rows)} Zeilen)    neu: {neu} ({len(n_rows)} Zeilen)")
+    for name in sorted(set(a_mit) | set(n_mit), key=lambda k: (k == "ALLE", k)):
+        a = a_mit.get(name)
+        n = n_mit.get(name)
+        if a is None or n is None:
+            print(f"\n{name}: nur in {'neu' if a is None else 'alt'} — übersprungen")
+            continue
+        print(f"\n{name}  (Läufe alt {a['laeufe']}, neu {n['laeufe']})")
+        print(f"  {'Kennzahl':<20}{'alt':>10}{'neu':>10}{'Differenz':>12}")
+        for c in SPALTEN:
+            d = n[c] - a[c]
+            print(f"  {c:<20}{a[c]:>10}{n[c]:>10}{d:>+12}")
+    return 0
+
+
 def run_match(godot: str, karte: str, strategien: list[str], seed: int, ticks: int,
               staerke: str, credits: int, verbose: bool) -> list[dict]:
 
@@ -74,7 +167,13 @@ def main() -> int:
     ap.add_argument("--credits", type=int, default=5000)
     ap.add_argument("--csv", default="", help="Ergebnisse zusätzlich als CSV ablegen")
     ap.add_argument("--laut", action="store_true", help="Godot-Ausgabe durchreichen")
+    ap.add_argument("--vergleich", nargs=2, metavar=("ALT.CSV", "NEU.CSV"), default=None,
+                    help="zwei fertige CSV-Dateien vergleichen (Mittel je Kennzahl und Differenz), "
+                         "ohne einen neuen Lauf zu starten")
     a = ap.parse_args()
+
+    if a.vergleich:
+        return vergleich(Path(a.vergleich[0]), Path(a.vergleich[1]))
 
     paarungen: list[list[str]] = [p.split(":") for p in a.paare]
     if a.alle or not paarungen:
@@ -95,23 +194,7 @@ def main() -> int:
         return 1
 
 
-    spalten = ["gebaut", "superwaffen", "trupps", "erster_angriff", "lebend", "ertrag"]
-    zusammen: dict[str, dict] = {}
-    for r in alle:
-        z = zusammen.setdefault(r.get("strategie", "?"), {"laeufe": 0, **{c: 0 for c in spalten}})
-        z["laeufe"] += 1
-        for c in spalten:
-            z[c] += int(r.get(c, 0) or 0)
-
-    kopf = f"{'Spielweise':<12}{'Läufe':>6}{'Einheiten':>11}{'Superw.':>9}{'Trupps':>8}{'1. Angriff':>12}{'lebend':>8}{'Ertrag':>10}"
-    print()
-    print(kopf)
-    print("-" * len(kopf))
-    for name in sorted(zusammen, key=lambda k: -zusammen[k]["lebend"] / max(1, zusammen[k]["laeufe"])):
-        z = zusammen[name]
-        n = max(1, z["laeufe"])
-        print(f"{name:<12}{z['laeufe']:>6}{z['gebaut'] // n:>11}{z['superwaffen'] // n:>9}"
-              f"{z['trupps'] // n:>8}{z['erster_angriff'] // n:>12}{z['lebend'] // n:>8}{z['ertrag'] // n:>10}")
+    bestenliste(alle)
 
     if a.csv:
         out = Path(a.csv)

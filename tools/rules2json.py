@@ -256,13 +256,20 @@ def balance_rules(path: Path = BALANCE_FILE) -> dict[str, bool]:
                 if top.key != "rules":
                     continue
                 for f in top.children:
-                    _BALANCE_RULES[f.key] = str(f.value).strip().lower() in ("true", "yes", "1")
+                    raw = str(f.value).strip()
+
+                    _BALANCE_RULES[f.key] = int(raw) if raw.lstrip("-").isdigit() else raw.lower() in ("true", "yes", "1")
     return _BALANCE_RULES
 
 
 def apply_actor_balance(act: dict, path: Path = BALANCE_FILE) -> bool:
 
     rules = balance_rules(path)
+
+
+    pct = rules.get("aircraft_hp_percent")
+    if isinstance(pct, int) and pct != 100 and act.get("aircraft") and not act.get("husk") and isinstance(act.get("hp"), int):
+        act["hp"] = max(1, act["hp"] * pct // 100)
     if rules.get("chrono_unlimited") and isinstance(act.get("portable_chrono"), dict):
         act["portable_chrono"]["max_distance"] = 0
 

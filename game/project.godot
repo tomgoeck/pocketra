@@ -41,7 +41,7 @@ config/custom_user_dir_name="Godot/app_userdata/pocketra"
 ; App-Version (nur mit einer neuen APK änderbar) — dieselbe Zahl steht in export_presets.cfg als
 ; version/name und landet über tools/update_pack.sh als apk_version in version.json.
 ; UpdateConfig.app_version() liest sie; min_supported in version.json vergleicht dagegen.
-config/version="0.24"
+config/version="0.25"
 run/main_scene="res://scenes/intro.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 ; Android-Zurücktaste beendet nicht die App — sie wird in proto_main/main_menu behandelt (Audit 09, N3)

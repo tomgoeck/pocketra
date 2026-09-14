@@ -205,7 +205,11 @@ void RaSim::_bind_methods() {
     ClassDB::bind_method(D_METHOD("bot_personality", "owner"), &RaSim::bot_personality);
     ClassDB::bind_method(D_METHOD("bot_enabled", "owner"), &RaSim::bot_enabled);
     ClassDB::bind_method(D_METHOD("bot_plan", "owner"), &RaSim::bot_plan);
+    ClassDB::bind_method(D_METHOD("bot_vorhaben", "owner"), &RaSim::bot_vorhaben);
+    ClassDB::bind_method(D_METHOD("bot_vorhaben_log", "owner"), &RaSim::bot_vorhaben_log);
     ClassDB::bind_method(D_METHOD("bot_stat", "owner", "which"), &RaSim::bot_stat);
+    ClassDB::bind_method(D_METHOD("bot_stats", "owner"), &RaSim::bot_stats);
+    ClassDB::bind_method(D_METHOD("bot_squad_info", "owner"), &RaSim::bot_squad_info);
     ClassDB::bind_method(D_METHOD("set_handicap", "owner", "percent"), &RaSim::set_handicap);
     ClassDB::bind_method(D_METHOD("handicap", "owner"), &RaSim::handicap);
     ClassDB::bind_method(D_METHOD("set_crate_spawner", "params"), &RaSim::set_crate_spawner);
@@ -1234,6 +1238,33 @@ void RaSim::enable_bot(int owner, const Dictionary& params) {
     p.initial_min_refineries = int(params.get("initial_min_refineries", p.initial_min_refineries));
     p.additional_min_refineries = int(params.get("additional_min_refineries", p.additional_min_refineries));
     p.min_construction_yards = int(params.get("min_construction_yards", p.min_construction_yards));
+
+
+    p.difficulty = int(params.get("difficulty", p.difficulty));
+    p.gather_max_ticks = int(params.get("gather_max_ticks", p.gather_max_ticks));
+    p.regen_ticks = int(params.get("regen_ticks", p.regen_ticks));
+    p.allow_raid = int(params.get("allow_raid", p.allow_raid));
+    p.allow_siege = int(params.get("allow_siege", p.allow_siege));
+    p.allow_support_powers = int(params.get("allow_support_powers", p.allow_support_powers));
+    p.allow_air_squad = int(params.get("allow_air_squad", p.allow_air_squad));
+    p.allow_counterattack = int(params.get("allow_counterattack", p.allow_counterattack));
+    p.allow_pincer = int(params.get("allow_pincer", p.allow_pincer));
+    p.min_first_attack_tick = int(params.get("min_first_attack_tick", p.min_first_attack_tick));
+
+
+    p.harvesters_per_refinery = int(params.get("harvesters_per_refinery", p.harvesters_per_refinery));
+    p.max_conyards = int(params.get("max_conyards", p.max_conyards));
+    p.surplus_cash = int(params.get("surplus_cash", p.surplus_cash));
+    p.defense_budget_percent = int(params.get("defense_budget_percent", p.defense_budget_percent));
+    p.sell_on_loss = int(params.get("sell_on_loss", p.sell_on_loss));
+
+
+    p.max_running_vorhaben = int(params.get("max_running_vorhaben", p.max_running_vorhaben));
+    p.counter_interval = int(params.get("counter_interval", p.counter_interval));
+    p.vorhaben_random_percent = int(params.get("vorhaben_random_percent", p.vorhaben_random_percent));
+
+    p.reaction_min_ticks = int(params.get("reaction_min_ticks", p.reaction_min_ticks));
+    p.reaction_max_ticks = int(params.get("reaction_max_ticks", p.reaction_max_ticks));
     static const char* TABLE_KEYS[5] = {"building_fraction", "building_limit", "building_delay", "unit_share", "unit_limit"};
     std::vector<int32_t>* tables[5] = {&p.building_fraction, &p.building_limit, &p.building_delay, &p.unit_share, &p.unit_limit};
     for (int k = 0; k < 5; ++k) {
@@ -1250,9 +1281,79 @@ int RaSim::bot_squad_count(int owner) const { return int(world_.bot_squad_count(
 int RaSim::pick_bot_personality() { return int(world_.bot_pick_personality()); }
 int RaSim::bot_personality(int owner) const { return int(world_.bot_personality(owner)); }
 bool RaSim::bot_enabled(int owner) const { return world_.bot_enabled(owner); }
-int RaSim::bot_plan(int owner) const { return int(world_.bot_plan(owner)); }
+int RaSim::bot_vorhaben(int owner) const { return int(world_.bot_vorhaben(owner)); }
+int RaSim::bot_plan(int owner) const { return int(world_.bot_vorhaben(owner)); }
+
+
+Array RaSim::bot_vorhaben_log(int owner) const {
+    Array out;
+    if (!world_.bot_enabled(owner)) return out;
+    for (const ra::BotVorhabenLog& e : world_.bot_vorhaben_log(owner)) {
+        Dictionary d;
+        d["vorhaben"] = int(e.vorhaben);
+        d["start"] = int(e.start);
+        d["end"] = int(e.end);
+        d["result"] = int(e.result);
+        out.push_back(d);
+    }
+    return out;
+}
 
 int RaSim::bot_stat(int owner, int which) const { return int(world_.bot_stat(owner, which)); }
+
+
+Dictionary RaSim::bot_stats(int owner) {
+    Dictionary d;
+    if (!world_.bot_enabled(owner)) return d;
+    world_.bot_stat_sample(owner);
+    const ra::BotState& b = world_.bot_state(owner);
+    d["gebaut"] = int(b.stat_units_built);
+    d["superwaffen"] = int(b.stat_sp_fired);
+    d["trupps"] = int(b.stat_squads_sent);
+    d["erster_angriff"] = int(b.stat_first_attack);
+    d["armee"] = int(b.stat_army_value);
+    d["bargeld"] = int(b.stat_cash_samples > 0 ? b.stat_cash_sum / b.stat_cash_samples : 0);
+    d["tuerme"] = int(b.stat_towers);
+    d["belagerer_verloren"] = int(b.stat_siege_lost);
+    d["in_turmreichweite"] = int(b.stat_siege_lost_in_range);
+    d["trupp_verluste"] = int(b.stat_squad_units_lost);
+    d["schwere_verluste"] = -1;
+    return d;
+}
+
+
+Array RaSim::bot_squad_info(int owner) const {
+    Array out;
+    if (!world_.bot_enabled(owner)) return out;
+    const ra::BotState& b = world_.bot_state(owner);
+    Dictionary head;
+    Array orders;
+    for (int r = 0; r < ra::ROLE_COUNT; ++r) orders.push_back(int(b.vh_orders[r]));
+    head["bestellungen"] = orders;
+    head["vh_pending"] = int(b.vh_pending);
+    head["reserve"] = int(b.idle_base_units.size());
+    out.push_back(head);
+    for (const ra::BotSquad& s : b.squads) {
+        Dictionary d;
+        d["typ"] = int(s.type);
+        d["zustand"] = int(s.state);
+        d["groesse"] = int(s.units.size());
+        d["start"] = int(s.start_size);
+        d["sammel_x"] = int(s.gather.x);
+        d["sammel_y"] = int(s.gather.y);
+        d["ziel"] = int(s.target);
+        d["vorhaben"] = int(s.vorhaben);
+        d["sturm"] = int(s.storm ? 1 : 0);
+        d["sammel_seit"] = int(s.gather_start);
+        d["regen_bis"] = int(s.regen_until);
+        d["sturm_ab"] = int(s.storm_at);
+        const int li = s.leader >= 0 ? world_.index_of(s.leader) : -1;
+        d["fuehrer_x"] = li >= 0 ? int(world_.mobile(size_t(li)).cell.x) : -1;
+        d["fuehrer_y"] = li >= 0 ? int(world_.mobile(size_t(li)).cell.y) : -1;
+        out.push_back(d);
+    }
+    return out;
+}
 
 
 void RaSim::set_crate_spawner(const Dictionary& params) {

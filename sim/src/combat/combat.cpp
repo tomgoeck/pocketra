@@ -1136,6 +1136,9 @@ void World::kill(size_t i, int32_t damage_type, int32_t attacker_id) {
     const int atk = attacker_id >= 0 ? index_of(attacker_id) : -1;
     actors_[i].last_attacker_owner = atk >= 0 ? actors_[atk].owner : -1;
 
+
+    bot_stat_note_death(i);
+
     on_kill_experience(i, attacker_id);
 
 
@@ -1311,6 +1314,69 @@ uint32_t World::alive_count(int32_t owner) const {
     uint32_t n = 0;
     for (const Actor& a : actors_) n += (a.alive && (owner < 0 || a.owner == owner)) ? 1 : 0;
     return n;
+}
+
+
+int32_t World::bot_stat_army_value(int32_t owner) const {
+    int64_t sum = 0;
+    for (const Actor& a : actors_) {
+        if (!a.alive || a.owner != owner) continue;
+        const UnitType& t = types_[a.type];
+        if (t.building || t.husk || t.harvester || t.weapon < 0) continue;
+        sum += t.cost;
+    }
+    return int32_t(std::min<int64_t>(sum, INT32_MAX));
+}
+
+
+int32_t World::bot_stat_towers(int32_t owner) const {
+    int32_t n = 0;
+    for (const Actor& a : actors_) {
+        if (!a.alive || a.owner != owner) continue;
+        const UnitType& t = types_[a.type];
+        if (!t.building || !t.defense || a.sell_ticks >= 0) continue;
+        ++n;
+    }
+    return n;
+}
+
+
+void World::bot_stat_sample(int32_t owner) {
+    if (owner < 0 || owner >= MAX_PLAYERS) return;
+    BotState& b = players_[size_t(owner)].bot;
+    if (!b.enabled) return;
+    b.stat_army_value = bot_stat_army_value(owner);
+    b.stat_towers = bot_stat_towers(owner);
+    b.stat_cash_sum += credits(owner);
+    ++b.stat_cash_samples;
+}
+
+
+void World::bot_stat_note_death(size_t i) {
+    const Actor& dead = actors_[i];
+    if (dead.owner < 0 || dead.owner >= MAX_PLAYERS) return;
+    BotState& b = players_[size_t(dead.owner)].bot;
+    if (!b.enabled) return;
+    for (const BotSquad& s : b.squads) {
+        if (std::find(s.units.begin(), s.units.end(), dead.id) == s.units.end()) continue;
+        ++b.stat_squad_units_lost;
+        break;
+    }
+    if (!bot_unit_is_siege(i)) return;
+    ++b.stat_siege_lost;
+    const WVec at = dead.pos;
+    const int32_t owner = dead.owner;
+    for (const Actor& c : actors_) {
+        if (!c.alive || !hostile(owner, c.owner)) continue;
+        const UnitType& t = types_[c.type];
+        if (!t.building || !t.defense) continue;
+        const int32_t arms[3] = {t.weapon, t.weapon_secondary, t.weapon_tertiary};
+        int64_t range = 0;
+        for (int32_t wi : arms)
+            if (wi >= 0 && size_t(wi) < weapons_.size()) range = std::max<int64_t>(range, weapons_[size_t(wi)].range);
+        if (range <= 0) continue;
+        if (length(c.pos - at) <= range) { ++b.stat_siege_lost_in_range; break; }
+    }
 }
 
 }

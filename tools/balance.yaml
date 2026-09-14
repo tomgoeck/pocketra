@@ -8,3 +8,4 @@ rules:
 	c4_bridges: true
 	chrono_unlimited: true
 	buildable_area_all: true
+	aircraft_hp_percent: 150

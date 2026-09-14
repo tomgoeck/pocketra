@@ -94,10 +94,51 @@ const START_CREDITS := 5000
 
 
 const AI_DIFFICULTIES := ["easy", "normal", "hard"]
-const AI_BOT_TYPES := {"easy": "normal", "normal": "normal", "hard": "rush"}
-const AI_HANDICAPS := {"easy": 50, "normal": 25, "hard": 10}
+const AI_HANDICAPS := {"easy": 50, "normal": 0, "hard": 0}
 
 const AI_RUSH_OFF := 100000
+
+
+const AI_LEVELS := {
+	"easy": {
+		"reaction_min_ticks": 100, "reaction_max_ticks": 200,
+		"difficulty": 0,
+		"strategy_interval": 400, "attack_force_interval": 150,
+		"gather_max_ticks": 1000, "regen_ticks": 2500,
+		"min_first_attack_tick": 8000,
+		"allow_raid": 0, "allow_siege": 0, "allow_support_powers": 0,
+		"allow_air_squad": 0, "allow_counterattack": 0, "allow_pincer": 0,
+
+
+		"max_running_vorhaben": 1, "vorhaben_random_percent": 40, "counter_interval": 0,
+		"squad_size_percent": 200, "rush": false,
+	},
+	"normal": {
+		"reaction_min_ticks": 50, "reaction_max_ticks": 100,
+		"difficulty": 1,
+		"strategy_interval": 200, "attack_force_interval": 75,
+		"gather_max_ticks": 600, "regen_ticks": 1500,
+		"min_first_attack_tick": 0,
+		"allow_raid": 1, "allow_siege": 1, "allow_support_powers": 1,
+		"allow_air_squad": 1, "allow_counterattack": 0, "allow_pincer": 0,
+		"max_running_vorhaben": 2, "vorhaben_random_percent": 25, "counter_interval": 750,
+		"squad_size_percent": 100, "rush": true,
+	},
+	"hard": {
+		"reaction_min_ticks": 25, "reaction_max_ticks": 60,
+		"difficulty": 2,
+		"strategy_interval": 100, "attack_force_interval": 50,
+		"gather_max_ticks": 400, "regen_ticks": 1000,
+		"min_first_attack_tick": 0,
+		"allow_raid": 1, "allow_siege": 1, "allow_support_powers": 1,
+
+		"max_running_vorhaben": 3, "vorhaben_random_percent": 20, "counter_interval": 500,
+		"allow_air_squad": 1, "allow_counterattack": 1, "allow_pincer": 1,
+		"squad_size_percent": 75, "rush": true,
+	},
+}
+
+const AI_LEVEL_LOCAL_KEYS := ["squad_size_percent", "rush"]
 static var next_ai_difficulty := "normal"
 
 
@@ -1605,7 +1646,7 @@ func _spawn_start(player: int, cell: Vector2i, faction: String = "allies") -> vo
 func _bot_params(difficulty: String, strategy: String = "") -> Dictionary:
 	var p: Dictionary = {}
 	if strategy == "" or not AI_STRATEGY_BOT_TYPES.has(strategy):
-		strategy = AI_BOT_TYPES.get(difficulty, "normal")
+		strategy = "normal"
 	p["personality"] = int(AI_PERSONALITY_IDS.get(strategy, 0))
 	var bot: Dictionary = rules.ai.get("bots", {}).get(AI_STRATEGY_BOT_TYPES.get(strategy, "normal"), {})
 	var src: Dictionary = bot.get("params", {})
@@ -1621,9 +1662,13 @@ func _bot_params(difficulty: String, strategy: String = "") -> Dictionary:
 
 
 	p["squad_size_random_bonus"] = maxi(1, int(p["squad_size"]) / 2)
-	if difficulty == "easy":
 
-		p["squad_size"] *= 2
+	var lvl: Dictionary = AI_LEVELS.get(difficulty, AI_LEVELS["normal"])
+	for k in lvl:
+		if not AI_LEVEL_LOCAL_KEYS.has(k):
+			p[k] = int(lvl[k])
+	p["squad_size"] = maxi(4, int(p["squad_size"]) * int(lvl.get("squad_size_percent", 100)) / 100)
+	if not bool(lvl.get("rush", true)):
 		p["rush_interval"] = AI_RUSH_OFF
 	const TABLE_DEFAULTS := {"building_fraction": -1, "building_limit": 2147483647, "building_delay": 0,
 							 "unit_share": -1, "unit_limit": 2147483647}
@@ -1637,6 +1682,32 @@ func _bot_params(difficulty: String, strategy: String = "") -> Dictionary:
 			if type_ids.has(name):
 				arr[int(type_ids[name])] = int(bot[TABLE_SOURCES[key]][name])
 		p[key] = arr
+
+
+	const AI_ECONOMY := {
+		"normal": [3, 4, 3000, 100, 1],
+		"rush":   [2, 3, 2000,  60, 1],
+		"turtle": [3, 4, 3000, 150, 1],
+		"air":    [3, 3, 3000, 100, 1],
+		"naval":  [3, 4, 3000, 100, 1],
+	}
+	var eco: Array = AI_ECONOMY.get(strategy, AI_ECONOMY["normal"])
+	p["harvesters_per_refinery"] = int(eco[0])
+	p["max_conyards"] = int(eco[1])
+	p["surplus_cash"] = int(eco[2])
+	p["defense_budget_percent"] = int(eco[3])
+	p["sell_on_loss"] = int(eco[4])
+
+
+	if difficulty == "easy":
+		p["harvesters_per_refinery"] = mini(int(p["harvesters_per_refinery"]), 2)
+		p["max_conyards"] = mini(int(p["max_conyards"]), 2)
+		p["surplus_cash"] = maxi(int(p["surplus_cash"]), 5000)
+		p["defense_budget_percent"] = int(p["defense_budget_percent"]) / 2
+		p["sell_on_loss"] = 0
+	elif difficulty == "hard":
+		p["surplus_cash"] = mini(int(p["surplus_cash"]), 2000)
+		p["defense_budget_percent"] = maxi(int(p["defense_budget_percent"]), 100)
 	return p
 
 

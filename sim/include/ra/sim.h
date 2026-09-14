@@ -213,6 +213,11 @@ constexpr int32_t RICH_LOADS = 2;
 
 constexpr int32_t GEM_BONUS = 150;
 
+
+constexpr int32_t THIN_PENALTY = 150;
+constexpr int32_t FULLNESS_OWN_WEIGHT = 3;
+constexpr int32_t FULLNESS_MAX = (FULLNESS_OWN_WEIGHT + 8) * ORE_MAX_DENSITY;
+
 constexpr int32_t REFINERY_DIRECTION_PENALTY = 200;
 
 constexpr int32_t MAX_DOCK_QUEUE = 3;
@@ -563,7 +568,66 @@ enum BotPersonality {
 };
 
 
-enum BotPlan { PLAN_ECONOMY = 0, PLAN_PRESSURE = 1, PLAN_AIR_STRIKE = 2, PLAN_SIEGE = 3, PLAN_DEFEND = 4, PLAN_COUNT = 5 };
+enum BotVorhaben {
+    VH_SCOUT = 0,
+    VH_ORE_RAID = 1,
+    VH_TANK_PUSH = 2,
+    VH_SIEGE = 3,
+    VH_INFANTRY_FLOOD = 4,
+    VH_AIR_STRIKE = 5,
+    VH_ENGINEER = 6,
+    VH_COMMANDO = 7,
+    VH_PINCER = 8,
+    VH_COUNTERATTACK = 9,
+    VH_EXPANSION_GUARD = 10,
+    VH_NUKE_PUSH = 11,
+    VH_CURTAIN_PUSH = 12,
+    VH_TURTLE = 13,
+    VH_ECONOMY = 14,
+    VH_COUNT = 15
+};
+
+
+enum BotRole {
+    ROLE_TANK = 0,
+    ROLE_SIEGE = 1,
+    ROLE_FAST = 2,
+    ROLE_INFANTRY = 3,
+    ROLE_AA = 4,
+    ROLE_ENGINEER = 5,
+    ROLE_COMMANDO = 6,
+    ROLE_AIR = 7,
+    ROLE_COUNT = 8
+};
+
+
+enum BotGoalScheme {
+    GS_DEFENSE_FIRST = 0,
+    GS_HARVESTER_FIRST = 1,
+    GS_TECH_FIRST = 2,
+    GS_POWER_FIRST = 3,
+    GS_GUARD = 4
+};
+
+
+struct BotStrategyFacts {
+    int64_t credits = 0;
+    int32_t refineries = 0, harvesters = 0, conyards = 0;
+    int32_t own_army = 0, enemy_army = 0;
+    int32_t own_aircraft = 0, enemy_aa = 0;
+    int32_t siege_units = 0;
+    int32_t own_fast = 0, own_infantry = 0, own_engineers = 0, own_commandos = 0;
+    int32_t enemy_defenses = 0, enemy_harvesters = 0, enemy_buildings = 0;
+    int32_t base_threat = 0, base_guard = 0;
+    int32_t reserve = 0;
+};
+
+
+struct BotVorhabenLog {
+    int32_t vorhaben = -1;
+    uint32_t start = 0, end = 0;
+    int32_t result = 0;
+};
 
 struct BotParams {
 
@@ -611,7 +675,6 @@ struct BotParams {
 
     int32_t personality = BOT_P_NORMAL;
     int32_t strategy_interval = 200;
-    int32_t plan_weight[PLAN_COUNT] = {100, 100, 100, 100, 100};
 
     int32_t threat_map_interval = 97, threat_map_side = 6;
 
@@ -629,15 +692,46 @@ struct BotParams {
     int32_t aa_per_unit = 3;
 
     int32_t raid_squad_size = 4, raid_interval = 1500;
-    int32_t siege_range_percent = 85;
+    int32_t siege_range_percent = 95;
     int32_t first_attack_tick = 0;
+
+
+    int32_t difficulty = 1;
+    int32_t gather_max_ticks = 600;
+    int32_t regen_ticks = 1500;
+
+    int32_t allow_raid = 1;
+    int32_t allow_siege = 1;
+    int32_t allow_support_powers = 1;
+    int32_t allow_air_squad = 1;
+    int32_t allow_counterattack = 1;
+    int32_t allow_pincer = 1;
+    int32_t min_first_attack_tick = 0;
+
+
+    int32_t harvesters_per_refinery = 3;
+    int32_t max_conyards = 4;
+    int32_t surplus_cash = 3000;
+    int32_t defense_budget_percent = 100;
+    int32_t sell_on_loss = 1;
+
+
+    int32_t max_running_vorhaben = 3;
+    int32_t counter_interval = 500;
+
+
+    int32_t reaction_min_ticks = 0;
+    int32_t reaction_max_ticks = 0;
+    int32_t vorhaben_random_percent = 20;
+    int32_t vorhaben_weight[VH_COUNT] = {100, 100, 100, 100, 100, 100, 100, 100,
+                                         100, 100, 100, 100, 100, 100, 100};
 };
 
 struct BotSquad {
 
 
     enum Type { ASSAULT, RUSH, PROTECTION, AIR, RAID, NAVAL };
-    enum State { IDLE, ATTACK_MOVE, ATTACK, FLEE };
+    enum State { IDLE, ATTACK_MOVE, ATTACK, FLEE, GATHER };
     Type type = ASSAULT;
     State state = IDLE;
     std::vector<int32_t> units;
@@ -648,6 +742,22 @@ struct BotSquad {
     int32_t last_target = -1;
     int32_t backoff = 4;
     bool dead = false;
+
+    CPos gather{-1, -1};
+    uint32_t gather_start = 0;
+    uint32_t protect_since = 0;
+    uint32_t regen_until = 0;
+    uint32_t siege_start = 0;
+
+    int32_t goal_target = -1;
+    bool storm = false;
+    int32_t update_ticks = 1;
+
+    int32_t vorhaben = -1;
+    int32_t scheme = GS_DEFENSE_FIRST;
+    int32_t start_size = 0;
+    uint32_t storm_at = 0;
+    int32_t gather_side = 0;
 };
 
 
@@ -695,6 +805,9 @@ struct BotState {
     std::vector<int32_t> active_units;
     std::vector<int32_t> idle_base_units;
     int32_t rush_ticks = 0, assign_roles_ticks = 0, attack_force_ticks = 0, min_attack_force_delay_ticks = 0;
+
+
+    int32_t squad_cursor = 0;
     int32_t respond_cooldown = 30;
     int32_t protect_from = -1;
     bool first_tick = true;
@@ -736,8 +849,6 @@ struct BotState {
     int32_t saboteur_ticks = 0;
 
     int32_t personality = BOT_P_NORMAL;
-    int32_t plan = PLAN_ECONOMY;
-    int32_t plan_score = 0;
     int32_t strategy_ticks = 0, raid_ticks = 0, threat_ticks = 0;
 
 
@@ -749,6 +860,55 @@ struct BotState {
 
     int32_t stat_units_built = 0, stat_sp_fired = 0, stat_squads_sent = 0;
     uint32_t stat_first_attack = 0;
+
+
+    std::vector<int32_t> attack_heat;
+    int32_t attack_sum = 0;
+    int32_t attack_log_cooldown = 0;
+    int32_t attack_decay_ticks = 0;
+    int32_t sell_loss_ticks = 0;
+
+
+    int32_t vorhaben_lead = VH_ECONOMY;
+    int32_t vorhaben_score = 0;
+    int32_t vh_running[VH_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    uint32_t vh_start[VH_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    int32_t vh_success[VH_COUNT] = {100, 100, 100, 100, 100, 100, 100, 100,
+                                    100, 100, 100, 100, 100, 100, 100};
+    int32_t vh_cooldown[VH_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+
+    int32_t vh_ref[VH_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    int32_t vh_last[2] = {-1, -1};
+    int32_t vh_orders[ROLE_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0};
+    int32_t vh_pending = -1;
+
+
+    int32_t counter_ticks = 0;
+    int32_t counter_class[3] = {0, 0, 0};
+    std::vector<int32_t> seen_ids;
+    std::vector<uint32_t> seen_ticks;
+
+    int32_t attack_peak = 0;
+
+    std::vector<BotVorhabenLog> vorhaben_log;
+
+
+    int32_t react_q[NUM_QUEUES] = {-1, -1, -1, -1, -1, -1};
+
+
+    int32_t naval_alarm_id = -1;
+    CPos naval_alarm_cell{-1, -1};
+    uint32_t naval_alarm_tick = 0;
+    int32_t stat_army_value = 0;
+    int32_t stat_towers = 0;
+    int64_t stat_cash_sum = 0;
+    int32_t stat_cash_samples = 0;
+    int32_t stat_siege_lost = 0;
+    int32_t stat_siege_lost_in_range = 0;
+
+    int32_t stat_squad_units_lost = 0;
+
 };
 
 struct PlayerState {
@@ -1968,6 +2128,8 @@ public:
     void set_resource(CPos c, int32_t type, int32_t density);
     int32_t resource_type(CPos c) const { return map_.in_bounds(c) ? res_type_[map_.index(c)] : RES_NONE; }
     int32_t resource_density(CPos c) const { return map_.in_bounds(c) ? res_density_[map_.index(c)] : 0; }
+
+    int32_t cell_fullness(CPos c) const;
     const std::vector<uint8_t>& resource_types() const { return res_type_; }
     const std::vector<uint8_t>& resource_densities() const { return res_density_; }
     uint32_t resource_version() const { return resource_version_; }
@@ -2048,7 +2210,14 @@ public:
     int32_t bot_pick_personality() { return int32_t(rand() % uint32_t(BOT_P_RANDOM)); }
 
     int32_t bot_personality(int32_t owner) const { return bot_enabled(owner) ? players_[owner].bot.personality : -1; }
-    int32_t bot_plan(int32_t owner) const { return bot_enabled(owner) ? players_[owner].bot.plan : -1; }
+
+
+    int32_t bot_vorhaben(int32_t owner) const { return bot_enabled(owner) ? players_[owner].bot.vorhaben_lead : -1; }
+    int32_t bot_plan(int32_t owner) const { return bot_vorhaben(owner); }
+
+    const std::vector<BotVorhabenLog>& bot_vorhaben_log(int32_t owner) const {
+        return players_[owner < 0 || owner >= MAX_PLAYERS ? 0 : owner].bot.vorhaben_log;
+    }
     int32_t bot_stat(int32_t owner, int32_t which) const {
         if (!bot_enabled(owner)) return 0;
         const BotState& b = players_[owner].bot;
@@ -2110,12 +2279,28 @@ public:
     int32_t bot_threat_at(int32_t owner, CPos c, bool enemy) const;
     int32_t bot_firepower_of(size_t i) const;
 
-    void bot_strategy(int32_t owner);
-    int32_t bot_plan_score(int32_t owner, int32_t plan) const;
+    void bot_vorhaben_wahl(int32_t owner);
+    BotStrategyFacts bot_strategy_facts(int32_t owner) const;
+    int32_t bot_vorhaben_lage(int32_t owner, int32_t vh, const BotStrategyFacts& f) const;
+    int32_t bot_vorhaben_lage(int32_t owner, int32_t vh) const {
+        return bot_vorhaben_lage(owner, vh, bot_strategy_facts(owner));
+    }
+    bool bot_vorhaben_allowed(int32_t owner, int32_t vh) const;
+    void bot_vorhaben_start(int32_t owner, int32_t vh);
+    void bot_vorhaben_end(int32_t owner, int32_t vh, bool success);
+    void bot_vorhaben_review(int32_t owner);
+    int32_t bot_vorhaben_squad_size(int32_t owner) const;
+    int32_t bot_vorhaben_sp_threshold(int32_t owner, int32_t base) const;
+    bool bot_vorhaben_heavy(int32_t vh) const;
+    int32_t bot_vorhaben_scheme(int32_t vh) const;
+    int32_t bot_role_of_type(size_t t) const;
+    int32_t bot_counter_share(int32_t owner, size_t t) const;
+    void bot_counter_scan(int32_t owner);
     int64_t bot_target_value(size_t i) const;
     int32_t bot_pick_target(int32_t owner, WVec from, int64_t radius, bool ignore_airborne) const;
 
     void bot_support_powers(int32_t owner);
+    bool bot_squad_at_gather(const BotSquad& s) const;
     bool bot_sp_target(int32_t owner, int32_t kind, CPos& out, CPos& out2, int64_t& attraction) const;
     int64_t bot_sp_attraction(int32_t owner, int32_t kind, CPos c) const;
 
@@ -2125,8 +2310,34 @@ public:
     void bot_update_raid_squad(int32_t owner, BotSquad& s);
     int32_t bot_raid_target(int32_t owner, WVec from) const;
     bool bot_squad_siege(int32_t owner, BotSquad& s);
-    int32_t bot_plan_squad_size(int32_t owner) const;
-    int32_t bot_plan_sp_threshold(int32_t owner, int32_t base) const;
+
+
+    int32_t bot_front_target(int32_t owner, WVec from, int64_t radius,
+                             int32_t scheme = GS_DEFENSE_FIRST, bool buildings_only = false) const;
+    bool bot_gather_point(int32_t owner, CPos from, CPos& out, int32_t side = 0) const;
+
+
+    bool bot_shore_firing_cell(size_t unit, size_t target, const std::vector<uint8_t>& reach, CPos& out) const;
+    bool bot_reaction_ready(int32_t owner, int32_t kind);
+    void bot_reaction_reset(int32_t owner, int32_t kind);
+    void bot_reaction_tick(int32_t owner);
+    int32_t bot_focus_target(int32_t owner, const BotSquad& s, WVec center) const;
+
+    int32_t bot_harvester_target(int32_t owner) const;
+    int32_t bot_free_resource_fields(int32_t owner) const;
+    int32_t bot_max_conyards(int32_t owner, int32_t yards) const;
+    int32_t bot_pending_cost(int32_t owner) const;
+    int32_t bot_spend_surplus(int32_t owner, int32_t kind, const std::vector<int32_t>& buildable_list,
+                              const std::vector<int32_t>& count) const;
+    int32_t bot_defense_request(int32_t owner, const std::vector<int32_t>& buildable_list,
+                                const std::vector<int32_t>& count) const;
+    int32_t bot_defense_firepower(int32_t owner) const;
+    int32_t bot_defense_budget(int32_t owner) const;
+    bool bot_enemy_has_air(int32_t owner) const;
+    void bot_log_attack(int32_t owner, size_t victim, size_t attacker);
+    void bot_attack_decay(int32_t owner);
+    bool bot_attack_center(int32_t owner, CPos& out) const;
+    void bot_sell_on_loss(int32_t owner);
     int32_t bot_count_aa(int32_t owner, WVec at, int32_t radius_cells) const;
     bool bot_unit_is_siege(size_t i) const;
 
@@ -2196,6 +2407,13 @@ public:
     size_t projectile_count() const { return projectiles_.size(); }
 
     const std::vector<Zap>& zaps() const { return zaps_; }
+
+
+    void bot_stat_sample(int32_t owner);
+
+    void bot_stat_note_death(size_t i);
+    int32_t bot_stat_army_value(int32_t owner) const;
+    int32_t bot_stat_towers(int32_t owner) const;
 
 private:
     Map map_;

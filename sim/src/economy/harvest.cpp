@@ -83,6 +83,27 @@ int64_t World::field_value(CPos c) const {
 }
 
 
+int32_t World::cell_fullness(CPos c) const {
+    int32_t sum = 0;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            const CPos n{c.x + dx, c.y + dy};
+            if (!map_.in_bounds(n)) continue;
+            const int i = map_.index(n);
+            if (res_density_[i] == 0) continue;
+
+
+            const int32_t rt = res_type_[i] == RES_GEMS ? RES_GEMS : RES_ORE;
+            const int32_t max = rt == RES_GEMS ? GEMS_MAX_DENSITY : ORE_MAX_DENSITY;
+            int32_t scaled = int32_t(res_density_[i]) * ORE_MAX_DENSITY / max;
+            if (rt == RES_GEMS) scaled = std::min<int32_t>(ORE_MAX_DENSITY, scaled * RESOURCE_VALUE[RES_GEMS] / RESOURCE_VALUE[RES_ORE]);
+            sum += (dx == 0 && dy == 0) ? FULLNESS_OWN_WEIGHT * scaled : scaled;
+        }
+    }
+    return sum > FULLNESS_MAX ? FULLNESS_MAX : sum;
+}
+
+
 bool World::resource_known(int32_t owner, CPos c) const {
     if (owner < 0 || owner >= MAX_PLAYERS) return true;
     if (((vis_players_ >> owner) & 1u) == 0) return true;
@@ -174,6 +195,12 @@ void World::order_harvest(const int32_t* ids, size_t n, CPos cell) {
         h.state = Harvest::SEARCH;
         h.order_cell = cell;
         h.has_order = map_.in_bounds(cell);
+
+
+        if (h.has_order) {
+            h.has_last = true;
+            h.last_cell = cell;
+        }
     }
 }
 
@@ -328,6 +355,9 @@ bool World::closest_harvestable(size_t i, CPos& out, bool ignore_shroud) {
         int64_t cost = int64_t(isqrt(cell_dist_sq(c, m.cell))) * 10;
         if (have_dock) cost += refinery_direction_penalty(c, m.cell, dock);
         if (res_type_[map_.index(c)] == RES_GEMS) cost -= GEM_BONUS;
+
+
+        cost += int64_t(THIN_PENALTY) * (FULLNESS_MAX - cell_fullness(c)) / FULLNESS_MAX;
         return cost;
     };
 
@@ -349,7 +379,10 @@ bool World::closest_harvestable(size_t i, CPos& out, bool ignore_shroud) {
                 if (!claimable(c)) continue;
                 const int64_t cost = cost_of(c);
                 if (cost < any.cost) any = Candidate{cost, c, true};
-                if (cost < rich.cost && field_value(c) >= rich_need) rich = Candidate{cost, c, true};
+
+
+                const int64_t need = res_type_[map_.index(c)] == RES_GEMS ? rich_need / 2 : rich_need;
+                if (cost < rich.cost && field_value(c) >= need) rich = Candidate{cost, c, true};
             }
         }
     };

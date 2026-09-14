@@ -11778,12 +11778,38 @@ func _ai_level_of(pl: int) -> String:
 	return "?"
 
 
+const AI_VORHABEN_NAMES := ["spaeher", "erzueberfall", "panzerstoss", "belagerung", "infanterieflut",
+	"luftschlag", "pionier", "kommando", "zange", "gegenstoss", "ausbau_wache",
+	"atom_stoss", "vorhang_stoss", "igel", "wirtschaft"]
+
+func _ai_vorhaben_name(i: int) -> String:
+	return AI_VORHABEN_NAMES[i] if i >= 0 and i < AI_VORHABEN_NAMES.size() else "?"
+
 func _ai_plan_name(pl: int) -> String:
-	const NAMES := ["wirtschaft", "druck", "luftschlag", "belagerung", "igel"]
-	if world.sim == null or not world.sim.has_method("bot_plan"):
+	if world.sim == null or not world.sim.has_method("bot_vorhaben"):
 		return "?"
-	var i: int = world.sim.bot_plan(pl)
-	return NAMES[i] if i >= 0 and i < NAMES.size() else "?"
+	return _ai_vorhaben_name(world.sim.bot_vorhaben(pl))
+
+
+const AI_STAT_KEYS := ["gebaut", "superwaffen", "trupps", "erster_angriff", "armee", "bargeld",
+	"tuerme", "belagerer_verloren", "in_turmreichweite", "trupp_verluste", "schwere_verluste"]
+
+func _ai_stats(pl: int) -> Dictionary:
+	var sim = world.sim
+	var out := {}
+	for k in AI_STAT_KEYS:
+		out[k] = -1
+	if sim == null:
+		return out
+	if sim.has_method("bot_stats"):
+		var d: Dictionary = sim.bot_stats(pl)
+		for k in AI_STAT_KEYS:
+			out[k] = int(d.get(k, -1))
+		return out
+	if sim.has_method("bot_stat"):
+		for i in 4:
+			out[AI_STAT_KEYS[i]] = int(sim.bot_stat(pl, i))
+	return out
 
 
 func _print_tournament_rows(tick: int) -> void:
@@ -11797,14 +11823,13 @@ func _print_tournament_rows(tick: int) -> void:
 		var pl := int(e.get("sim", -1))
 		if pl < 0:
 			continue
-		var built: int = sim.bot_stat(pl, 0) if sim.has_method("bot_stat") else -1
-		var sp: int = sim.bot_stat(pl, 1) if sim.has_method("bot_stat") else -1
-		var squads: int = sim.bot_stat(pl, 2) if sim.has_method("bot_stat") else -1
-		var first: int = sim.bot_stat(pl, 3) if sim.has_method("bot_stat") else -1
-		print("TURNIER tick=%d pl=%d strategie=%s staerke=%s plan=%s gebaut=%d superwaffen=%d trupps=%d erster_angriff=%d lebend=%d ertrag=%d credits=%d spieler_lebend=%d ausgang=%d" % [
+		var st := _ai_stats(pl)
+		print("TURNIER tick=%d pl=%d strategie=%s staerke=%s plan=%s gebaut=%d superwaffen=%d trupps=%d erster_angriff=%d lebend=%d ertrag=%d credits=%d spieler_lebend=%d ausgang=%d armee=%d bargeld=%d belagerer_verloren=%d in_turmreichweite=%d tuerme=%d trupp_verluste=%d schwere_verluste=%d" % [
 			tick, pl, _ai_strategy_of(pl), _ai_level_of(pl), _ai_plan_name(pl),
-			built, sp, squads, first, sim.alive_count(pl), sim.earned(pl), sim.credits(pl),
-			sim.alive_count(0), ws])
+			st["gebaut"], st["superwaffen"], st["trupps"], st["erster_angriff"],
+			sim.alive_count(pl), sim.earned(pl), sim.credits(pl), sim.alive_count(0), ws,
+			st["armee"], st["bargeld"], st["belagerer_verloren"], st["in_turmreichweite"],
+			st["tuerme"], st["trupp_verluste"], st["schwere_verluste"]])
 
 
 func _run_test_harvest() -> void:
@@ -11925,9 +11950,44 @@ func _run_test_ai() -> void:
 							air_names.append(str(nm))
 							break
 			var air_buildable: String = ",".join(PackedStringArray(air_names)) if not air_names.is_empty() else "-"
-			print("T%d KI%d [%s] luftbaubar=%s: %s credits=%d ertrag=%d squads=%d plan=%s" % [tick, pl, _ai_strategy_of(pl), air_buildable,
+
+
+			var st := _ai_stats(int(pl))
+			print("T%d KI%d [%s] luftbaubar=%s: %s credits=%d ertrag=%d squads=%d plan=%s armee=%d bargeld=%d belagerer_verloren=%d in_turmreichweite=%d tuerme=%d schwere_verluste=%d" % [
+				tick, pl, _ai_strategy_of(pl), air_buildable,
 				per[pl], sim.credits(pl), sim.earned(pl), sim.bot_squad_count(pl),
-				_ai_plan_name(pl)])
+				_ai_plan_name(pl), st["armee"], st["bargeld"], st["belagerer_verloren"],
+				st["in_turmreichweite"], st["tuerme"], st["schwere_verluste"]])
+
+
+			if sim.has_method("bot_squad_info"):
+				var info: Array = sim.bot_squad_info(int(pl))
+				if not info.is_empty():
+					var head: Dictionary = info[0]
+					print("   KI%d Bestellungen=%s vh_pending=%d reserve=%d" % [
+						pl, str(head.get("bestellungen", [])), int(head.get("vh_pending", -1)),
+						int(head.get("reserve", 0))])
+					for k in range(1, info.size()):
+						var q: Dictionary = info[k]
+						print("   KI%d Trupp typ=%d zustand=%s groesse=%d/%d sammel=(%d,%d) ziel=%d vorhaben=%d sturm=%d sammel_seit=%d regen_bis=%d sturm_ab=%d fuehrer=(%d,%d)" % [
+							pl, int(q.get("typ", 0)),
+							["IDLE", "ATTACK_MOVE", "ATTACK", "FLEE", "GATHER"][clampi(int(q.get("zustand", 0)), 0, 4)],
+							int(q.get("groesse", 0)), int(q.get("start", 0)),
+							int(q.get("sammel_x", -1)), int(q.get("sammel_y", -1)),
+							int(q.get("ziel", -1)), int(q.get("vorhaben", -1)), int(q.get("sturm", 0)),
+							int(q.get("sammel_seit", 0)), int(q.get("regen_bis", 0)),
+							int(q.get("sturm_ab", 0)), int(q.get("fuehrer_x", -1)), int(q.get("fuehrer_y", -1))])
+
+
+			if sim.has_method("bot_vorhaben_log"):
+				var vlog: Array = sim.bot_vorhaben_log(int(pl))
+				if not vlog.is_empty():
+					var parts: PackedStringArray = []
+					for e in vlog:
+						parts.append("%s T%d-T%d %s" % [_ai_vorhaben_name(int(e.get("vorhaben", -1))),
+							int(e.get("start", 0)), int(e.get("end", 0)),
+							["laeuft", "erfolg", "fehlschlag"][clampi(int(e.get("result", 0)), 0, 2)]])
+					print("   KI%d Vorhaben-Protokoll: %s" % [pl, "; ".join(parts)])
 		print("T%d Spieler: %d | %d µs/Tick, %d Actors, %d Kisten" % [tick, sim.alive_count(0), sim.last_step_usec(), sim.actor_count(), sim.crate_count()])
 
 

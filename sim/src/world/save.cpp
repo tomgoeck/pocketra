@@ -26,9 +26,9 @@ namespace {
 constexpr uint32_t SAVE_MAGIC = 0x5653'4152u;
 
 
-constexpr uint32_t SAVE_VERSION = 11;
+constexpr uint32_t SAVE_VERSION = 12;
 
-constexpr uint32_t SAVE_VERSION_MIN = 11;
+constexpr uint32_t SAVE_VERSION_MIN = 12;
 
 
 enum Section : uint32_t {
@@ -156,6 +156,7 @@ template <class V> void visit_fields(V& v, BotSquad& s);
 template <class V> void visit_fields(V& v, BotResourceIndice& r);
 template <class V> void visit_fields(V& v, BotActiveMcv& m);
 template <class V> void visit_fields(V& v, BotRefineryRequest& r);
+template <class V> void visit_fields(V& v, BotVorhabenLog& e);
 template <class V> void visit_fields(V& v, BotState& b);
 template <class V> void visit_fields(V& v, PlayerState& p);
 template <class V> void visit_fields(V& v, CrateSpawnerParams& c);
@@ -391,18 +392,38 @@ template <class V> void visit_fields(V& v, BotParams& p) {
     v(p.building_fraction); v(p.building_limit); v(p.building_delay); v(p.unit_share); v(p.unit_limit);
 
 
-    v(p.personality); v(p.strategy_interval); v(p.plan_weight);
+    v(p.personality); v(p.strategy_interval);
     v(p.threat_map_interval); v(p.threat_map_side);
     v(p.target_value_weight); v(p.target_distance_bias); v(p.target_threat_weight);
     v(p.sp_scan_interval); v(p.sp_coarse_step); v(p.sp_fine_step); v(p.sp_check_radius); v(p.sp_own_penalty);
     v(p.nuke_min_attractiveness); v(p.iron_min_attractiveness); v(p.chrono_min_attractiveness);
     v(p.air_squad_size); v(p.air_danger_radius); v(p.aa_per_unit);
     v(p.raid_squad_size); v(p.raid_interval); v(p.siege_range_percent); v(p.first_attack_tick);
+
+    v(p.difficulty); v(p.gather_max_ticks); v(p.regen_ticks);
+    v(p.allow_raid); v(p.allow_siege); v(p.allow_support_powers); v(p.allow_air_squad);
+    v(p.allow_counterattack); v(p.allow_pincer); v(p.min_first_attack_tick);
+
+
+    v(p.harvesters_per_refinery); v(p.max_conyards); v(p.surplus_cash);
+    v(p.defense_budget_percent); v(p.sell_on_loss);
+
+
+    v(p.max_running_vorhaben); v(p.counter_interval); v(p.vorhaben_random_percent);
+    v(p.reaction_min_ticks); v(p.reaction_max_ticks);
+    v(p.vorhaben_weight);
 }
 
 template <class V> void visit_fields(V& v, BotSquad& s) {
     v(s.type); v(s.state); v(s.units); v(s.target); v(s.leader); v(s.last_updated);
     v(s.last_leader_cell); v(s.last_target); v(s.backoff); v(s.dead);
+
+    v(s.gather); v(s.gather_start); v(s.regen_until); v(s.siege_start);
+    v(s.protect_since);
+    v(s.goal_target); v(s.storm); v(s.update_ticks);
+
+
+    v(s.vorhaben); v(s.scheme); v(s.start_size); v(s.storm_at); v(s.gather_side);
 }
 
 template <class V> void visit_fields(V& v, BotResourceIndice& r) {
@@ -419,6 +440,10 @@ template <class V> void visit_fields(V& v, BotRefineryRequest& r) {
     v(r.mcv_id); v(r.conyard); v(r.resource);
 }
 
+template <class V> void visit_fields(V& v, BotVorhabenLog& e) {
+    v(e.vorhaben); v(e.start); v(e.end); v(e.result);
+}
+
 template <class V> void visit_fields(V& v, BotState& b) {
     v(b.enabled); v(b.p);
     v(b.wait_ticks_q); v(b.fail_count_q); v(b.fail_retry_q);
@@ -427,6 +452,7 @@ template <class V> void visit_fields(V& v, BotState& b) {
     v(b.scan_idle_harvesters_ticks); v(b.low_effect_ticks);
     v(b.squads); v(b.active_units); v(b.idle_base_units);
     v(b.rush_ticks); v(b.assign_roles_ticks); v(b.attack_force_ticks); v(b.min_attack_force_delay_ticks);
+    v(b.squad_cursor);
     v(b.respond_cooldown); v(b.protect_from); v(b.first_tick);
     v(b.initial_base_center); v(b.mcv_ticks); v(b.mcv_scan_ticks);
     v(b.expansion_mode); v(b.failed_attempts); v(b.max_failed_attempts); v(b.last_failed_spot);
@@ -438,12 +464,29 @@ template <class V> void visit_fields(V& v, BotState& b) {
     v(b.harv_respond_cooldown); v(b.mcv_respond_cooldown); v(b.rally_ticks);
 
 
-    v(b.personality); v(b.plan); v(b.plan_score);
+    v(b.personality); v(b.vorhaben_lead); v(b.vorhaben_score);
     v(b.strategy_ticks); v(b.raid_ticks); v(b.threat_ticks);
     v(b.sp_wait);
     v(b.threat_enemy); v(b.threat_friendly);
     v(b.tm_cols); v(b.tm_rows); v(b.tm_side);
     v(b.stat_units_built); v(b.stat_sp_fired); v(b.stat_squads_sent); v(b.stat_first_attack);
+
+
+    v(b.attack_heat); v(b.attack_sum); v(b.attack_log_cooldown);
+    v(b.attack_decay_ticks); v(b.sell_loss_ticks);
+
+
+    v(b.vh_running); v(b.vh_start); v(b.vh_success); v(b.vh_cooldown); v(b.vh_ref);
+    v(b.vh_last); v(b.vh_orders); v(b.vh_pending);
+    v(b.counter_ticks); v(b.counter_class); v(b.seen_ids); v(b.seen_ticks);
+    v(b.attack_peak); v(b.vorhaben_log);
+
+
+    v(b.stat_army_value); v(b.stat_towers);
+    v(b.stat_cash_sum); v(b.stat_cash_samples);
+    v(b.stat_siege_lost); v(b.stat_siege_lost_in_range); v(b.stat_squad_units_lost);
+    v(b.react_q);
+    v(b.naval_alarm_id); v(b.naval_alarm_cell); v(b.naval_alarm_tick);
 }
 
 template <class V> void visit_fields(V& v, PendingPlace& p) {

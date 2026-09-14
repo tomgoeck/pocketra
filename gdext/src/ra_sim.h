@@ -197,8 +197,19 @@ public:
     int bot_personality(int owner) const;
 
     bool bot_enabled(int owner) const;
+
+
+    int bot_vorhaben(int owner) const;
     int bot_plan(int owner) const;
+
+    Array bot_vorhaben_log(int owner) const;
     int bot_stat(int owner, int which) const;
+
+
+    Dictionary bot_stats(int owner);
+
+
+    Array bot_squad_info(int owner) const;
     void order_repair(const PackedInt32Array& ids, int depot_id);
     int win_state(int owner) const;
 

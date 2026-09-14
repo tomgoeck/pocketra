@@ -794,6 +794,105 @@ static void test_bot() {
 }
 
 
+static void test_bot_naval_alarm() {
+
+
+    auto run = [](int ship_x, bool& protection_vs_ship, int32_t& reserve, int32_t& naval_target,
+                  int32_t& alarm_id, bool& moved_to_shore, int32_t& enemy_out) {
+        World w;
+        const int size = 64;
+        std::vector<uint8_t> cost(size_t(size) * size_t(size), 1);
+        std::vector<uint8_t> terrain(size_t(size) * size_t(size), uint8_t(TER_CLEAR));
+        for (int y = 0; y < size; ++y) {
+            for (int x = 24; x < 48; ++x) {
+                cost[size_t(y * size + x)] = 0;
+                terrain[size_t(y * size + x)] = uint8_t(TER_WATER);
+            }
+        }
+        w.set_map(size, size, cost.data());
+        w.set_terrain(size, size, terrain.data());
+        w.init_layers();
+        Weapon gun; gun.range = 6 * CELL; gun.reload = 40; gun.damage = 500; gun.speed = 0;
+        gun.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_VEHICLE | TT_INFANTRY | TT_WATER_ACTOR;
+        const int w_gun = w.define_weapon(gun);
+        UnitType fact;
+        fact.building = true; fact.foot_w = 3; fact.foot_h = 3; fact.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+        fact.build_block = fact.footprint; fact.sprite_h = 3; fact.hp = 150000; fact.cost = 2500;
+        fact.produces = 1u << QUEUE_BUILDING; fact.base_provider = true; fact.provides = {"fact"};
+        fact.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+        const int t_fact = w.define_type(fact);
+        UnitType powr;
+        powr.building = true; powr.foot_w = 2; powr.foot_h = 2; powr.footprint = {1, 1, 1, 1};
+        powr.build_block = powr.footprint; powr.sprite_h = 2; powr.hp = 400000; powr.power = 300;
+        powr.cost = 300; powr.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+        const int t_powr = w.define_type(powr);
+        UnitType tank;
+        tank.speed = 85; tank.turn_rate = 20; tank.hp = 40000; tank.cost = 1000; tank.weapon = w_gun;
+        tank.target_types = TT_GROUND_ACTOR | TT_VEHICLE; tank.auto_target_mask = TT_GROUND_ACTOR | TT_VEHICLE | TT_INFANTRY | TT_WATER_ACTOR;
+        const int t_tank = w.define_type(tank);
+        UnitType dd;
+        dd.speed = 56; dd.turn_rate = 20; dd.hp = 60000; dd.cost = 1000; dd.weapon = w_gun;
+        dd.locomotor = LOCO_NAVAL; dd.hit_radius = 426;
+        dd.auto_target_mask = TT_GROUND_ACTOR | TT_STRUCTURE | TT_VEHICLE | TT_WATER_ACTOR;
+        dd.target_types = TT_WATER_ACTOR | TT_VEHICLE;
+        const int t_dd = w.define_type(dd);
+        Weapon big = gun; big.range = 16 * CELL;
+        const int w_big = w.define_weapon(big);
+        UnitType dd_far = dd; dd_far.weapon = w_big;
+        const int t_dd_far = w.define_type(dd_far);
+
+        w.spawn_building(t_fact, 0, {8, 30});
+        const int32_t powr_id = w.spawn_building(t_powr, 0, {20, 30});
+        std::vector<int32_t> tanks;
+        for (int k = 0; k < 3; ++k) tanks.push_back(w.spawn(t_tank, 0, {10 + k, 36}));
+        w.spawn(t_dd, 0, {30, 50});
+        const int32_t enemy_ship = w.spawn(ship_x > 30 ? t_dd_far : t_dd, 1, {ship_x, 31});
+        enemy_out = enemy_ship;
+        w.set_enemy(0, 1, true);
+        w.set_enemy(1, 0, true);
+        w.give_credits(0, 5000);
+        BotParams p;
+        p.first_attack_tick = 100000;
+        w.enable_bot(0, p);
+        w.order_attack(&enemy_ship, 1, powr_id, false);
+
+        protection_vs_ship = false; naval_target = -1; reserve = 0; moved_to_shore = false;
+        for (int t = 0; t < 600; ++t) {
+            w.step();
+            const BotState& b = w.bot_state(0);
+            for (const BotSquad& s : b.squads) {
+                if (s.type == BotSquad::PROTECTION && !s.units.empty() && s.target == enemy_ship) protection_vs_ship = true;
+                if (s.type == BotSquad::NAVAL && !s.units.empty()) naval_target = s.target;
+            }
+            reserve = int32_t(b.idle_base_units.size());
+            for (int32_t id : tanks) {
+                const int i = w.index_of(id);
+                if (i >= 0 && w.mobile(size_t(i)).cell.x >= 18) moved_to_shore = true;
+            }
+        }
+        alarm_id = w.bot_state(0).naval_alarm_id;
+    };
+    bool prot = false, shore = false;
+    int32_t reserve = 0, naval = -1, alarm = -1, enemy = -1;
+
+    run(26, prot, reserve, naval, alarm, shore, enemy);
+    std::printf("Marine-Alarm (a) Schiff am Ufer: Schutztrupp=%s, ans Ufer gefahren=%s, Marine-Ziel=%d (Angreifer %d), Alarm=%d\n",
+                prot ? "ja" : "nein", shore ? "ja" : "nein", naval, enemy, alarm);
+    CHECK(prot);
+    CHECK(shore);
+    CHECK(alarm == enemy);
+    CHECK(naval == enemy);
+
+
+    run(36, prot, reserve, naval, alarm, shore, enemy);
+    std::printf("Marine-Alarm (b) Schiff fern: Schutztrupp=%s, Reserve=%d, ans Ufer gefahren=%s, Marine-Ziel=%d (Angreifer %d)\n",
+                prot ? "ja" : "nein", reserve, shore ? "ja" : "nein", naval, enemy);
+    CHECK(!prot);
+    CHECK(reserve == 3);
+    CHECK(!shore);
+    CHECK(naval == enemy);
+}
+
 static void test_bot_naval() {
     World w;
     const int size = 64;
@@ -1270,7 +1369,11 @@ static void test_bot_personality() {
 
     CHECK(turtle.raid_squad_size == 0 && rush.raid_squad_size > 0);
 
-    CHECK(air.plan_weight[PLAN_AIR_STRIKE] > rush.plan_weight[PLAN_AIR_STRIKE]);
+    CHECK(air.vorhaben_weight[VH_AIR_STRIKE] > rush.vorhaben_weight[VH_AIR_STRIKE]);
+
+    CHECK(rush.vorhaben_weight[VH_TANK_PUSH] > turtle.vorhaben_weight[VH_TANK_PUSH]);
+    CHECK(turtle.vorhaben_weight[VH_TURTLE] > rush.vorhaben_weight[VH_TURTLE]);
+    CHECK(turtle.vorhaben_weight[VH_NUKE_PUSH] > rush.vorhaben_weight[VH_NUKE_PUSH]);
     CHECK(air.target_threat_weight > rush.target_threat_weight);
 
 
@@ -1414,6 +1517,524 @@ static void test_bot_air_squad() {
         if (s.type == BotSquad::AIR && s.target >= 0) any_target = true;
     CHECK(!any_target);
     std::printf("KI-Luft-Trupp: 2 Flieger gegen 4 Flakstellungen -> kein Ziel (AirStates: Flak x 3 >= Truppgroesse)\n");
+}
+
+
+struct SiegeWorld {
+    int32_t fact = -1, arty = -1, tank = -1, tower = -1, hut = -1;
+};
+
+static SiegeWorld build_siege_world(World& w) {
+    SiegeWorld t;
+    std::vector<uint8_t> cost(64 * 64, 1);
+    w.set_map(64, 64, cost.data());
+    Weapon shell;
+    shell.range = 11 * CELL; shell.min_range = 4 * CELL; shell.reload = 60; shell.damage = 2000; shell.speed = 0;
+    shell.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_DEFENSE | TT_VEHICLE | TT_INFANTRY;
+    const int w_shell = w.define_weapon(shell);
+    Weapon gun;
+    gun.range = 5 * CELL; gun.reload = 15; gun.damage = 4000; gun.speed = 0;
+    gun.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_DEFENSE | TT_VEHICLE | TT_INFANTRY;
+    const int w_gun = w.define_weapon(gun);
+
+    UnitType fact;
+    fact.building = true; fact.foot_w = 3; fact.foot_h = 3; fact.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    fact.build_block = fact.footprint; fact.hp = 150000; fact.cost = 2500;
+    fact.base_provider = true; fact.provides = {"fact"};
+    fact.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    t.fact = w.define_type(fact);
+
+    UnitType arty;
+    arty.speed = 45; arty.turn_rate = 20; arty.hp = 15000; arty.hit_radius = 426; arty.cost = 600;
+    arty.weapon = w_shell; arty.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+    t.arty = w.define_type(arty);
+
+    UnitType tank;
+    tank.speed = 72; tank.turn_rate = 20; tank.hp = 40000; tank.hit_radius = 426; tank.cost = 800;
+    tank.weapon = w_gun; tank.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+    t.tank = w.define_type(tank);
+
+    UnitType tower;
+    tower.building = true; tower.foot_w = 1; tower.foot_h = 1; tower.footprint = {1};
+    tower.build_block = tower.footprint; tower.hp = 400000; tower.cost = 600;
+    tower.weapon = w_gun; tower.defense = true;
+    tower.target_types = TT_GROUND_ACTOR | TT_STRUCTURE | TT_DEFENSE;
+    t.tower = w.define_type(tower);
+
+    UnitType hut;
+    hut.building = true; hut.foot_w = 2; hut.foot_h = 2; hut.footprint = {1, 1, 1, 1};
+    hut.build_block = hut.footprint; hut.hp = 200000; hut.cost = 1000;
+    hut.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+    t.hut = w.define_type(hut);
+    return t;
+}
+
+
+static BotParams siege_bot_params() {
+    BotParams bp;
+    World::bot_apply_personality(bp, BOT_P_NORMAL);
+    bp.squad_size = 2;
+    bp.squad_size_random_bonus = 1;
+    bp.first_attack_tick = 0;
+    bp.rush_interval = 100000;
+    bp.raid_squad_size = 0;
+    bp.gather_max_ticks = 600;
+    return bp;
+}
+
+
+static void test_bot_siege_holds_range() {
+    World w;
+    const SiegeWorld t = build_siege_world(w);
+    w.set_rng_seed(4242);
+    w.set_alliance(0, 1, false);
+    w.spawn_building(t.fact, 1, {18, 49});
+    const int32_t tower = w.spawn_building(t.tower, 0, {44, 50});
+    w.spawn_building(t.hut, 0, {50, 50});
+    for (int k = 0; k < 4; ++k) w.spawn(t.arty, 1, {22 + k, 48 + (k % 2)});
+    w.enable_bot(1, siege_bot_params());
+
+    const int tw = w.index_of(tower);
+    const int hp0 = w.actor(size_t(tw)).hp;
+    int64_t closest = INT64_MAX;
+    int dead_in_range = 0;
+    int hp1 = hp0;
+    for (int k = 0; k < 4000; ++k) {
+        w.step();
+        const int ti = w.index_of(tower);
+
+
+        if (ti < 0 || !w.actor(size_t(ti)).alive) break;
+        hp1 = w.actor(size_t(ti)).hp;
+        const CPos tc = w.actor(size_t(ti)).origin;
+        for (size_t i = 0; i < w.actor_count(); ++i) {
+            if (w.actor(i).owner != 1 || w.type(w.actor(i).type).building) continue;
+            const int64_t dx = w.mobile(i).cell.x - tc.x, dy = w.mobile(i).cell.y - tc.y;
+            const int64_t d2 = dx * dx + dy * dy;
+            if (!w.actor(i).alive) { if (d2 <= 36) ++dead_in_range; continue; }
+            closest = std::min(closest, d2);
+        }
+    }
+    int alive = 0;
+    for (size_t i = 0; i < w.actor_count(); ++i)
+        if (w.actor(i).alive && w.actor(i).owner == 1 && !w.type(w.actor(i).type).building) ++alive;
+    std::printf("KI-Belagerung: dichteste Annaeherung %.1f Zellen (Turmreichweite 5), Turm %d -> %d HP, %d/4 Belagerer leben\n",
+                std::sqrt(double(closest)), hp0, hp1, alive);
+    CHECK(closest > 36);
+    CHECK(dead_in_range == 0);
+    CHECK(hp1 < hp0);
+    CHECK(alive == 4);
+}
+
+
+static void test_bot_gather() {
+    World w;
+    const SiegeWorld t = build_siege_world(w);
+    w.set_rng_seed(99);
+    w.set_alliance(0, 1, false);
+    w.spawn_building(t.fact, 1, {6, 30});
+    w.spawn_building(t.tower, 0, {44, 30});
+    w.spawn_building(t.hut, 0, {50, 30});
+    for (int k = 0; k < 6; ++k) w.spawn(t.tank, 1, {10 + k % 3, 28 + k / 3});
+    BotParams bp = siege_bot_params();
+    bp.squad_size = 4;
+    w.enable_bot(1, bp);
+
+    CPos gather{-1, -1};
+    bool saw_gather = false, left_gather = false;
+    int near_at_start = 0, total_at_start = 0;
+    uint32_t gather_tick = 0, start_tick = 0;
+    for (int k = 0; k < 4000; ++k) {
+        w.step();
+        const BotState& b = w.bot_state(1);
+        for (const BotSquad& s : b.squads) {
+            if (s.type != BotSquad::ASSAULT) continue;
+            if (s.state == BotSquad::GATHER && s.gather.x >= 0 && !saw_gather) {
+                saw_gather = true;
+                gather = s.gather;
+                gather_tick = w.tick();
+            } else if (saw_gather && !left_gather && s.state != BotSquad::GATHER) {
+                left_gather = true;
+                start_tick = w.tick();
+                total_at_start = int(s.units.size());
+                for (int32_t id : s.units) {
+                    const int i = w.index_of(id);
+                    if (i < 0) continue;
+                    const int64_t dx = w.mobile(size_t(i)).cell.x - gather.x, dy = w.mobile(size_t(i)).cell.y - gather.y;
+                    if (dx * dx + dy * dy <= 16) ++near_at_start;
+                }
+            }
+        }
+        if (left_gather) break;
+    }
+
+    const int64_t dx = gather.x - 44, dy = gather.y - 30;
+    const double dist = std::sqrt(double(dx * dx + dy * dy));
+    std::printf("KI-Sammeln: Sammelpunkt (%d,%d), %.1f Zellen vor dem Turm, ab Tick %u, Aufbruch Tick %u mit %d/%d Einheiten am Punkt\n",
+                gather.x, gather.y, dist, gather_tick, start_tick, near_at_start, total_at_start);
+    CHECK(saw_gather);
+    CHECK(dist >= 12.0 && dist <= 15.0);
+    CHECK(gather.x < 44);
+    CHECK(w.bot_threat_at(1, gather, true) == 0);
+    CHECK(left_gather);
+
+    CHECK(near_at_start * 100 >= total_at_start * 80 || start_tick > gather_tick + 600);
+}
+
+
+static void test_bot_gather_leaves_without_building() {
+    World w;
+    const SiegeWorld t = build_siege_world(w);
+    w.set_rng_seed(7);
+    w.set_alliance(0, 1, false);
+    w.spawn_building(t.fact, 1, {6, 30});
+    const int32_t far_enemy = w.spawn(t.tank, 0, {55, 30});
+    for (int k = 0; k < 6; ++k) w.spawn(t.tank, 1, {10 + k % 3, 28 + k / 3});
+    BotParams bp = siege_bot_params();
+    bp.squad_size = 4;
+    bp.gather_max_ticks = 400;
+    w.enable_bot(1, bp);
+
+    bool saw_gather = false, left_gather = false;
+    uint32_t gather_tick = 0, start_tick = 0;
+    int32_t start_target = -1;
+    for (int k = 0; k < 4000; ++k) {
+        w.step();
+        for (const BotSquad& s : w.bot_state(1).squads) {
+            if (s.type != BotSquad::ASSAULT) continue;
+            if (s.state == BotSquad::GATHER && !saw_gather) { saw_gather = true; gather_tick = w.tick(); }
+            else if (saw_gather && !left_gather && s.state != BotSquad::GATHER) {
+                left_gather = true;
+                start_tick = w.tick();
+                start_target = s.target;
+            }
+        }
+        if (left_gather) break;
+    }
+    std::printf("KI-Sammeln ohne Gegnergebaeude: Sammeln ab Tick %u, Aufbruch Tick %u, Ziel %d (Gegner %d)\n",
+                gather_tick, start_tick, start_target, far_enemy);
+    CHECK(saw_gather);
+    CHECK(left_gather);
+    CHECK(start_target == far_enemy);
+
+    CHECK(start_tick <= gather_tick + 400 + 200);
+}
+
+
+static void test_bot_vorhaben_form_timeout() {
+    World w;
+    const SiegeWorld t = build_siege_world(w);
+    w.set_rng_seed(11);
+    w.set_alliance(0, 1, false);
+    w.spawn_building(t.fact, 1, {6, 30});
+    w.spawn_building(t.hut, 0, {50, 30});
+    for (int k = 0; k < 3; ++k) w.spawn(t.tank, 1, {10 + k, 28});
+    BotParams bp = siege_bot_params();
+    bp.squad_size = 5000;
+    bp.squad_size_random_bonus = 0;
+    w.enable_bot(1, bp);
+
+    int32_t pending = -1;
+    uint32_t pending_since = 0, longest = 0;
+    int32_t ever_pending = -1;
+    for (int k = 0; k < 6000; ++k) {
+        w.step();
+        const int32_t now = w.bot_state(1).vh_pending;
+        if (now != pending) {
+            if (pending >= 0) longest = std::max(longest, w.tick() - pending_since);
+            pending = now;
+            pending_since = w.tick();
+            if (now >= 0) ever_pending = now;
+        }
+    }
+    if (pending >= 0) longest = std::max(longest, w.tick() - pending_since);
+    const BotState& b = w.bot_state(1);
+    int32_t open_orders = 0;
+    for (int r = 0; r < ROLE_COUNT; ++r) open_orders += b.vh_orders[r];
+    std::printf("KI-Vorhaben ohne Trupp: laengste Wartezeit %u Ticks, zuletzt %d, offene Bestellungen %d\n",
+                longest, ever_pending, open_orders);
+    CHECK(ever_pending >= 0);
+    CHECK(longest <= 900 + 400);
+    CHECK(open_orders <= 30);
+}
+
+
+static void test_bot_difficulty_params() {
+
+    {
+        World w;
+        build_siege_world(w);
+        BotParams bp;
+        World::bot_apply_personality(bp, BOT_P_RUSH);
+        bp.min_first_attack_tick = 8000;
+        w.enable_bot(1, bp);
+        CHECK(w.bot_state(1).p.first_attack_tick == 8000);
+    }
+
+
+    int64_t closest_off = INT64_MAX;
+    {
+        World w;
+        const SiegeWorld t = build_siege_world(w);
+        w.set_rng_seed(4242);
+        w.set_alliance(0, 1, false);
+        w.spawn_building(t.fact, 1, {18, 49});
+        const int32_t tower = w.spawn_building(t.tower, 0, {44, 50});
+        w.spawn_building(t.hut, 0, {50, 50});
+        for (int k = 0; k < 4; ++k) w.spawn(t.arty, 1, {22 + k, 48 + (k % 2)});
+        BotParams bp = siege_bot_params();
+        bp.allow_siege = 0;
+        w.enable_bot(1, bp);
+        for (int k = 0; k < 4000; ++k) {
+            w.step();
+            const int ti = w.index_of(tower);
+            if (ti < 0 || !w.actor(size_t(ti)).alive) break;
+            const CPos tc = w.actor(size_t(ti)).origin;
+            for (size_t i = 0; i < w.actor_count(); ++i) {
+                if (!w.actor(i).alive || w.actor(i).owner != 1 || w.type(w.actor(i).type).building) continue;
+                const int64_t dx = w.mobile(i).cell.x - tc.x, dy = w.mobile(i).cell.y - tc.y;
+                closest_off = std::min(closest_off, dx * dx + dy * dy);
+            }
+        }
+        CHECK(closest_off <= 36);
+    }
+
+
+    {
+        World w;
+        const UtilityWorld t = build_utility_world(w);
+        w.set_alliance(0, 1, false);
+        w.spawn_building(t.fact, 1, {4, 4});
+        w.spawn_building(t.mslo, 1, {4, 9});
+        w.spawn_building(t.powr, 1, {8, 4});
+        w.spawn_building(t.fact, 0, {40, 40});
+        w.spawn_building(t.proc, 0, {44, 40});
+        w.spawn_building(t.proc, 0, {40, 44});
+        BotParams bp;
+        World::bot_apply_personality(bp, BOT_P_NORMAL);
+        bp.sp_scan_interval = 20;
+        bp.allow_support_powers = 0;
+        w.enable_bot(1, bp);
+        for (int k = 0; k < 400; ++k) w.step();
+        CHECK(w.bot_stat(1, 1) == 0);
+    }
+
+    int max_assaults = 0;
+    {
+        World w;
+        const SiegeWorld t = build_siege_world(w);
+        w.set_rng_seed(7);
+        w.set_alliance(0, 1, false);
+        w.spawn_building(t.fact, 1, {6, 30});
+        w.spawn_building(t.tower, 0, {44, 30});
+        w.spawn_building(t.hut, 0, {50, 30});
+        for (int k = 0; k < 24; ++k) w.spawn(t.tank, 1, {10 + k % 6, 26 + k / 6});
+        BotParams bp = siege_bot_params();
+        bp.squad_size = 4;
+        bp.allow_pincer = 0;
+        w.enable_bot(1, bp);
+        for (int k = 0; k < 3000; ++k) {
+            w.step();
+            int n = 0;
+            for (const BotSquad& s : w.bot_state(1).squads)
+                if (s.type == BotSquad::ASSAULT && !s.units.empty()) ++n;
+            max_assaults = std::max(max_assaults, n);
+        }
+        CHECK(max_assaults <= 1);
+    }
+
+    bool air_target = false;
+    {
+        World w;
+        const UtilityWorld t = build_utility_world(w);
+        w.set_alliance(0, 1, false);
+        w.spawn_building(t.fact, 1, {4, 4});
+        w.spawn_building(t.hpad, 1, {8, 4});
+        w.spawn_building(t.fact, 0, {50, 50});
+        BotParams bp;
+        World::bot_apply_personality(bp, BOT_P_AIR);
+        bp.air_squad_size = 2;
+        bp.first_attack_tick = 0;
+        bp.allow_air_squad = 0;
+        w.enable_bot(1, bp);
+        for (int k = 0; k < 3; ++k) w.spawn(t.heli, 1, {10 + k, 8});
+        for (int k = 0; k < 600; ++k) w.step();
+        for (const BotSquad& s : w.bot_state(1).squads)
+            if (s.type == BotSquad::AIR && s.target >= 0) air_target = true;
+        CHECK(!air_target);
+    }
+    std::printf("KI-Stufen: first_attack_tick auf 8000 angehoben; ohne allow_siege %.1f Zellen an den Turm heran; "
+                "ohne allow_support_powers kein Abschuss; ohne allow_pincer hoechstens %d Stosstrupp; ohne allow_air_squad kein Luftziel\n",
+                std::sqrt(double(closest_off)), max_assaults);
+}
+
+
+static void setup_vorhaben_world(World& w, const SiegeWorld& t) {
+    w.set_alliance(0, 1, false);
+    w.spawn_building(t.fact, 1, {6, 30});
+    for (int k = 0; k < 3; ++k) w.spawn(t.arty, 1, {10 + k, 30});
+    w.spawn_building(t.fact, 0, {56, 30});
+    for (int k = 0; k < 3; ++k) w.spawn_building(t.tower, 0, {52, 26 + k * 3});
+    for (int k = 0; k < 10; ++k) w.spawn(t.tank, 0, {56 + k % 5, 38 + k / 5});
+}
+
+static BotParams vorhaben_bot_params() {
+    BotParams bp = siege_bot_params();
+    bp.strategy_interval = 100;
+    bp.max_running_vorhaben = 1;
+    bp.vorhaben_random_percent = 0;
+    bp.counter_interval = 0;
+    return bp;
+}
+
+
+static void test_bot_vorhaben_wahl() {
+
+
+    int32_t lage_siege = 0, lage_push = 0, chosen = -1;
+    {
+        World w;
+        const SiegeWorld t = build_siege_world(w);
+        w.set_rng_seed(4242);
+        setup_vorhaben_world(w, t);
+        w.enable_bot(1, vorhaben_bot_params());
+        for (int k = 0; k < 200; ++k) w.step();
+        lage_siege = w.bot_vorhaben_lage(1, VH_SIEGE);
+        lage_push = w.bot_vorhaben_lage(1, VH_TANK_PUSH);
+        for (int32_t vh = 0; vh < VH_COUNT; ++vh)
+            if (vh != VH_ECONOMY && w.bot_state(1).vh_running[vh]) chosen = vh;
+        CHECK(lage_siege > lage_push);
+        CHECK(chosen == VH_SIEGE);
+
+        CHECK(w.bot_state(1).vh_running[VH_ECONOMY] == 1);
+
+        bool squad_has_order = false;
+        for (const BotSquad& s : w.bot_state(1).squads)
+            if (s.vorhaben == VH_SIEGE && s.scheme == GS_DEFENSE_FIRST) squad_has_order = true;
+        CHECK(squad_has_order || w.bot_state(1).vh_pending == VH_SIEGE);
+    }
+
+
+    int32_t easy_choice = -1;
+    {
+        World w;
+        const SiegeWorld t = build_siege_world(w);
+        w.set_rng_seed(4242);
+        setup_vorhaben_world(w, t);
+        BotParams bp = vorhaben_bot_params();
+        bp.allow_siege = 0;
+        bp.allow_raid = 0;
+        bp.allow_support_powers = 0;
+        bp.allow_air_squad = 0;
+        bp.allow_counterattack = 0;
+        bp.allow_pincer = 0;
+        w.enable_bot(1, bp);
+        CHECK(!w.bot_vorhaben_allowed(1, VH_SIEGE));
+        CHECK(!w.bot_vorhaben_allowed(1, VH_ORE_RAID));
+        CHECK(w.bot_vorhaben_allowed(1, VH_TANK_PUSH));
+        CHECK(w.bot_vorhaben_allowed(1, VH_INFANTRY_FLOOD));
+        CHECK(w.bot_vorhaben_allowed(1, VH_TURTLE));
+        for (int k = 0; k < 200; ++k) w.step();
+        CHECK(w.bot_state(1).vh_running[VH_SIEGE] == 0);
+        for (int32_t vh = 0; vh < VH_COUNT; ++vh)
+            if (vh != VH_ECONOMY && w.bot_state(1).vh_running[vh]) easy_choice = vh;
+        CHECK(easy_choice == VH_TANK_PUSH);
+    }
+
+    int32_t after_fail = 0, after_win = 0;
+    {
+        World w;
+        const SiegeWorld t = build_siege_world(w);
+        setup_vorhaben_world(w, t);
+        w.enable_bot(1, vorhaben_bot_params());
+        w.bot_vorhaben_start(1, VH_COMMANDO);
+        w.bot_vorhaben_end(1, VH_COMMANDO, false);
+        after_fail = w.bot_state(1).vh_success[VH_COMMANDO];
+        w.bot_vorhaben_start(1, VH_COMMANDO);
+        w.bot_vorhaben_end(1, VH_COMMANDO, true);
+        after_win = w.bot_state(1).vh_success[VH_COMMANDO];
+        CHECK(after_fail == 80);
+        CHECK(after_win == 95);
+
+        CHECK(w.bot_state(1).vh_cooldown[VH_COMMANDO] > 0);
+        CHECK(w.bot_vorhaben_log(1).size() >= 2);
+        CHECK(w.bot_vorhaben_log(1).back().result == 1);
+    }
+
+
+    auto run = [](uint32_t seed) {
+        World w;
+        const SiegeWorld t = build_siege_world(w);
+        w.set_rng_seed(seed);
+        setup_vorhaben_world(w, t);
+        BotParams bp = vorhaben_bot_params();
+        bp.vorhaben_random_percent = 20;
+        bp.max_running_vorhaben = 3;
+        w.enable_bot(1, bp);
+        for (int k = 0; k < 2500; ++k) w.step();
+        uint64_t h = 0;
+        for (int32_t vh = 0; vh < VH_COUNT; ++vh)
+            h = h * 131 + uint64_t(w.bot_state(1).vh_running[vh] * 1000 + w.bot_state(1).vh_success[vh]);
+        return h;
+    };
+    const uint64_t h1 = run(99), h2 = run(99);
+    CHECK(h1 == h2);
+    std::printf("KI-Vorhaben: Belagerung %d > Panzerstoss %d, gewaehlt %d; leicht waehlt %d; "
+                "Erfolgsfaktor 100 -> %d -> %d; Determinismus %016llx zweimal\n",
+                lage_siege, lage_push, chosen, easy_choice, after_fail, after_win,
+                static_cast<unsigned long long>(h1));
+}
+
+
+static void test_bot_stats() {
+    World w;
+    const SiegeWorld t = build_siege_world(w);
+    w.set_rng_seed(7);
+    w.set_alliance(0, 1, false);
+    w.spawn_building(t.fact, 1, {10, 10});
+    w.spawn_building(t.tower, 0, {40, 40});
+    w.spawn_building(t.tower, 1, {12, 12});
+
+    const int32_t nah = w.spawn(t.arty, 1, {43, 40});
+    const int32_t fern = w.spawn(t.arty, 1, {20, 40});
+    const int32_t panzer = w.spawn(t.tank, 1, {11, 14});
+    BotParams bp = siege_bot_params();
+    bp.squad_size = 99;
+    w.enable_bot(1, bp);
+    w.step();
+
+    const BotState& b = w.bot_state(1);
+    w.bot_stat_sample(1);
+    const int32_t armee = b.stat_army_value;
+    const int32_t tuerme = b.stat_towers;
+    CHECK(armee == 600 + 600 + 800);
+    CHECK(tuerme == 1);
+
+    w.destroy(nah);
+    CHECK(b.stat_siege_lost == 1);
+    CHECK(b.stat_siege_lost_in_range == 1);
+    w.destroy(fern);
+    CHECK(b.stat_siege_lost == 2);
+    CHECK(b.stat_siege_lost_in_range == 1);
+    w.destroy(panzer);
+    CHECK(b.stat_siege_lost == 2);
+
+
+    const BotState& b2 = w.bot_state(1);
+    const int64_t vorher = b2.stat_cash_sum;
+    const int32_t n_vorher = b2.stat_cash_samples;
+    w.give_credits(1, 1000);
+    w.bot_stat_sample(1);
+    w.give_credits(1, 2000);
+    w.bot_stat_sample(1);
+    const int64_t mittel = (b2.stat_cash_sum - vorher) / std::max(1, b2.stat_cash_samples - n_vorher);
+    std::printf("KI-Messung: Armeewert %d, Tuerme %d, Belagerer verloren %d (davon %d in Turmreichweite), Bargeld-Mittel %lld\n",
+                armee, tuerme, b2.stat_siege_lost, b2.stat_siege_lost_in_range, (long long)mittel);
+    CHECK(b2.stat_cash_samples - n_vorher == 2);
+    CHECK(mittel == 2000);
+
+    w.bot_stat_sample(1);
+    CHECK(b2.stat_army_value == 0);
 }
 
 
@@ -4163,6 +4784,122 @@ static void test_harvester_gems_and_richness() {
 }
 
 
+static void test_harvester_gems() {
+    struct Setup {
+        World w;
+        int t_harv = -1;
+        size_t i = 0;
+        int32_t id = -1;
+    };
+    auto build = [](Setup& s, int gem_density, int gem_x0, int gem_x1, int ore_x0, int ore_x1) {
+        std::vector<uint8_t> cost(64 * 64, 1);
+        s.w.set_map(64, 64, cost.data());
+        s.w.set_visibility_players(0);
+        UnitType ht = harv_fixture::harv_type();
+        ht.search_from_proc = 15; ht.search_from_harv = 8;
+        s.t_harv = s.w.define_type(ht);
+        const int t_proc = s.w.define_type(harv_fixture::proc_type());
+        s.w.spawn_building(t_proc, 0, {4, 10});
+        for (int y = 10; y <= 13; ++y)
+            for (int x = gem_x0; x <= gem_x1; ++x) s.w.set_resource({x, y}, RES_GEMS, gem_density);
+        for (int y = 8; y <= 15; ++y)
+            for (int x = ore_x0; x <= ore_x1; ++x) s.w.set_resource({x, y}, RES_ORE, 12);
+        s.id = s.w.spawn(s.t_harv, 0, {12, 12});
+        s.i = size_t(s.w.index_of(s.id));
+    };
+    auto settle = [](Setup& s) {
+        for (int t = 0; t < 600 && s.w.harvest(s.i).state != Harvest::TO_FIELD &&
+                        s.w.harvest(s.i).state != Harvest::HARVESTING; ++t) s.w.step();
+        CHECK(s.w.harvest(s.i).state == Harvest::TO_FIELD || s.w.harvest(s.i).state == Harvest::HARVESTING);
+        return s.w.harvest(s.i).target;
+    };
+
+    Setup a; build(a, 1, 16, 19, 26, 33);
+    const CPos ta = settle(a);
+    std::printf("Diamanten (a) Feld nebenan gegen fernes Erz: Ziel (%d,%d) Typ %d\n", ta.x, ta.y, a.w.resource_type(ta));
+    CHECK(a.w.resource_type(ta) == RES_GEMS);
+
+    Setup b; build(b, 2, 24, 27, 14, 17);
+    const CPos tb = settle(b);
+    std::printf("Diamanten (b) nahes Erz gegen ferne Diamanten: Ziel (%d,%d) Typ %d\n", tb.x, tb.y, b.w.resource_type(tb));
+    CHECK(b.w.resource_type(tb) == RES_ORE);
+
+    Setup c; build(c, 1, 24, 27, 14, 17);
+    const int32_t other = c.w.spawn(c.t_harv, 0, {25, 11});
+    const size_t oi = size_t(c.w.index_of(other));
+    for (int t = 0; t < 200 && c.w.harvest(oi).state != Harvest::HARVESTING; ++t) c.w.step();
+    CHECK(c.w.harvest(oi).state == Harvest::HARVESTING);
+    const CPos claimed = c.w.harvest(oi).target;
+    c.w.order_harvest(&c.id, 1, claimed);
+    const CPos tc = settle(c);
+    std::printf("Diamanten (c) Befehl auf beanspruchte Zelle (%d,%d): Ziel (%d,%d) Typ %d\n",
+                claimed.x, claimed.y, tc.x, tc.y, c.w.resource_type(tc));
+    CHECK(c.w.resource_type(tc) == RES_GEMS);
+    CHECK(!(tc == claimed));
+}
+
+static void test_harvester_prefers_full_field() {
+
+    auto first_target = [](int thin_density, int thin_x0, int thin_x1, int full_x0, int full_x1) {
+        World w;
+        std::vector<uint8_t> cost(48 * 48, 1);
+        w.set_map(48, 48, cost.data());
+        UnitType ht = harv_fixture::harv_type();
+        ht.search_from_proc = 40;
+        const int t_harv = w.define_type(ht);
+        const int t_proc = w.define_type(harv_fixture::proc_type());
+        w.spawn_building(t_proc, 0, {4, 10});
+        for (int y = 9; y <= 15; ++y)
+            for (int x = thin_x0; x <= thin_x1; ++x) w.set_resource({x, y}, RES_ORE, thin_density);
+        for (int y = 9; y <= 14; ++y)
+            for (int x = full_x0; x <= full_x1; ++x) w.set_resource({x, y}, RES_ORE, 12);
+        const int32_t h = w.spawn(t_harv, 0, {12, 12});
+        const size_t i = size_t(w.index_of(h));
+        for (int t = 0; t < 400 && w.harvest(i).state != Harvest::TO_FIELD &&
+                        w.harvest(i).state != Harvest::HARVESTING; ++t) w.step();
+        CHECK(w.harvest(i).state == Harvest::TO_FIELD || w.harvest(i).state == Harvest::HARVESTING);
+        return w.harvest(i).target;
+    };
+
+
+    const CPos a = first_target(1, 14, 20, 24, 29);
+    std::printf("Erzwahl (a) dünnes Feld nebenan, volles fern: Ziel (%d,%d) — %s\n", a.x, a.y,
+                a.x >= 24 ? "volles Feld" : "dünnes Feld");
+    CHECK(a.x >= 24);
+
+
+    const CPos b = first_target(12, 14, 20, 24, 29);
+    std::printf("Erzwahl (b) beide voll: Ziel (%d,%d) — %s\n", b.x, b.y, b.x <= 20 ? "nahes Feld" : "fernes Feld");
+    CHECK(b.x <= 20);
+
+
+    const CPos c = first_target(1, 13, 13, 18, 23);
+    std::printf("Erzwahl (c) Einzelzelle nebenan, volles Feld nah: Ziel (%d,%d) — %s\n", c.x, c.y,
+                c.x >= 18 ? "volles Feld" : "Einzelzelle");
+    CHECK(c.x >= 18);
+
+
+    const CPos d = first_target(1, 13, 13, 18, 23);
+    CHECK(c == d);
+
+
+    {
+        World w;
+        std::vector<uint8_t> cost(16 * 16, 1);
+        w.set_map(16, 16, cost.data());
+        w.set_resource({2, 2}, RES_ORE, 1);
+        CHECK(w.cell_fullness({2, 2}) == FULLNESS_OWN_WEIGHT * 1);
+        for (int y = 7; y <= 9; ++y)
+            for (int x = 7; x <= 9; ++x) w.set_resource({x, y}, RES_ORE, 12);
+        CHECK(w.cell_fullness({8, 8}) == FULLNESS_MAX);
+        for (int y = 12; y <= 14; ++y)
+            for (int x = 12; x <= 14; ++x) w.set_resource({x, y}, RES_GEMS, 3);
+        CHECK(w.cell_fullness({13, 13}) == FULLNESS_MAX);
+        CHECK(w.cell_fullness({0, 0}) == 0);
+    }
+}
+
+
 static void test_harvester_park() {
     World w;
     std::vector<uint8_t> cost(48 * 48, 1);
@@ -4483,6 +5220,372 @@ static void test_bot_expansion() {
 }
 
 
+struct EconTypes {
+    int t_fact = -1, t_powr = -1, t_proc = -1, t_harv = -1;
+};
+
+static EconTypes econ_basics(World& w) {
+    EconTypes e;
+    UnitType fact;
+    fact.building = true; fact.foot_w = 3; fact.foot_h = 3; fact.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    fact.build_block = fact.footprint; fact.hp = 150000; fact.base_provider = true; fact.cost = 2000;
+    fact.produces = (1u << QUEUE_BUILDING) | (1u << QUEUE_VEHICLE) | (1u << QUEUE_DEFENSE);
+    fact.provides = {"fact"}; fact.exit_dx = 1; fact.exit_dy = 3;
+    UnitType powr;
+    powr.building = true; powr.foot_w = 2; powr.foot_h = 2; powr.footprint = {1, 1, 1, 1};
+    powr.build_block = powr.footprint; powr.hp = 40000; powr.power = 100; powr.cost = 300;
+    powr.queue_kind = QUEUE_BUILDING; powr.provides = {"powr", "anypower"}; powr.ai_building_fraction = 10;
+    UnitType harv;
+    harv.speed = 72; harv.turn_rate = 20; harv.hp = 60000; harv.harvester = true; harv.capacity = 20;
+    harv.bale_load_delay = 4; harv.bale_unload_delay = 1; harv.search_from_proc = 15; harv.search_from_harv = 8;
+    harv.wait_duration = 25; harv.cost = 1400; harv.queue_kind = QUEUE_VEHICLE; harv.ai_unit_share = 15;
+    harv.ai_unit_limit = 12;
+    e.t_fact = w.define_type(fact); e.t_powr = w.define_type(powr); e.t_harv = w.define_type(harv);
+    UnitType proc;
+    proc.building = true; proc.foot_w = 3; proc.foot_h = 3; proc.footprint = {0, 1, 0, 1, 1, 1, 1, 0, 0};
+    proc.build_block = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    proc.hp = 90000; proc.power = -30; proc.cost = 1400; proc.queue_kind = QUEUE_BUILDING;
+    proc.prerequisites = {"anypower"}; proc.provides = {"proc"}; proc.refinery = true;
+    proc.dock_dx = 1; proc.dock_dy = 2; proc.ai_building_fraction = 10;
+    proc.free_actor = e.t_harv; proc.free_dx = 1; proc.free_dy = 2;
+    e.t_proc = w.define_type(proc);
+    return e;
+}
+
+
+static void test_bot_harvesters_by_ore() {
+    auto target_with_ore = [](int ore_side) {
+        World w;
+        std::vector<uint8_t> cost(64 * 64, 1);
+        w.set_map(64, 64, cost.data());
+        const EconTypes e = econ_basics(w);
+        w.spawn_building(e.t_fact, 1, {8, 8});
+        w.spawn_building(e.t_proc, 1, {13, 8});
+        for (int y = 20; y < 20 + ore_side; ++y)
+            for (int x = 8; x < 8 + ore_side; ++x) w.set_resource({x, y}, RES_ORE, 12);
+        w.give_credits(1, 20000);
+        BotParams bp;
+        bp.squad_size = 1000;
+        w.enable_bot(1, bp);
+        w.step();
+        return w.bot_harvester_target(1);
+    };
+    const int32_t many = target_with_ore(16);
+    const int32_t few = target_with_ore(3);
+    std::printf("KI-Ernte nach Erzangebot: 256 Erzzellen → %d Ernteeinheiten, 9 Erzzellen → %d\n", many, few);
+    CHECK(many == 3);
+    CHECK(few >= 1 && few <= 1);
+    CHECK(many > few);
+}
+
+
+static void test_bot_spend_surplus() {
+    World w;
+    std::vector<uint8_t> cost(64 * 64, 1);
+    w.set_map(64, 64, cost.data());
+    const EconTypes e = econ_basics(w);
+    UnitType barr;
+    barr.building = true; barr.foot_w = 2; barr.foot_h = 2; barr.footprint = {1, 1, 1, 1};
+    barr.build_block = barr.footprint; barr.hp = 40000; barr.power = -20; barr.cost = 500;
+    barr.queue_kind = QUEUE_BUILDING; barr.prerequisites = {"anypower"}; barr.provides = {"barr"};
+    barr.produces = 1u << QUEUE_INFANTRY; barr.exit_dx = 0; barr.exit_dy = 2;
+    UnitType dome;
+    dome.building = true; dome.foot_w = 2; dome.foot_h = 2; dome.footprint = {1, 1, 1, 1};
+    dome.build_block = dome.footprint; dome.hp = 40000; dome.power = -40; dome.cost = 1400;
+    dome.queue_kind = QUEUE_BUILDING; dome.prerequisites = {"anypower"}; dome.provides = {"dome"};
+    dome.provides_radar = true;
+    UnitType mslo;
+    mslo.building = true; mslo.foot_w = 2; mslo.foot_h = 2; mslo.footprint = {1, 1, 1, 1};
+    mslo.build_block = mslo.footprint; mslo.hp = 40000; mslo.power = -100; mslo.cost = 2500;
+    mslo.queue_kind = QUEUE_BUILDING; mslo.prerequisites = {"dome"}; mslo.provides = {"mslo"};
+    mslo.support_power = SP_NUKE;
+    const int t_barr = w.define_type(barr), t_dome = w.define_type(dome), t_mslo = w.define_type(mslo);
+
+    w.spawn_building(e.t_fact, 1, {8, 8});
+    w.spawn_building(e.t_powr, 1, {13, 8});
+    w.spawn_building(e.t_proc, 1, {8, 13});
+    w.spawn_building(t_barr, 1, {13, 13});
+    for (int y = 24; y < 32; ++y)
+        for (int x = 8; x < 16; ++x) w.set_resource({x, y}, RES_ORE, 12);
+    BotParams bp;
+    bp.squad_size = 1000;
+    w.enable_bot(1, bp);
+    w.step();
+
+    std::vector<int32_t> list;
+    w.buildable(1, QUEUE_BUILDING, list);
+    std::vector<int32_t> count(w.type_count(), 0);
+    for (size_t i = 0; i < w.actor_count(); ++i) {
+        const Actor& a = w.actor(i);
+        if (a.alive && a.owner == 1 && w.type(a.type).building) ++count[size_t(a.type)];
+    }
+
+    const int32_t poor = w.bot_spend_surplus(1, QUEUE_BUILDING, list, count);
+    w.give_credits(1, 9000);
+
+    const int32_t first = w.bot_spend_surplus(1, QUEUE_BUILDING, list, count);
+    count[size_t(t_barr)] = 3;
+
+    const int32_t second = w.bot_spend_surplus(1, QUEUE_BUILDING, list, count);
+    count[size_t(t_dome)] = 2;
+    w.spawn_building(t_dome, 1, {18, 8});
+    w.step();
+    w.buildable(1, QUEUE_BUILDING, list);
+
+    const int32_t third = w.bot_spend_surplus(1, QUEUE_BUILDING, list, count);
+    std::printf("KI-Überschuss: ohne Geld %d, dann Reihenfolge %d (Kaserne %d), %d (Radar %d), %d (Superwaffe %d)\n",
+                poor, first, t_barr, second, t_dome, third, t_mslo);
+    CHECK(poor < 0);
+    CHECK(first == t_barr);
+    CHECK(second == t_dome);
+    CHECK(third == t_mslo);
+
+
+    const int64_t before = w.credits(1);
+    int32_t buildings_before = 0;
+    for (size_t i = 0; i < w.actor_count(); ++i)
+        if (w.actor(i).alive && w.actor(i).owner == 1 && w.type(w.actor(i).type).building) ++buildings_before;
+    for (int t = 0; t < 3000; ++t) w.step();
+    int32_t buildings_after = 0;
+    for (size_t i = 0; i < w.actor_count(); ++i)
+        if (w.actor(i).alive && w.actor(i).owner == 1 && w.type(w.actor(i).type).building) ++buildings_after;
+    std::printf("KI-Überschuss im Lauf: Guthaben %lld → %lld, Gebäude %d → %d\n",
+                static_cast<long long>(before), static_cast<long long>(w.credits(1)),
+                buildings_before, buildings_after);
+    CHECK(buildings_after > buildings_before);
+}
+
+
+static void test_bot_defense_budget() {
+    World w;
+    std::vector<uint8_t> cost(64 * 64, 1);
+    w.set_map(64, 64, cost.data());
+    const EconTypes e = econ_basics(w);
+    Weapon cannon; cannon.range = 5 * CELL; cannon.reload = 40; cannon.damage = 5000;
+    cannon.versus[ARMOR_NONE] = 25; cannon.versus[ARMOR_HEAVY] = 100;
+    Weapon mg; mg.range = 4 * CELL; mg.reload = 20; mg.damage = 1500;
+    mg.versus[ARMOR_NONE] = 100; mg.versus[ARMOR_HEAVY] = 25;
+    Weapon flak; flak.range = 6 * CELL; flak.reload = 30; flak.damage = 3000;
+    flak.valid_targets = TT_AIRBORNE;
+    const int w_cannon = w.define_weapon(cannon), w_mg = w.define_weapon(mg), w_flak = w.define_weapon(flak);
+    UnitType gun;
+    gun.building = true; gun.foot_w = 1; gun.foot_h = 1; gun.footprint = {1}; gun.build_block = gun.footprint;
+    gun.hp = 40000; gun.cost = 600; gun.queue_kind = QUEUE_DEFENSE; gun.defense = true;
+    gun.prerequisites = {"anypower"}; gun.provides = {"gun"}; gun.weapon = w_cannon; gun.ai_building_fraction = 5;
+    UnitType pbox;
+    pbox.building = true; pbox.foot_w = 1; pbox.foot_h = 1; pbox.footprint = {1}; pbox.build_block = pbox.footprint;
+    pbox.hp = 40000; pbox.cost = 400; pbox.queue_kind = QUEUE_DEFENSE; pbox.defense = true;
+    pbox.prerequisites = {"anypower"}; pbox.provides = {"pbox"}; pbox.weapon = w_mg; pbox.ai_building_fraction = 5;
+    UnitType sam;
+    sam.building = true; sam.foot_w = 1; sam.foot_h = 1; sam.footprint = {1}; sam.build_block = sam.footprint;
+    sam.hp = 40000; sam.cost = 750; sam.queue_kind = QUEUE_DEFENSE; sam.defense = true;
+    sam.prerequisites = {"anypower"}; sam.provides = {"sam"}; sam.weapon = w_flak; sam.ai_building_fraction = 5;
+    UnitType tank;
+    tank.speed = 85; tank.turn_rate = 20; tank.hp = 40000; tank.cost = 1150; tank.weapon = w_cannon;
+    tank.armor = ARMOR_HEAVY; tank.queue_kind = QUEUE_VEHICLE;
+    UnitType hpad;
+    hpad.building = true; hpad.foot_w = 2; hpad.foot_h = 2; hpad.footprint = {1, 1, 1, 1};
+    hpad.build_block = hpad.footprint; hpad.hp = 40000; hpad.cost = 500; hpad.produces = 1u << QUEUE_AIRCRAFT;
+    const int t_gun = w.define_type(gun), t_pbox = w.define_type(pbox), t_sam = w.define_type(sam);
+    const int t_tank = w.define_type(tank), t_hpad = w.define_type(hpad);
+
+    w.spawn_building(e.t_fact, 1, {8, 8});
+    w.spawn_building(e.t_powr, 1, {13, 8});
+    w.spawn_building(e.t_proc, 1, {8, 13});
+    BotParams bp;
+    bp.squad_size = 1000;
+    w.enable_bot(1, bp);
+    w.step();
+
+    std::vector<int32_t> list;
+    w.buildable(1, QUEUE_DEFENSE, list);
+    std::vector<int32_t> count(w.type_count(), 0);
+
+
+    for (int i = 0; i < 4; ++i) w.spawn(t_tank, 2, CPos{20 + i, 20});
+    w.step();
+    const int32_t budget = w.bot_defense_budget(1);
+    const int32_t want_ground = w.bot_defense_request(1, list, count);
+
+    std::vector<int32_t> only_sam{t_sam};
+    const int32_t no_air = w.bot_defense_request(1, only_sam, count);
+
+    w.spawn_building(t_hpad, 2, {30, 30});
+    w.step();
+    const int32_t with_air = w.bot_defense_request(1, list, count);
+    std::printf("KI-Verteidigungsbudget: Soll %d, gewählter Turm %d (gun %d / pbox %d), ohne Gegnerflieger %d, "
+                "mit Landeplatz %d (sam %d)\n",
+                budget, want_ground, t_gun, t_pbox, no_air, with_air, t_sam);
+    CHECK(budget > 0);
+    CHECK(want_ground == t_gun || want_ground == t_pbox);
+    CHECK(want_ground != t_sam);
+    CHECK(no_air < 0);
+    CHECK(with_air == t_sam);
+}
+
+
+struct CounterTypes {
+    int t_tank = -1, t_rocket = -1, t_flame = -1, t_arty = -1;
+};
+
+static CounterTypes counter_units(World& w) {
+    CounterTypes c;
+    Weapon cannon; cannon.range = 5 * CELL; cannon.reload = 40; cannon.damage = 5000;
+    cannon.versus[ARMOR_NONE] = 50; cannon.versus[ARMOR_HEAVY] = 100;
+    cannon.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_VEHICLE | TT_INFANTRY;
+    Weapon rocket; rocket.range = 6 * CELL; rocket.reload = 50; rocket.damage = 4000;
+    rocket.versus[ARMOR_NONE] = 25; rocket.versus[ARMOR_HEAVY] = 100;
+    rocket.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_VEHICLE | TT_INFANTRY;
+    Weapon flame; flame.range = 3 * CELL; flame.reload = 30; flame.damage = 3000;
+    flame.versus[ARMOR_NONE] = 100; flame.versus[ARMOR_HEAVY] = 25;
+    flame.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_VEHICLE | TT_INFANTRY;
+    Weapon shell; shell.range = 11 * CELL; shell.min_range = 4 * CELL; shell.reload = 60; shell.damage = 2000;
+    shell.valid_targets = TT_GROUND_ACTOR | TT_STRUCTURE | TT_DEFENSE | TT_VEHICLE | TT_INFANTRY;
+    const int w_cannon = w.define_weapon(cannon), w_rocket = w.define_weapon(rocket);
+    const int w_flame = w.define_weapon(flame), w_shell = w.define_weapon(shell);
+
+    UnitType tank;
+    tank.speed = 72; tank.turn_rate = 20; tank.hp = 40000; tank.cost = 800; tank.weapon = w_cannon;
+    tank.armor = ARMOR_HEAVY; tank.queue_kind = QUEUE_VEHICLE; tank.ai_unit_share = 40; tank.ai_unit_limit = 99;
+    tank.hit_radius = 426; tank.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+    UnitType rock;
+    rock.speed = 60; rock.turn_rate = 20; rock.hp = 30000; rock.cost = 700; rock.weapon = w_rocket;
+    rock.armor = ARMOR_LIGHT; rock.queue_kind = QUEUE_VEHICLE; rock.ai_unit_share = 20; rock.ai_unit_limit = 99;
+    rock.hit_radius = 426; rock.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+    UnitType flam;
+    flam.speed = 60; flam.turn_rate = 20; flam.hp = 30000; flam.cost = 700; flam.weapon = w_flame;
+    flam.armor = ARMOR_LIGHT; flam.queue_kind = QUEUE_VEHICLE; flam.ai_unit_share = 20; flam.ai_unit_limit = 99;
+    flam.hit_radius = 426; flam.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+    UnitType arty;
+    arty.speed = 45; arty.turn_rate = 20; arty.hp = 15000; arty.cost = 600; arty.weapon = w_shell;
+    arty.armor = ARMOR_LIGHT; arty.queue_kind = QUEUE_VEHICLE; arty.ai_unit_share = 10; arty.ai_unit_limit = 99;
+    arty.hit_radius = 426; arty.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+    c.t_tank = w.define_type(tank);
+    c.t_rocket = w.define_type(rock);
+    c.t_flame = w.define_type(flam);
+    c.t_arty = w.define_type(arty);
+    return c;
+}
+
+
+static void test_bot_orders() {
+    World w;
+    std::vector<uint8_t> cost(64 * 64, 1);
+    w.set_map(64, 64, cost.data());
+    const EconTypes e = econ_basics(w);
+    const CounterTypes c = counter_units(w);
+    w.spawn_building(e.t_fact, 1, {8, 8});
+    w.spawn_building(e.t_powr, 1, {13, 8});
+    w.give_credits(1, 30000);
+    BotParams bp;
+    bp.squad_size = 1000;
+    bp.counter_interval = 0;
+    w.enable_bot(1, bp);
+    w.step();
+
+
+    CHECK(w.bot_role_of_type(size_t(c.t_arty)) == ROLE_SIEGE);
+    CHECK(w.bot_role_of_type(size_t(c.t_tank)) == ROLE_TANK);
+    CHECK(w.bot_role_of_type(size_t(e.t_harv)) < 0);
+
+
+    w.bot_vorhaben_start(1, VH_SIEGE);
+    CHECK(w.bot_state(1).vh_orders[ROLE_TANK] == 5);
+    CHECK(w.bot_state(1).vh_orders[ROLE_SIEGE] == 3);
+    int tanks = 0, artys = 0, others = 0;
+    for (int k = 0; k < 8; ++k) {
+        const int32_t t = w.bot_choose_unit(1, QUEUE_VEHICLE);
+        if (t == c.t_tank) ++tanks;
+        else if (t == c.t_arty) ++artys;
+        else ++others;
+    }
+    CHECK(tanks == 5 && artys == 3 && others == 0);
+
+    CHECK(w.bot_state(1).vh_orders[ROLE_TANK] == 0);
+    CHECK(w.bot_state(1).vh_orders[ROLE_SIEGE] == 0);
+    std::printf("KI-Bestellungen: Belagerung bestellt 5 Panzer + 3 Belagerer, geliefert %d/%d (sonstige %d)\n",
+                tanks, artys, others);
+}
+
+
+static void test_bot_counter() {
+    auto shares = [](int32_t counter_interval, int32_t& rocket_pct, int32_t& flame_pct) {
+        World w;
+        std::vector<uint8_t> cost(64 * 64, 1);
+        w.set_map(64, 64, cost.data());
+        const EconTypes e = econ_basics(w);
+        const CounterTypes c = counter_units(w);
+        w.set_alliance(1, 2, false);
+        w.spawn_building(e.t_fact, 1, {8, 8});
+        w.spawn_building(e.t_powr, 1, {13, 8});
+
+
+        for (int k = 0; k < 3; ++k) w.spawn(c.t_tank, 1, {20 + k, 20});
+        for (int k = 0; k < 6; ++k) w.spawn(c.t_tank, 2, {22 + k, 22});
+        BotParams bp;
+        bp.squad_size = 1000;
+        bp.threat_map_interval = 5;
+        bp.counter_interval = counter_interval;
+        w.enable_bot(1, bp);
+        for (int k = 0; k < 120; ++k) w.step();
+        rocket_pct = w.bot_counter_share(1, size_t(c.t_rocket));
+        flame_pct = w.bot_counter_share(1, size_t(c.t_flame));
+    };
+    int32_t rocket_on = 0, flame_on = 0, rocket_off = 0, flame_off = 0;
+    shares(20, rocket_on, flame_on);
+    shares(0, rocket_off, flame_off);
+    CHECK(rocket_on > 100);
+    CHECK(flame_on <= 100);
+    CHECK(rocket_on > flame_on);
+    CHECK(rocket_off == 100 && flame_off == 100);
+    std::printf("KI-Konter: Gegner nur Panzer → Raketenwagen %d %%, Flammenwagen %d %%; ohne Konter %d/%d %%\n",
+                rocket_on, flame_on, rocket_off, flame_off);
+}
+
+
+static void test_bot_expansion_all_fields() {
+    World w;
+    std::vector<uint8_t> cost(96 * 96, 1);
+    w.set_map(96, 96, cost.data());
+    const EconTypes e = econ_basics(w);
+    UnitType mcv;
+    mcv.speed = 60; mcv.turn_rate = 20; mcv.hp = 60000; mcv.cost = 2000; mcv.queue_kind = QUEUE_VEHICLE;
+    mcv.transforms_into = e.t_fact;
+    const int t_mcv = w.define_type(mcv);
+
+
+    const CPos fields[3] = {{20, 12}, {74, 20}, {74, 74}};
+    for (const CPos& f : fields)
+        for (int y = f.y - 5; y <= f.y + 5; ++y)
+            for (int x = f.x - 5; x <= f.x + 5; ++x) w.set_resource({x, y}, RES_ORE, 12);
+
+    w.spawn_building(e.t_fact, 1, {10, 10});
+    w.give_credits(1, 40000);
+    BotParams bp;
+    bp.squad_size = 1000;
+    w.enable_bot(1, bp);
+    w.step();
+
+
+    const int32_t free_fields = w.bot_free_resource_fields(1);
+    const int32_t should_have = w.bot_max_conyards(1, 1);
+    for (int t = 1; t <= 15000; ++t) w.step();
+    int32_t yards = 0, at_field[3] = {0, 0, 0};
+    for (size_t i = 0; i < w.actor_count(); ++i) {
+        const Actor& a = w.actor(i);
+        if (!a.alive || a.owner != 1 || a.type != e.t_fact) continue;
+        ++yards;
+        for (int k = 0; k < 3; ++k) if (cell_dist_sq(a.origin, fields[k]) <= 22 * 22) ++at_field[k];
+    }
+    std::printf("KI-Ausbau auf alle Felder: %d freie Erzfelder, Soll %d Bauhöfe, gebaut %d (Felder %d/%d/%d)\n",
+                free_fields, should_have, yards, at_field[0], at_field[1], at_field[2]);
+    CHECK(free_fields >= 3);
+    CHECK(should_have >= 3);
+    CHECK(yards >= 3);
+    (void)t_mcv;
+}
+
+
 static void test_bot_intervals() {
     World w;
     std::vector<uint8_t> cost(32 * 32, 1);
@@ -4613,6 +5716,52 @@ static void test_bot_vehicle_timing() {
     }
     std::printf("KI baut ihr erstes Kampffahrzeug bei Tick %u (Ziel < 6000)\n", tank_tick);
     CHECK(tank_tick > 0 && tank_tick < 6000);
+}
+
+
+static uint32_t bot_reaction_gap(int32_t reaction) {
+    World w;
+    std::vector<uint8_t> cost(48 * 48, 1);
+    w.set_map(48, 48, cost.data());
+    UnitType fact;
+    fact.building = true; fact.foot_w = 3; fact.foot_h = 3; fact.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    fact.build_block = fact.footprint; fact.hp = 150000; fact.armor = ARMOR_WOOD;
+    fact.produces = 1u << QUEUE_BUILDING; fact.base_provider = true; fact.provides = {"fact"};
+    UnitType weap;
+    weap.building = true; weap.foot_w = 3; weap.foot_h = 3; weap.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    weap.build_block = weap.footprint; weap.hp = 150000; weap.armor = ARMOR_WOOD;
+    weap.provides = {"weap"}; weap.produces = 1u << QUEUE_VEHICLE; weap.exit_dx = 1; weap.exit_dy = 3;
+    UnitType tank;
+    tank.speed = 85; tank.turn_rate = 20; tank.hp = 40000; tank.cost = 600;
+    tank.queue_kind = QUEUE_VEHICLE; tank.prerequisites = {"weap"}; tank.ai_unit_share = 50;
+    const int t_fact = w.define_type(fact), t_weap = w.define_type(weap), t_tank = w.define_type(tank);
+    w.spawn_building(t_fact, 1, {8, 8});
+    w.spawn_building(t_weap, 1, {14, 8});
+    w.give_credits(1, 20000);
+    BotParams bp;
+    bp.reaction_min_ticks = reaction;
+    bp.reaction_max_ticks = reaction;
+    w.enable_bot(1, bp);
+    uint32_t first = 0, second = 0;
+    for (int t = 0; t < 4000 && second == 0; ++t) {
+        w.step();
+        int n = 0;
+        for (size_t i = 0; i < w.actor_count(); ++i) {
+            const Actor& a = w.actor(i);
+            if (a.alive && a.owner == 1 && a.type == t_tank) ++n;
+        }
+        if (n >= 1 && first == 0) first = w.tick();
+        if (n >= 2 && second == 0) second = w.tick();
+    }
+    CHECK(first > 0 && second > first);
+    return second - first;
+}
+
+static void test_bot_build_reaction() {
+    const uint32_t gap0 = bot_reaction_gap(0);
+    const uint32_t gap1 = bot_reaction_gap(200);
+    std::printf("KI Bau-Versatz: Panzerabstand ohne %u Ticks, mit Versatz 200: %u Ticks\n", gap0, gap1);
+    CHECK(gap1 >= gap0 + 170 && gap1 <= gap0 + 260);
 }
 
 
@@ -8511,12 +9660,20 @@ int main() {
     test_bot();
     test_bot_repair();
     test_bot_naval();
+    test_bot_naval_alarm();
     test_bot_saboteurs();
     test_bot_difficulty();
     test_bot_personality();
     test_bot_target_value();
     test_bot_support_power();
     test_bot_air_squad();
+    test_bot_siege_holds_range();
+    test_bot_gather();
+    test_bot_gather_leaves_without_building();
+    test_bot_vorhaben_form_timeout();
+    test_bot_difficulty_params();
+    test_bot_vorhaben_wahl();
+    test_bot_stats();
     test_bot_determinism();
     test_build_area();
     test_place_over_unit();
@@ -8573,15 +9730,24 @@ int main() {
     test_seeds_blocked_walk();
     test_bot_harvester_redirect();
     test_bot_expansion();
+    test_bot_harvesters_by_ore();
+    test_bot_spend_surplus();
+    test_bot_defense_budget();
+    test_bot_orders();
+    test_bot_counter();
+    test_bot_expansion_all_fields();
     test_bot_refinery_reachable();
     test_order_deliver();
     test_harvester_queue();
     test_harvester_far_ore();
     test_harvester_gems_and_richness();
+    test_harvester_gems();
+    test_harvester_prefers_full_field();
     test_harvester_park();
     test_harvester_explore();
     test_bot_squad_advance();
     test_bot_vehicle_timing();
+    test_bot_build_reaction();
     test_no_backwards_movement();
     test_cargo();
     test_cargo_helicopter();
