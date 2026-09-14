@@ -242,6 +242,25 @@ func _ready() -> void:
 	_test_armaments = args.has("--test-armaments")
 	_test_dog = args.has("--test-dog")
 	_test_placement = args.has("--test-placement")
+
+	var dbk := args.find("--demo-battle")
+	if dbk >= 0:
+		_demo_battle = 1
+		if dbk + 1 < args.size() and not args[dbk + 1].begins_with("--"):
+			_demo_battle = maxi(1, int(args[dbk + 1]))
+		_any_test = true
+		_screenshot_tick = 1 << 30
+		var ddk := args.find("--demo-delay")
+		if ddk >= 0 and ddk + 1 < args.size():
+			_demo_delay = int(args[ddk + 1])
+		var dek := args.find("--demo-every")
+		if dek >= 0 and dek + 1 < args.size():
+			_demo_every = maxi(1, int(args[dek + 1]))
+		var dsk := args.find("--demo-shots")
+		if dsk >= 0 and dsk + 1 < args.size():
+			_demo_count = maxi(1, int(args[dsk + 1]))
+		_demo_zap = args.has("--demo-zap")
+		_demo_follow = args.has("--demo-follow")
 	_test_heal = args.has("--test-heal")
 	_test_iron = args.has("--test-iron")
 	_test_water = args.has("--test-water")
@@ -325,7 +344,7 @@ func _ready() -> void:
 	if ssk >= 0 and ssk + 1 < args.size():
 		_screenshot_series = int(args[ssk + 1])
 	var stk := args.find("--screenshot-at")
-	if stk >= 0 and stk + 1 < args.size():
+	if stk >= 0 and stk + 1 < args.size() and _demo_battle == 0:
 		_screenshot_tick = int(args[stk + 1])
 	elif _test_spy or _test_bridge or _test_bridges or _test_capture:
 
@@ -2445,6 +2464,342 @@ func _run_test_buildings() -> void:
 			get_viewport().get_texture().get_image().save_png(_screenshot_path)
 			print("Screenshot: ", _screenshot_path)
 		get_tree().quit()
+
+
+var _demo_battle := 0
+var _demo_shots := 0
+var _demo_next_tick := 0
+var _demo_delay := 60
+var _demo_every := 12
+var _demo_count := 30
+var _demo_attackers := PackedInt32Array()
+var _demo_rally := Vector2i.ZERO
+var _demo_select := ""
+var _demo_zap := false
+var _demo_follow := false
+var _demo_center := Vector2.ZERO
+
+
+func _demo_units(rows: Array, player: int, origin: Vector2i, facing: int = -1,
+		airborne: bool = false) -> PackedInt32Array:
+	var ids := PackedInt32Array()
+	for row in rows:
+		var u = world.spawn_unit(String(row[0]), player, origin + Vector2i(int(row[1]), int(row[2])),
+				facing, 100, airborne)
+		if u != null and u.id >= 0:
+			ids.append(u.id)
+	return ids
+
+
+const DEMO_GROUND := [0, 1, 2, 6]
+
+
+func _demo_land_ok(type: String, cell: Vector2i) -> bool:
+	if not world.type_ids.has(type):
+		return false
+	var rows: PackedStringArray = String(world.types[type].get("footprint", "x")).split(" ")
+	for y in rows.size():
+		for x in rows[0].length():
+			if not DEMO_GROUND.has(world.terrain_type(cell + Vector2i(x, y))):
+				return false
+	return true
+
+
+func _demo_site(type: String, from: Vector2i, max_r: int = 10) -> Vector2i:
+	for r in range(0, max_r):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if r > 0 and absi(dx) != r and absi(dy) != r:
+					continue
+				if _demo_land_ok(type, from + Vector2i(dx, dy)):
+					return from + Vector2i(dx, dy)
+	return Vector2i(-1, -1)
+
+
+func _demo_base(rows: Array, player: int, origin: Vector2i) -> PackedInt32Array:
+	var ids := PackedInt32Array()
+	for row in rows:
+		var type := String(row[0])
+		if not world.type_ids.has(type):
+			continue
+		var cell := origin + Vector2i(int(row[1]), int(row[2]))
+		if not _demo_land_ok(type, cell):
+			cell = _demo_site(type, cell, 5)
+		if cell.x < 0:
+			continue
+		var u = world.call("_add_building", type, player, cell)
+		if u != null and u.id >= 0:
+			ids.append(u.id)
+	return ids
+
+
+func _demo_water_cells(center: Vector2i, want: int, radius: int = 20) -> Array:
+	var out: Array = []
+	for r in range(0, radius):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if r > 0 and absi(dx) != r and absi(dy) != r:
+					continue
+				var c := center + Vector2i(dx, dy)
+				if world.terrain_type(c) != ProtoWorld.TER_WATER:
+					continue
+				var free := true
+				for p in out:
+					if (Vector2i(p) - c).length_squared() < 6:
+						free = false
+				if free:
+					out.append(c)
+				if out.size() >= want:
+					return out
+	return out
+
+
+func _demo_show_hud() -> void:
+
+
+	_auto_bar_enabled = false
+	if build_bar != null and build_toggle != null:
+		build_bar.visible = true
+		build_toggle.button_pressed = true
+	if _demo_select == "":
+		return
+	var list: Array = []
+	for u in world.units:
+		if u.alive and u.player == 0 and u.type == _demo_select and list.size() < 6:
+			list.append(u)
+	if not list.is_empty():
+		world.select_units(list)
+
+
+func _demo_camera(center: Vector2, zoom: float) -> void:
+	world.zoom_at(clampf(zoom, ProtoWorld.MIN_ZOOM, ProtoWorld.MAX_ZOOM) / world.zoom,
+			world.get_viewport_rect().size / 2.0)
+	world.center_on(center * ProtoWorld.CELL)
+	_demo_center = center
+
+
+func _demo_track() -> void:
+	var sum := Vector2.ZERO
+	var n := 0
+	for u in world.units:
+		if not u.alive or (u.player != 0 and u.player != 1):
+			continue
+		if bool(world.types.get(u.type, {}).get("building", false)):
+			continue
+		var cell := u.pos / ProtoWorld.CELL
+		if cell.distance_to(_demo_center) > 30.0:
+			continue
+		sum += cell
+		n += 1
+	if n > 0:
+		world.center_on(sum / float(n) * ProtoWorld.CELL)
+
+
+func _run_demo_battle() -> void:
+	var sim = world.sim
+	var tick: int = sim.tick()
+	if _test_step == 0 and tick >= 10:
+		var origin := Vector2i(20, 20)
+		for u in world.units:
+			if u.alive and u.player == 0:
+				origin = Vector2i(u.pos / ProtoWorld.CELL)
+				break
+		origin.x = clampi(origin.x, 24, world.map_w - 25)
+		origin.y = clampi(origin.y, 14, world.map_h - 15)
+		_test_origin = origin
+		sim.give_credits(0, 50000)
+		sim.give_credits(1, 50000)
+		sim.set_enemy(0, 1, true)
+		sim.set_enemy(1, 0, true)
+
+
+		for u in world.units:
+			if u.alive and u.player == 0:
+				sim.remove_actor(u.id)
+
+
+		var away: int = 22 if origin.y + 34 < world.map_h else -22
+		var home := _demo_site("fact", origin + Vector2i(0, away), 22)
+		if home.x < 0:
+			home = _demo_site("fact", origin + Vector2i(0, -away), 22)
+		if home.x >= 0:
+			_demo_base([["fact", 0, 0], ["powr", 4, 0], ["powr", 4, 3], ["apwr", -4, 0],
+					["dome", 0, 4], ["weap", 4, 6], ["barr", -4, 4], ["proc", -4, 8]], 0, home)
+		match _demo_battle:
+			2: _demo_scene_mammut(origin)
+			3: _demo_scene_marine(origin)
+			4: _demo_scene_luft(origin)
+			5: _demo_scene_feld(origin)
+			_: _demo_scene_tesla(origin)
+		_demo_show_hud()
+		_test_step = 1
+		_demo_next_tick = tick + _demo_delay
+		print("T%d --demo-battle %d: Aufbau fertig, erstes Bild bei Tick %d"
+				% [tick, _demo_battle, _demo_next_tick])
+	elif _test_step == 1 and tick >= _demo_next_tick:
+
+
+		if _demo_zap and not _tesla_zap_now() and tick < _demo_next_tick + 60:
+			return
+		_demo_next_tick = tick + _demo_every
+
+		if _demo_attackers.size() > 0 and _demo_shots % 5 == 0:
+			sim.order_attack_move(_demo_attackers, _demo_rally.x, _demo_rally.y)
+		if _demo_follow:
+			_demo_track()
+		if _screenshot_path != "":
+			var path := "%s-%02d.png" % [_screenshot_path.get_basename(), _demo_shots]
+			get_viewport().get_texture().get_image().save_png(path)
+			print("T%d --demo-battle: Bild %s" % [tick, path])
+		_demo_shots += 1
+		if _demo_shots >= _demo_count:
+			get_tree().quit()
+
+
+func _demo_scene_tesla(origin: Vector2i) -> void:
+	_demo_base([["powr", 7, -5], ["powr", 7, -2], ["powr", 7, 1], ["powr", 7, 4],
+			["tsla", -2, -5], ["tsla", -2, 0], ["tsla", -2, 5],
+			["barr", 5, -8], ["proc", 5, 6]], 0, origin)
+	var own := _demo_units([["4tnk", 3, -4], ["4tnk", 3, -2], ["4tnk", 3, 2], ["4tnk", 3, 4],
+			["ttnk", 1, -3], ["ttnk", 1, -1], ["ttnk", 1, 1], ["ttnk", 1, 3],
+			["e1", 0, -5], ["e1", 0, 5], ["e3", 0, -2], ["e3", 0, 2], ["e4", 0, 0]], 0, origin, 768)
+	var foe := _demo_units([["2tnk", -11, -4], ["2tnk", -11, -2], ["2tnk", -11, 0], ["2tnk", -11, 2],
+			["2tnk", -11, 4], ["2tnk", -13, -3], ["2tnk", -13, -1], ["2tnk", -13, 1], ["2tnk", -13, 3],
+			["1tnk", -15, -4], ["1tnk", -15, 4], ["arty", -17, -1], ["arty", -17, 1],
+			["jeep", -12, -6], ["jeep", -12, 6],
+			["e1", -9, -3], ["e1", -9, 3], ["e3", -9, -1], ["e3", -9, 1], ["e2", -10, 0]], 1, origin, 256)
+	world.sim.order_attack_move(foe, origin.x + 2, origin.y)
+	world.sim.order_attack_move(own, origin.x - 7, origin.y)
+	_demo_attackers = foe
+	_demo_rally = origin + Vector2i(2, 0)
+	_demo_select = "ttnk"
+	_demo_camera(Vector2(origin) + Vector2(-5.5, -0.5), 2.9)
+
+
+func _demo_scene_mammut(origin: Vector2i) -> void:
+	var base := origin + Vector2i(-13, 0)
+	var walls := _demo_base([["fact", 0, -2], ["powr", 4, -5], ["powr", 4, -2], ["apwr", 4, 1],
+			["proc", -4, 3], ["weap", -4, -4], ["dome", 0, 3], ["fix", 0, 6],
+			["gun", 7, -2], ["gun", 7, 1], ["pbox", 6, -4], ["pbox", 6, 4],
+			["agun", 2, -6], ["ftur", 7, 4]], 1, base)
+	_demo_units([["2tnk", 9, -2], ["2tnk", 9, 2], ["1tnk", 9, 0],
+			["e1", 8, -3], ["e1", 8, 3], ["e3", 8, 0]], 1, base, 768)
+	var column := _demo_units([["4tnk", 0, -4], ["4tnk", 0, -2], ["4tnk", 0, 0], ["4tnk", 0, 2],
+			["4tnk", 0, 4], ["4tnk", 3, -3], ["4tnk", 3, -1], ["4tnk", 3, 1], ["4tnk", 3, 3],
+			["ttnk", 5, -2], ["ttnk", 5, 2], ["3tnk", 5, 0],
+			["e4", 2, -5], ["e4", 2, 5], ["e2", 4, 0]], 0, origin, 256)
+	var v2 := _demo_units([["v2rl", 7, -4], ["v2rl", 7, -2], ["v2rl", 7, 2], ["v2rl", 7, 4],
+			["v2rl", 9, -1], ["v2rl", 9, 1]], 0, origin, 256)
+	world.sim.order_attack_move(column, base.x + 6, base.y)
+
+	if walls.size() > 0:
+		for i in v2.size():
+			world.sim.order_attack(PackedInt32Array([v2[i]]), walls[i % walls.size()], false, true)
+	_demo_attackers = column
+	_demo_rally = base + Vector2i(6, 0)
+	_demo_select = "4tnk"
+	_demo_camera(Vector2(origin) + Vector2(-4.5, 0.0), 2.3)
+
+
+func _demo_scene_marine(origin: Vector2i) -> void:
+	var water := _find_water_cell(origin, 3, 60)
+	if water.x < 0:
+		print("--demo-battle 3: kein Wasser in der Nähe — Karte mit Küste wählen")
+		_demo_scene_tesla(origin)
+		return
+	var shore := _demo_site("fact", water, 18)
+	if shore.x < 0:
+		shore = origin
+	var base := _demo_base([["fact", 0, 0], ["powr", -4, -3], ["powr", -4, 0], ["proc", -4, 3],
+			["dome", 0, 4], ["tent", -4, -6], ["gun", 3, -2], ["gun", 3, 2], ["pbox", 3, 0],
+			["agun", 0, -4], ["silo", -1, 7], ["fix", 4, 5]], 1, shore)
+	_demo_units([["2tnk", 1, -2], ["1tnk", 2, 3], ["e1", -1, 0], ["e3", -1, 2]], 1, shore, 256)
+	var spots := _demo_water_cells(water, 16, 24)
+	var fleet := PackedInt32Array()
+	var guards := PackedInt32Array()
+	for i in spots.size():
+		var cell: Vector2i = spots[i]
+		if i < 5:
+			var m = world.spawn_unit("msub", 0, cell, 256)
+			if m != null and m.id >= 0:
+				fleet.append(m.id)
+		elif i < 9:
+			var s = world.spawn_unit("ss", 0, cell, 256)
+			if s != null and s.id >= 0:
+				fleet.append(s.id)
+		elif i < 13:
+			var d = world.spawn_unit("dd", 1, cell, 768)
+			if d != null and d.id >= 0:
+				guards.append(d.id)
+		else:
+			var p = world.spawn_unit("pt", 1, cell, 768)
+			if p != null and p.id >= 0:
+				guards.append(p.id)
+	if base.size() > 0 and fleet.size() > 0:
+		for i in fleet.size():
+			world.sim.order_attack(PackedInt32Array([fleet[i]]), base[i % base.size()], false, true)
+	if guards.size() > 0 and fleet.size() > 0:
+		world.sim.order_attack(guards, fleet[0], false, true)
+	_demo_attackers = PackedInt32Array()
+	_demo_select = "msub"
+
+
+	var mid := Vector2.ZERO
+	for c in spots:
+		mid += Vector2(c)
+	if not spots.is_empty():
+		mid /= float(spots.size())
+	else:
+		mid = Vector2(water)
+	_demo_camera(mid.lerp(Vector2(shore), 0.25), 2.6)
+
+
+func _demo_scene_luft(origin: Vector2i) -> void:
+	var base := origin + Vector2i(-14, 0)
+	var targets := _demo_base([["fact", 0, -2], ["powr", 4, -5], ["powr", 4, -2], ["apwr", 4, 2],
+			["proc", -4, 3], ["weap", -5, -4], ["dome", 0, 4], ["atek", -5, 6], ["hpad", 2, 6],
+			["agun", 3, -7], ["agun", 3, 5], ["agun", -3, -6], ["agun", -6, 0],
+			["pbox", 6, -1], ["pbox", 6, 2]], 1, base)
+	_demo_units([["e1", 2, -4], ["e1", 2, 4], ["e3", 1, 0], ["2tnk", 5, 0]], 1, base, 768)
+	_demo_units([["heli", -2, -3], ["heli", -2, 3]], 1, base, 768, true)
+	var wing := _demo_units([["mig", 9, -4], ["mig", 10, -2], ["mig", 10, 2], ["mig", 9, 4],
+			["yak", 13, -3], ["yak", 13, 0], ["yak", 13, 3]], 0, origin, 256, true)
+	if targets.size() > 0:
+		for i in wing.size():
+			world.sim.order_attack(PackedInt32Array([wing[i]]), targets[i % targets.size()], false, true)
+	_demo_attackers = PackedInt32Array()
+	_demo_select = "mig"
+	_demo_camera(Vector2(base) + Vector2(1.0, 0.0), 2.7)
+
+
+func _demo_scene_feld(origin: Vector2i) -> void:
+	_demo_base([["powr", 12, -6], ["powr", 12, -3], ["powr", 12, 0], ["powr", 12, 3],
+			["tsla", 6, -6], ["tsla", 6, 0], ["tsla", 6, 6], ["barr", 11, 6]], 0, origin)
+	_demo_base([["gun", -20, -4], ["gun", -20, 4], ["pbox", -19, 0], ["powr", -24, -2],
+			["powr", -24, 2], ["tent", -24, 6]], 1, origin)
+	var red := _demo_units([
+			["4tnk", 3, -7], ["4tnk", 3, -5], ["4tnk", 3, 5], ["4tnk", 3, 7],
+			["3tnk", 1, -6], ["3tnk", 1, -4], ["3tnk", 1, -2], ["3tnk", 1, 2], ["3tnk", 1, 4], ["3tnk", 1, 6],
+			["ttnk", 3, -1], ["ttnk", 3, 1], ["ttnk", 5, -3], ["ttnk", 5, 3],
+			["v2rl", 7, -4], ["v2rl", 7, -2], ["v2rl", 7, 2], ["v2rl", 7, 4],
+			["e1", -1, -7], ["e1", -1, -5], ["e1", -1, -3], ["e1", -1, 3], ["e1", -1, 5], ["e1", -1, 7],
+			["e2", 0, -1], ["e2", 0, 1], ["e4", -1, -1], ["e4", -1, 1],
+			["dog", 0, -4], ["dog", 0, 4], ["ftrk", 5, -6], ["ftrk", 5, 6]], 0, origin, 256)
+	var blue := _demo_units([
+			["2tnk", -10, -7], ["2tnk", -10, -5], ["2tnk", -10, -3], ["2tnk", -10, 3],
+			["2tnk", -10, 5], ["2tnk", -10, 7], ["2tnk", -12, -6], ["2tnk", -12, 6],
+			["1tnk", -12, -4], ["1tnk", -12, -2], ["1tnk", -12, 2], ["1tnk", -12, 4],
+			["arty", -14, -5], ["arty", -14, -2], ["arty", -14, 2], ["arty", -14, 5],
+			["jeep", -9, -8], ["jeep", -9, 8], ["mech", -13, 0], ["mech", -13, 3],
+			["e1", -7, -6], ["e1", -7, -4], ["e1", -7, -2], ["e1", -7, 2], ["e1", -7, 4], ["e1", -7, 6],
+			["e3", -8, -3], ["e3", -8, -1], ["e3", -8, 1], ["e3", -8, 3],
+			["e3", -6, -5], ["e3", -6, 5], ["e2", -6, -2], ["e2", -6, 2], ["e7", -11, 0]], 1, origin, 768)
+	world.sim.order_attack_move(red, origin.x - 9, origin.y)
+	world.sim.order_attack_move(blue, origin.x + 2, origin.y)
+	_demo_attackers = blue
+	_demo_rally = origin + Vector2i(2, 0)
+	_demo_select = "4tnk"
+	_demo_camera(Vector2(origin) + Vector2(-6.0, 0.0), 2.45)
 
 
 func _run_test_tesla() -> void:
@@ -13382,6 +13737,8 @@ func _process(delta: float) -> void:
 		_run_test_dog()
 	if _test_placement and world.sim != null:
 		_run_test_placement()
+	if _demo_battle > 0 and world.sim != null:
+		_run_demo_battle()
 	if _test_heal and world.sim != null:
 		_run_test_heal()
 	if _test_iron and world.sim != null:

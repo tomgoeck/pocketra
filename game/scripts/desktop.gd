@@ -73,7 +73,33 @@ static func apply_test_window() -> void:
 		return
 	var s := test_resize_size()
 	if s.x > 0 and s.y > 0:
+
+
+		if fullscreen():
+			set_fullscreen_now(false)
+			_resize_after_fullscreen(s)
+		else:
+			DisplayServer.window_set_size(s)
+
+
+static func _resize_after_fullscreen(s: Vector2i) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
 		DisplayServer.window_set_size(s)
+		return
+	var settled := 0
+	for i in 24:
+		await tree.create_timer(0.1).timeout
+		var ok := true
+		if DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			ok = false
+		if DisplayServer.window_get_size() != s:
+			DisplayServer.window_set_size(s)
+			ok = false
+		settled = settled + 1 if ok else 0
+		if settled >= 6:
+			return
 	if OS.get_cmdline_user_args().has("--fullscreen"):
 		set_fullscreen_now(true)
 

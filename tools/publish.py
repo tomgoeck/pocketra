@@ -456,7 +456,7 @@ def _strip_for(rel: Path, text: str) -> str | None:
 
 README_PUBLIC = """\
 <p align="center">
-  <img src="https://pocketra.net/img/mission-soviet-01.png" alt="PocketRA gameplay: a Soviet mission with a radar dome and defenses in the snow" width="640">
+  <img src="https://pocketra.net/img/battle-05.png" alt="PocketRA gameplay: mammoth tanks, infantry and artillery clash in a large field battle" width="640">
 </p>
 
 <h1 align="center">PocketRA</h1>
@@ -515,16 +515,24 @@ issues live here, and every release is also attached to this repository's
 ## Screenshots
 
 <p align="center">
-  <img src="https://pocketra.net/img/menu.png" width="45%">
-  <img src="https://pocketra.net/img/lobby.png" width="45%">
+  <img src="https://pocketra.net/img/battle-01.png" alt="Tesla coils and Tesla tanks stop an Allied tank rush" width="45%">
+  <img src="https://pocketra.net/img/battle-02.png" alt="Mammoth tanks and V2 launchers lay siege to an Allied base" width="45%">
   <br>
-  <img src="https://pocketra.net/img/create.png" width="45%">
-  <img src="https://pocketra.net/img/mission-soviet-01.png" width="45%">
+  <img src="https://pocketra.net/img/battle-03.png" alt="Missile submarines and destroyers shell a coastal base" width="45%">
+  <img src="https://pocketra.net/img/battle-04.png" alt="MiGs strike an Allied base while flak guns fire back" width="45%">
+</p>
+
+Menu, multiplayer lobby and skirmish setup:
+
+<p align="center">
+  <img src="https://pocketra.net/img/menu.png" alt="PocketRA main menu" width="30%">
+  <img src="https://pocketra.net/img/create.png" alt="Creating a multiplayer room" width="30%">
+  <img src="https://pocketra.net/img/lobby.png" alt="Multiplayer lobby with teams, chat and map preview" width="30%">
 </p>
 
 ### Gameplay
 
-<p align="center"><img src="https://pocketra.net/img/battle.gif" width="70%"></p>
+<p align="center"><img src="https://pocketra.net/img/battle.gif" alt="Soviet and Allied forces fighting in a skirmish" width="70%"></p>
 
 ## Layout
 
