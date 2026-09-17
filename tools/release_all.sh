@@ -88,7 +88,8 @@ if tut github; then
     echo "Quellcode gepusht (public → main)"
 
     step "GitHub: Release-Anhaenge ($TAG)"
-    tools/update_pack.sh ${FULL_PACK:+} ${FULL_PACK:-"--slim"} --notes "$NOTES"
+    PACK_FLAG="--slim"; [ -n "$FULL_PACK" ] && PACK_FLAG=""
+    tools/update_pack.sh $PACK_FLAG --notes "$NOTES"
     NOTES_FILE="$ROOT/build/update/notes.en.md"
     NOTES_ARG=""
     [ -f "$NOTES_FILE" ] && NOTES_ARG="--notes-file $NOTES_FILE"
@@ -109,7 +110,8 @@ fi
 
 if tut server; then
     step "Server (pocketra.net): version.json"
-    tools/update_pack.sh ${FULL_PACK:-"--slim"} --upload --notes "$NOTES"
+    PACK_FLAG="--slim"; [ -n "$FULL_PACK" ] && PACK_FLAG=""
+    tools/update_pack.sh $PACK_FLAG --upload --notes "$NOTES"
 fi
 
 step "fertig"
