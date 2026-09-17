@@ -82,7 +82,7 @@ if tut github; then
     [ -n "${GITHUB_TOKEN:-}" ] || [ -f "$ROOT/build/github_token" ] || { echo "kein Token: GITHUB_TOKEN setzen oder build/github_token anlegen"; exit 1; }
     TOKEN="${GITHUB_TOKEN:-$(head -1 "$ROOT/build/github_token")}"
     AUTH=$(printf 'x-access-token:%s' "$TOKEN" | base64)
-    (cd build/public && git -c http.extraheader="Authorization: Basic $AUTH" push -f -q origin public:main)
+    (cd build/public && git -c http.extraheader="Authorization: Basic $AUTH" push -f -q origin main:main)
     echo "Quellcode gepusht (public → main)"
 
     step "GitHub: Release-Anhaenge ($TAG)"
