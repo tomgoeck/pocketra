@@ -63,7 +63,7 @@ func setup(w: ProtoWorld) -> void:
 
 	messages = RulesDb.data().get("lua_messages", {}).duplicate()
 	if world.map_data != null:
-		messages.merge(_load_ftl("res://assets/maps/%s.map.ftl" % world.map_data.slug), true)
+		messages.merge(_load_ftl(ContentPaths.maps_dir().path_join("%s.map.ftl" % world.map_data.slug)), true)
 		map_notifications = world.map_data.notifications.duplicate()
 		var tl: Dictionary = world.map_data.time_limit
 		countdown_text = tl.get("countdown_text", "")

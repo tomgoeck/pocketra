@@ -42,8 +42,16 @@ func spawn_count() -> int:
 
 
 static func texture_for(map_slug: String) -> Texture2D:
-	var path := "res://assets/maps/%s.png" % map_slug
-	return load(path) if ResourceLoader.exists(path) else null
+	var path := ContentPaths.maps_dir().path_join("%s.png" % map_slug)
+	if ResourceLoader.exists(path):
+		return load(path)
+
+
+	if FileAccess.file_exists(path):
+		var img := Image.new()
+		if img.load(path) == OK:
+			return ImageTexture.create_from_image(img)
+	return null
 
 
 static func spawns_of(map_slug: String) -> Array:

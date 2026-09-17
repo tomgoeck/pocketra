@@ -46,6 +46,18 @@ if [[ $DO_DEMO -eq 1 ]]; then
   "$GODOT_BIN" --headless --path game --export-release 'Web Demo' ../website/play/demo/index.html
 fi
 
+buendel() {
+  local ziel=$1
+  mkdir -p "$ziel/extras"
+  rm -f "$ziel/extras/music.zip" "$ziel/extras/maps.zip"
+  (cd game/assets/music && zip -q -r -0 "$OLDPWD/$ziel/extras/music.zip" . -i '*.mp3')
+  (cd game/assets/maps && zip -q -r "$OLDPWD/$ziel/extras/maps.zip" . -i '*.json' '*.png' '*.map.ftl')
+  printf '  %s: Musik %s, Karten %s\n' "$ziel/extras" \
+    "$(du -h "$ziel/extras/music.zip" | cut -f1)" "$(du -h "$ziel/extras/maps.zip" | cut -f1)"
+}
+if [[ $DO_FULL -eq 1 ]]; then buendel website/play/full; fi
+if [[ $DO_DEMO -eq 1 ]]; then buendel website/play/demo; fi
+
 echo
 echo 'Fertig. Lokal ansehen:'
 echo '  python3 -m http.server 8097 --bind 127.0.0.1 --directory website'

@@ -5,6 +5,7 @@ cd "$ROOT"
 
 ONLY="android,windows,macos,ios,web,server,github"
 SKIP_TESTS=""
+FULL_PACK=""
 NO_NOTARIZE=""
 DRY=""
 NOTES=""
@@ -12,6 +13,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --only) ONLY=$2; shift ;;
         --skip-tests) SKIP_TESTS=1 ;;
+        --full-pack) FULL_PACK=1 ;;
         --no-notarize) NO_NOTARIZE=1 ;;
         --dry-run) DRY=1 ;;
         --notes) NOTES=$2; shift ;;
@@ -86,7 +88,7 @@ if tut github; then
     echo "Quellcode gepusht (public → main)"
 
     step "GitHub: Release-Anhaenge ($TAG)"
-    tools/update_pack.sh --slim --notes "$NOTES"
+    tools/update_pack.sh ${FULL_PACK:+} ${FULL_PACK:-"--slim"} --notes "$NOTES"
     NOTES_FILE="$ROOT/build/update/notes.en.md"
     NOTES_ARG=""
     [ -f "$NOTES_FILE" ] && NOTES_ARG="--notes-file $NOTES_FILE"
@@ -107,7 +109,7 @@ fi
 
 if tut server; then
     step "Server (pocketra.net): version.json"
-    tools/update_pack.sh --slim --upload --notes "$NOTES"
+    tools/update_pack.sh ${FULL_PACK:-"--slim"} --upload --notes "$NOTES"
 fi
 
 step "fertig"

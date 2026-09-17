@@ -48,6 +48,11 @@ PREV=0
 if [ -f "$VERSION_JSON" ]; then
     PREV=$(python3 -c 'import json,sys;print(int(json.load(open(sys.argv[1])).get("pack_version",0)))' "$VERSION_JSON")
 fi
+LIVE=$(curl -sS --max-time 15 "$BASE_URL/version.json" 2>/dev/null | python3 -c 'import json,sys;print(int(json.load(sys.stdin).get("pack_version",0)))' 2>/dev/null || echo 0)
+if [ "${LIVE:-0}" -gt "$PREV" ]; then
+    echo "Zaehler: Server steht auf $LIVE, lokal $PREV — es gilt der Server."
+    PREV=$LIVE
+fi
 if [ -n "$VERSION_ONLY" ]; then
     PACK_VERSION=$PREV
 else

@@ -461,6 +461,9 @@ content.not_installed,Nicht installiert,Not installed
 content.dev_bundled,In dieser Entwicklungsfassung bereits enthalten.,Already bundled in this development build.
 content.download,Herunterladen (%s MB),Download (%s MB)
 content.freeware_get,Paket herunterladen,Download package
+extras.loading,"Lade %s … %d %%","Loading %s … %d %%"
+extras.done,Inhalte vollstaendig geladen,Content fully loaded
+extras.failed,"Nachladen fehlgeschlagen. Beim naechsten Start wird es erneut versucht.","Loading failed. It will be retried on the next start."
 content.cd_download,Herunterladen,Download
 content.delete,Löschen,Delete
 content.cancelled,Abgebrochen.,Cancelled.

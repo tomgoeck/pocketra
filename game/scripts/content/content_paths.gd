@@ -78,6 +78,23 @@ static func sfx(name: String) -> String:
 	return "res://assets/sfx/%s.wav" % name
 
 
+const EXTRAS := "user://extras"
+const EXTRAS_MUSIC := EXTRAS + "/music"
+const EXTRAS_MAPS := EXTRAS + "/maps"
+
+
+static func music_dir() -> String:
+	if DirAccess.dir_exists_absolute(EXTRAS_MUSIC) and FileAccess.file_exists(EXTRAS_MUSIC.path_join("1.mp3")):
+		return EXTRAS_MUSIC
+	return "res://assets/music"
+
+
+static func maps_dir() -> String:
+	if FileAccess.file_exists(EXTRAS_MAPS.path_join("index.json")):
+		return EXTRAS_MAPS
+	return "res://assets/maps"
+
+
 static func mix_dir() -> String:
 	return MIX if DirAccess.dir_exists_absolute(MIX) else ""
 

@@ -322,7 +322,7 @@ func _on_closed(reason: String) -> void:
 
 
 static func map_sha256(slug: String) -> String:
-	var path := "res://assets/maps/%s.json" % slug
+	var path := ContentPaths.maps_dir().path_join("%s.json" % slug)
 	if not FileAccess.file_exists(path):
 		return ""
 	var ctx := HashingContext.new()
@@ -332,7 +332,7 @@ static func map_sha256(slug: String) -> String:
 
 
 static func map_json(slug: String) -> Dictionary:
-	var path := "res://assets/maps/%s.json" % slug
+	var path := ContentPaths.maps_dir().path_join("%s.json" % slug)
 	if not FileAccess.file_exists(path):
 		return {}
 	var d = JSON.parse_string(FileAccess.get_file_as_string(path))

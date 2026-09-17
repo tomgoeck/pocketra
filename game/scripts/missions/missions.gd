@@ -40,7 +40,12 @@ static func blocked_reason(slug: String) -> String:
 	return TranslationServer.translate(BLOCKED[slug]) if BLOCKED.has(slug) else ""
 
 const PROGRESS := "user://progress.cfg"
+
 const CAMPAIGNS := "res://assets/maps/campaigns.json"
+
+
+static func _campaigns_path() -> String:
+	return ContentPaths.maps_dir().path_join("campaigns.json")
 
 const TILESETS := ["temperat", "snow", "interior"]
 
@@ -48,8 +53,8 @@ static var _campaigns: Array = []
 
 
 static func campaigns() -> Array:
-	if _campaigns.is_empty() and FileAccess.file_exists(CAMPAIGNS):
-		var d = JSON.parse_string(FileAccess.get_file_as_string(CAMPAIGNS))
+	if _campaigns.is_empty() and FileAccess.file_exists(_campaigns_path()):
+		var d = JSON.parse_string(FileAccess.get_file_as_string(_campaigns_path()))
 		if d is Array:
 			_campaigns = d
 	return _campaigns
@@ -122,7 +127,7 @@ static func create(slug: String) -> MissionScript:
 
 
 static func briefing(slug: String) -> String:
-	var path := "res://assets/maps/%s.map.ftl" % slug
+	var path := ContentPaths.maps_dir().path_join("%s.map.ftl" % slug)
 	if not FileAccess.file_exists(path):
 		return ""
 	var lines := FileAccess.get_file_as_string(path).split("\n")
@@ -144,7 +149,7 @@ static func briefing(slug: String) -> String:
 
 
 static func video(slug: String, role: String) -> String:
-	var path := "res://assets/maps/%s.json" % slug
+	var path := ContentPaths.maps_dir().path_join("%s.json" % slug)
 	if not FileAccess.file_exists(path):
 		return ""
 	var d = JSON.parse_string(FileAccess.get_file_as_string(path))

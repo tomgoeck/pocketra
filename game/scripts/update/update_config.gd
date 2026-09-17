@@ -149,9 +149,10 @@ static func pack_enabled() -> bool:
 		return args[k + 1] == "on"
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS) == OK:
-		var v = cfg.get_value("update", "pack", null)
-		if v != null:
-			return bool(v)
+
+
+		if cfg.has_section_key("update", "pack"):
+			return bool(cfg.get_value("update", "pack", false))
 	return not (PACK_DEFAULT_OFF_ON_IOS and platform() == "iOS")
 
 

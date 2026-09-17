@@ -143,6 +143,9 @@ static func volume_row(key: String, label: String, host: Node = null) -> Control
 	value.add_theme_font_size_override("font_size", int(Dp.px(13)))
 	value.add_theme_color_override("font_color", GOLD)
 	var slider := HSlider.new()
+
+
+	slider.scrollable = false
 	slider.min_value = 0.0
 	slider.max_value = 1.0
 	slider.step = 0.05

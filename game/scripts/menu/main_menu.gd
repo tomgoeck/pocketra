@@ -4,6 +4,8 @@ extends Control
 
 const GAME_SCENE := "res://scenes/gesture_proto.tscn"
 
+
+const WebExtras := preload("res://scripts/content/web_extras.gd")
 const LogView := preload("res://scripts/ui/log_view.gd")
 const MapPreview := preload("res://scripts/ui/map_preview.gd")
 
@@ -89,6 +91,7 @@ func _ready() -> void:
 	else:
 		_show("main")
 	_start_update_service(args)
+	_start_web_extras()
 
 
 	if args.has("--fake-update-line"):
@@ -1300,7 +1303,7 @@ func _mission_short_reason(slug: String) -> String:
 
 
 func _mission_difficulties(slug: String) -> Array:
-	var path := "res://assets/maps/%s.json" % slug
+	var path := ContentPaths.maps_dir().path_join("%s.json" % slug)
 	if not FileAccess.file_exists(path):
 		return []
 	var d = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -1308,7 +1311,7 @@ func _mission_difficulties(slug: String) -> Array:
 
 
 func _mission_difficulty_default(slug: String) -> String:
-	var path := "res://assets/maps/%s.json" % slug
+	var path := ContentPaths.maps_dir().path_join("%s.json" % slug)
 	if not FileAccess.file_exists(path):
 		return "normal"
 	var d = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -2335,6 +2338,28 @@ var _app_avail := ""
 var _app_dialog: Control
 
 
+func _start_web_extras() -> void:
+	if not WebExtras.aktiv() or WebExtras.fehlend().is_empty():
+		return
+	var extras := WebExtras.new()
+	add_child(extras)
+	extras.progress.connect(func(_anteil: float, text: String):
+		_update_text = text
+		_refresh_update_bar())
+	extras.finished.connect(func(erfolg: bool):
+		_update_text = "" if erfolg else tr("extras.failed")
+		_refresh_update_bar()
+		if erfolg:
+
+
+			MusicPlayer.rebuild()
+
+
+			MusicPlayer.resume_playlist()
+			_rebuild_ui(_page))
+	extras.start()
+
+
 func _start_update_service(args: PackedStringArray) -> void:
 	if args.has("--no-update-check"):
 		return
@@ -2796,8 +2821,7 @@ func _on_map_selected(i: int) -> void:
 	if _map_scroll != null and i >= 0 and i < _map_buttons.size():
 		_map_scroll.ensure_control_visible.call_deferred(_map_buttons[i])
 	var m: Dictionary = _skirmish[i]
-	var path := "res://assets/maps/%s.png" % m["slug"]
-	_preview.texture = load(path) if ResourceLoader.exists(path) else null
+	_preview.texture = MapPreview.texture_for(str(m["slug"]))
 	var size: Array = m.get("size", [0, 0])
 	_info.text = tr("menu.skirmish.map_info") % [m["title"], int(m["players"]), _tileset_name(m["tileset"]), int(size[0]), int(size[1])]
 	_set_ai(_ai_players)

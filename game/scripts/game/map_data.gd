@@ -35,16 +35,25 @@ var _tiles := PackedByteArray()
 var _resources := PackedByteArray()
 
 
+static var _gemeldet := false
+
+
 static func list_maps() -> Array:
-	var path := "res://assets/maps/index.json"
+	var path := ContentPaths.maps_dir().path_join("index.json")
 	if not FileAccess.file_exists(path):
 		return []
 	var idx = JSON.parse_string(FileAccess.get_file_as_string(path))
-	return idx if idx is Array else []
+	var out: Array = idx if idx is Array else []
+
+
+	if not _gemeldet:
+		_gemeldet = true
+		print("Karten: %d aus %s" % [out.size(), path.get_base_dir()])
+	return out
 
 
 static func load(map_slug: String) -> MapData:
-	var path := "res://assets/maps/%s.json" % map_slug
+	var path := ContentPaths.maps_dir().path_join("%s.json" % map_slug)
 	if not FileAccess.file_exists(path):
 		push_error("Karte fehlt: " + path)
 		return null

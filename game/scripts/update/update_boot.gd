@@ -114,9 +114,10 @@ static func _pack_enabled() -> bool:
 		return args[k + 1] == "on"
 	var cfg := ConfigFile.new()
 	if cfg.load("user://settings.cfg") == OK:
-		var v = cfg.get_value("update", "pack", null)
-		if v != null:
-			return bool(v)
+
+
+		if cfg.has_section_key("update", "pack"):
+			return bool(cfg.get_value("update", "pack", false))
 	var p := OS.get_name()
 	var fk := args.find("--force-platform")
 	if fk >= 0 and fk + 1 < args.size():

@@ -3,6 +3,7 @@
 class_name Music
 extends Node
 
+
 const DIR := "res://assets/music"
 
 const VOLUME_FALLBACK := {
@@ -96,9 +97,10 @@ func rebuild() -> void:
 	for name in _original.keys():
 		_add_track(name)
 	if _scores.is_empty() and _original.is_empty():
-		var dir := DirAccess.open(DIR)
+		var base := ContentPaths.music_dir()
+		var dir := DirAccess.open(base)
 		if dir == null:
-			print("Musik: kein Verzeichnis ", DIR)
+			print("Musik: kein Verzeichnis ", base)
 			return
 		for f in dir.get_files():
 
@@ -230,9 +232,16 @@ func _start(name: String) -> void:
 	elif _original.has(name):
 		stream = OriginalContent.load_music(_original[name])
 	else:
-		var path := "%s/%s.mp3" % [DIR, name]
+		var path := "%s/%s.mp3" % [ContentPaths.music_dir(), name]
 		if ResourceLoader.exists(path):
 			stream = load(path)
+		elif FileAccess.file_exists(path):
+
+
+			var mp3 := AudioStreamMP3.new()
+			mp3.data = FileAccess.get_file_as_bytes(path)
+			if mp3.data.size() > 0:
+				stream = mp3
 	if stream == null:
 
 		if _forced == name:
