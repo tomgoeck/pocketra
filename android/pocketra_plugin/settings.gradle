@@ -1,0 +1,18 @@
+// Eigenstaendiges Gradle-Projekt fuer das Godot-Android-Plugin "PocketRaPlugin".
+// Es haengt NICHT am Godot-Android-Bauverzeichnis (game/android/build) — es baut nur eine AAR,
+// die der Export ueber addons/pocketra_plugin/export_plugin.gd einbindet.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "pocketra_plugin"

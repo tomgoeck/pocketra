@@ -1,0 +1,56 @@
+# EA-Assets und alles daraus Abgeleitete bleibt draussen
+# (mit fuehrendem / nur im Wurzelverzeichnis — gdext/src/content ist Quelltext)
+/content/
+/game/assets/
+
+# Godot
+.godot/
+game/bin/*.so
+game/bin/*.dylib
+game/bin/*.dll
+game/bin/*.wasm
+game/bin/*.xcframework/
+/gdext/bin/
+*.translation
+build/
+
+# GDExtension / SCons
+*.os
+*.obj
+.sconsign.dblite
+compile_commands.json
+
+# Build-Ausgaben
+build/
+*.o
+*.a
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# OpenRA-Referenz-Checkout (GPL, nicht unser Code)
+reference/
+__pycache__/
+*.pyc
+
+# Android-Plugin (Kotlin) — Bauergebnisse wie game/bin/*.so
+android/pocketra_plugin/build/
+android/pocketra_plugin/.gradle/
+android/pocketra_plugin/.kotlin/
+android/pocketra_plugin/local.properties
+game/addons/pocketra_plugin/bin/*.aar
+
+# Android-Bauvorlage fuer den Gradle-Bau der APK — erzeugt Godot aus android_source.zip
+# (tools/apk_build.sh macht das bei Bedarf selbst), gehoert nicht ins Repository.
+game/android/
+
+# Browser-Fassung: Exporte und lokal abgelegte Spielinhalte (nie ins Git, nie auf die Website)
+website/play/
+website/content/
+tools/cors_worker/node_modules/
+tools/cors_worker/.wrangler/

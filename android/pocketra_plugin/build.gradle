@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.library' version '8.7.3'
+    id 'org.jetbrains.kotlin.android' version '2.0.21'
+}
+
+android {
+    namespace 'net.pocketra.app.plugin'
+    // 35 ist noetig fuer Service.onTimeout (Android 15) und `foregroundServiceType` als Argument.
+    compileSdk 35
+    defaultConfig {
+        // Wie Godot 4.7: minSdk 24 (Vulkan 29). Die APK von PocketRA laeuft auf beidem.
+        minSdk 24
+        targetSdk 35
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+    buildTypes {
+        release { minifyEnabled false }
+    }
+}
+
+dependencies {
+    // Die Godot-Android-Bibliothek liegt auf Maven Central: org.godotengine:godot:<Fassung>.stable
+    compileOnly 'org.godotengine:godot:4.7.2.stable'
+    // OkHttp bringt den WebSocket. Wird ueber `_get_android_dependencies` im Export nachgezogen,
+    // damit die AAR schlank bleibt.
+    compileOnly 'com.squareup.okhttp3:okhttp:4.12.0'
+}

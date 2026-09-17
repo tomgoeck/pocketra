@@ -1,0 +1,40 @@
+; Audio-Busse wie OpenRAs Lautstärkeeinstellungen (OpenRA.Game/Settings.cs:288-299):
+; SoundVolume, MusicVolume, VideoVolume je 0.5 — hier als Startpegel -6 dB auf den Bussen
+; Musik / Effekte / Stimme / Video. Die Regler in den Optionen schreiben nach user://settings.cfg
+; (Abschnitt [audio], Schlüssel master, music, sfx, voice, video) und setzen die Busse zur Laufzeit.
+; „Funk" kam 2026-09-09 fuer den Sprechfunk im Mehrspieler dazu (docs/MULTIPLAYER.md §10): eigener
+; Bus, damit Sprache der Mitspieler getrennt von Musik, Effekten und EVA geregelt werden kann.
+; Der Aufnahmebus „FunkAufnahme" (stumm, AudioEffectCapture) entsteht zur Laufzeit in voice_chat.gd.
+[gd_resource type="AudioBusLayout" format=3]
+
+[resource]
+bus/1/name = &"Musik"
+bus/1/solo = false
+bus/1/mute = false
+bus/1/bypass_fx = false
+bus/1/volume_db = -6.0
+bus/1/send = &"Master"
+bus/2/name = &"Effekte"
+bus/2/solo = false
+bus/2/mute = false
+bus/2/bypass_fx = false
+bus/2/volume_db = -6.0
+bus/2/send = &"Master"
+bus/3/name = &"Stimme"
+bus/3/solo = false
+bus/3/mute = false
+bus/3/bypass_fx = false
+bus/3/volume_db = -6.0
+bus/3/send = &"Master"
+bus/4/name = &"Video"
+bus/4/solo = false
+bus/4/mute = false
+bus/4/bypass_fx = false
+bus/4/volume_db = -6.0
+bus/4/send = &"Master"
+bus/5/name = &"Funk"
+bus/5/solo = false
+bus/5/mute = false
+bus/5/bypass_fx = false
+bus/5/volume_db = 0.0
+bus/5/send = &"Master"

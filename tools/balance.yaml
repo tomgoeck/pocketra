@@ -1,0 +1,11 @@
+weapons:
+	155mm:
+		Range: 11c512
+	atomic:
+		DamagePercent: 85
+rules:
+	c4_vehicles: true
+	c4_bridges: true
+	chrono_unlimited: true
+	buildable_area_all: true
+	aircraft_hp_percent: 150

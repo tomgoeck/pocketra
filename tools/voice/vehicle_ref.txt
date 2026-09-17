@@ -1,0 +1,33 @@
+# Klon-Referenz „Fahrzeugstimme" für tools/tts_ref.py --list (Toms Handtest 2026-09-11, Punkt 5:
+# Erzsammler-Knopf mit gesprochener Bestätigung). Aus dieser Liste baut tts_ref.py die
+# Referenz-WAV, aus der tools/tts_clone.py die Sätze in tools/voice/harvester_<lang>.csv spricht.
+#
+#   build/.venv_tts/bin/python tools/tts_ref.py --lang de --list tools/voice/vehicle_ref.txt \
+#       build/voice_ref/vehicle_de.wav
+#
+# `<sfx>` steht für das Sprachverzeichnis der Soundeffekte: game/assets/sfx (en) bzw.
+# game/assets/sfx/de (de) — dieselbe Regel wie in tts_ref.py. Ein Pfad je Zeile, `#` ist Kommentar,
+# fehlende Dateien werden übersprungen (game/assets/ liegt nicht im Git).
+#
+# Welche Clips: reference/OpenRA/mods/ra/audio/voices.yaml `VehicleVoice` — Select vehic1, yessir1,
+# report1, await1; Action ackno, affirm1. Die Varianten der Fahrzeugstimme sind bei den Alliierten
+# .v00/.v02, bei den Sowjets .r00/.r02. Genommen wird die alliierte Fassung, .v00 zuerst: Chatterbox
+# hört akustisch nur die ersten sechs bis zehn Sekunden, die Sprecher-Einbettung dagegen die ganze
+# Datei — also erst ein Sprecher am Stück, dann die zweite Variante als Ergänzung.
+#
+# NICHT dabei, obwohl es sie als Datei gibt: roger, ugotit, ritaway. Die liegen nur als .v01/.v03
+# bzw. .r01/.r03 vor — das ist die GenericVoice der Infanterie, ein anderer Sprecher. Sie würden die
+# Klon-Referenz verwässern.
+
+<sfx>/vehic1_v00.wav
+<sfx>/yessir1_v00.wav
+<sfx>/report1_v00.wav
+<sfx>/await1_v00.wav
+<sfx>/ackno_v00.wav
+<sfx>/affirm1_v00.wav
+<sfx>/vehic1_v02.wav
+<sfx>/yessir1_v02.wav
+<sfx>/report1_v02.wav
+<sfx>/await1_v02.wav
+<sfx>/ackno_v02.wav
+<sfx>/affirm1_v02.wav
