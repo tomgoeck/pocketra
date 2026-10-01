@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Bibliotheks-Manifest des Plugins. Beim Gradle-Bau der APK (use_gradle_build=true) mischt der
+  Manifest-Merger diese Eintraege in das App-Manifest.
+
+  * meta-data `org.godotengine.plugin.v2.<PluginName>` meldet die Klasse bei Godot an (Plugin-Format
+    v2 ab Godot 4.2; das alte `.gdap` gibt es nicht mehr).
+  * Der Dienst laeuft als Vordergrunddienst vom Typ `specialUse` — er haelt eine Lobby-Verbindung,
+    was keinem der engeren Typen entspricht (`dataSync` hat seit Android 15 ein 6-h-Limit,
+    `connectedDevice` meint Hardware). Die App wird nicht ueber Google Play verteilt.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Sprechfunk: eigene AudioRecord-Quelle (VoiceInput.kt, docs/MULTIPLAYER.md §11.3). Die
+         Berechtigung steht auch im Export-Preset; hier, damit das Plugin fuer sich vollstaendig ist. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <application>
+        <meta-data
+            android:name="org.godotengine.plugin.v2.PocketRaPlugin"
+            android:value="net.pocketra.app.plugin.PocketRaPlugin" />
+
+        <service
+            android:name="net.pocketra.app.plugin.WatchService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Haelt die Verbindung zur Mehrspieler-Lobby, solange der Spieler in einem Raum sitzt, und meldet Beitritte und Chatzeilen." />
+        </service>
+    </application>
+</manifest>

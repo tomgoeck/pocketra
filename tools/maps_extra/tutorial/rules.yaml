@@ -1,0 +1,7 @@
+Player:
+	PlayerResources:
+		DefaultCash: 5000
+
+World:
+	MissionData:
+		Briefing:

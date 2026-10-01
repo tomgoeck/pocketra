@@ -1,0 +1,793 @@
+# Erzeugt von tools/rules2json.py — Sprites aller unterstützten Actors, Effekte, Projektile
+# Zeilen mit @tileset gelten nur für diesen Atlas
+120mm.shp
+1tnk.shp
+1tnkicon.shp
+2tnk.shp
+2tnkicon.shp
+3tnk.shp
+3tnkicon.shp
+4tnk.shp
+4tnkicon.shp
+50cal.shp
+afld.shp
+afldicon.shp
+afldidle.shp
+afldmake.shp
+agun.shp
+agunicon.shp
+agunmake.shp
+allyrepair.shp
+ammobox1.shp
+ammobox2.shp
+ammobox3.shp
+ant1.shp
+ant2.shp
+ant3.shp
+anticon.shp
+apc.shp
+apcicon.shp
+apwr.shp
+apwrdead.shp
+apwricon.shp
+apwrmake.shp
+armor.shp
+art-exp1.shp
+arty.shp
+artyicon.shp
+asianhut.shp
+ateficon.shp
+atek.shp
+atekicon.shp
+atekmake.shp
+atomicdn.shp
+atomicon.shp
+atomicup.shp
+atomsfx.shp
+badr.shp
+barb.shp
+barl.shp
+barr.shp
+barricon.shp
+barrmake.shp
+beaconclock.shp
+bio.shp
+biomake.shp
+bomb.shp
+bomblet.shp
+brik.shp
+brikicon.shp
+brl3.shp
+bubbles.shp
+burn-l.shp
+burn-m.shp
+burn-s.shp
+c1.shp
+c11.shp
+c2.shp
+ca.shp
+caicon.shp
+camera.shp
+camicon.shp
+chan.shp
+chronbox.shp
+clock.shp
+ctflag.shp
+ctnk.shp
+ctnkicon.shp
+cycl.shp
+dd-crnr.shp
+dd.shp
+ddicon.shp
+delphi.shp
+deviator.shp
+dog.shp
+dogbullt.shp
+dogicon.shp
+dollar.shp
+dome.shp
+domeicon.shp
+domemake.shp
+domficon.shp
+dragon.shp
+dtrk.shp
+dtrkicon.shp
+e1.shp
+e1icon.shp
+e2.shp
+e2icon.shp
+e3.shp
+e3icon.shp
+e4.shp
+e4icon.shp
+e6.shp
+e6icon.shp
+e7.shp
+e7icon.shp
+earth.shp
+einstein.shp
+electdog.shp
+empulse.shp
+facficon.shp
+fact.shp
+factdead.shp
+facticon.shp
+factmake.shp
+fapwicon.shp
+fb1.shp
+fb2.shp
+fb3.shp
+fb4.shp
+fball1.shp
+fcom.shp
+fcommake.shp
+fenc.shp
+fencicon.shp
+fire1.shp
+fire2.shp
+fire3.shp
+fire4.shp
+fix.shp
+fixficon.shp
+fixicon.shp
+fixmake.shp
+flagfly.shp
+flak.shp
+flmspt.shp
+fpls.shp
+fpower.shp
+fpwricon.shp
+frag1.shp
+ftrk.shp
+ftrkicon.shp
+ftur.shp
+fturicon.shp
+fturmake.shp
+gap.shp
+gapicon.shp
+gapmake.shp
+gnrl.shp
+gpsbox.shp
+gpsdot.shp
+gpssicon.shp
+gun.shp
+gunfire2.shp
+gunicon.shp
+gunmake.shp
+h2o_exp1.shp
+h2o_exp2.shp
+h2o_exp3.shp
+harv.shp
+harvempty.shp
+harvhalf.shp
+harvicon.shp
+hboxicon.shp
+heli.shp
+heliicon.shp
+hhusk.shp
+hhusk2.shp
+hind.shp
+hindicon.shp
+hosp.shp
+hospicon.shp
+hospmake.shp
+hpad.shp
+hpadicon.shp
+hpadmake.shp
+iconchevrons.shp
+infxicon.shp
+invulbox.shp
+invun.shp
+iron.shp
+ironicon.shp
+ironmake.shp
+jeep.shp
+jeepicon.shp
+jmin.shp
+kenn.shp
+kennicon.shp
+kennmake.shp
+lar1.shp
+lar2.shp
+levelup.shp
+lhus.shp
+litning.shp
+lrotor.shp
+lrotorlg.shp
+lst.shp
+lsticon.shp
+mcv.shp
+mcvhusk.shp
+mcvicon.shp
+mech.shp
+mechicon.shp
+medi.shp
+mediicon.shp
+mgg.shp
+mggicon.shp
+mgun.shp
+mh60.shp
+mh60icon.shp
+mig.shp
+migicon.shp
+minigun.shp
+minp.shp
+minv.shp
+miss.shp
+missile.shp
+missile2.shp
+missmake.shp
+mnly.shp
+mnlyicon.shp
+mouse.shp
+mpspawn.shp
+mrj.shp
+mrjicon.shp
+mslficon.shp
+msloicon2.shp
+msub.shp
+msubicon.shp
+napalm1.shp
+napalm2.shp
+napalm3.shp
+oilb.shp
+parabomb.shp
+parabox.shp
+parach-shadow.shp
+parach.shp
+pbmbicon.shp
+pbox.shp
+pboxicon.shp
+pboxmake.shp
+pdoficon.shp
+pdox.shp
+pdoxicon.shp
+pdoxmake.shp
+piff.shp
+piffpiff.shp
+pinficon.shp
+pip-disguise.shp
+pips.shp
+pips2.shp
+playersmoke.shp
+poweroff.shp
+powr.shp
+powrdead.shp
+powricon.shp
+powrmake.shp
+proc.shp
+procdead.shp
+procicon.shp
+procmake.shp
+proctop.shp
+pt.shp
+pticon.shp
+qtnk.shp
+qtnkicon.shp
+quee.shp
+rank.shp
+rrotor.shp
+rushouse.shp
+sam2.shp
+samfire.shp
+samicon.shp
+sammake.shp
+sbag.shp
+sbagicon.shp
+scorch_flames.shp
+scrate.shp
+select.shp
+shadow.shp
+shok.shp
+shokicon.shp
+silo2.shp
+siloicon.shp
+silomake.shp
+smigicon.shp
+smoke_m.shp
+smokey.shp
+snowhut.shp
+sonarbox.shp
+sonricon.shp
+speed.shp
+speficon.shp
+spen.shp
+spenicon.shp
+spenmake.shp
+sputdoor.shp
+sputnik.shp
+spy.shp
+spyicon.shp
+ss.shp
+ssam.shp
+ssicon.shp
+stealth2.shp
+stek.shp
+stekicon.shp
+stekmake.shp
+stnk.shp
+stnkicon.shp
+syrd.shp
+syrdicon.shp
+syrdmake.shp
+syrficon.shp
+tabs.shp
+tag-spy.shp
+tanktrap1.shp
+tanktrap2.shp
+tenficon.shp
+tenticon.shp
+thf.shp
+thficon.shp
+torpedo.shp
+tquake.shp
+tran1husk.shp
+tran2.shp
+tran2husk.shp
+tranicon.shp
+trans.icn
+truk.shp
+trukicon.shp
+tsla.shp
+tslaicon.shp
+tslamake.shp
+ttnk.shp
+ttnkicon.shp
+turr.shp
+twinkle1.shp
+twinkle2.shp
+twinkle3.shp
+u2.shp
+utilpol1.shp
+utilpol2.shp
+v19.shp
+v2.shp
+v2rl.shp
+v2rlicon.shp
+veh-hit1.shp
+veh-hit2.shp
+veh-hit3.shp
+volkicon.shp
+warpicon.shp
+waypoint.shp
+wcrate.shp
+weaficon.shp
+weap.shp
+weap2.shp
+weap3.shp
+weapicon.shp
+weapmake.shp
+windmill.shp
+wood.shp
+wpiff.shp
+wpifpif.shp
+wwcrate.shp
+xcratea.shp
+xcrateb.shp
+xcratec.shp
+xcrated.shp
+yak.shp
+yakicon.shp
+yrotorlg.shp
+zombicon.shp
+zombie.shp
+@temperat bib2.tem
+@temperat bib3.tem
+@temperat boxes01.int
+@temperat boxes02.int
+@temperat boxes03.int
+@temperat boxes04.int
+@temperat boxes05.int
+@temperat boxes06.int
+@temperat boxes07.int
+@temperat boxes08.int
+@temperat boxes09.int
+@temperat corpse1.tem
+@temperat electro.tem
+@temperat gmine.tem
+@temperat hbox.tem
+@temperat hboxmake.tem
+@temperat ice01.sno
+@temperat ice02.sno
+@temperat ice03.sno
+@temperat ice04.sno
+@temperat ice05.sno
+@temperat mbagun.tem
+@temperat mbfix.tem
+@temperat mbftur.tem
+@temperat mbgap.tem
+@temperat mbgun.tem
+@temperat mbhosp.tem
+@temperat mbiron.tem
+@temperat mbpbox.tem
+@temperat mbpdox.tem
+@temperat mbsam.tem
+@temperat mbsilo.tem
+@temperat mbtsla.tem
+@temperat mine.tem
+@temperat mslo.tem
+@temperat mslomake.tem
+@temperat railmine.tem
+@temperat rice.tem
+@temperat rock1.des
+@temperat rock2.des
+@temperat rock3.des
+@temperat rock4.des
+@temperat rock5.des
+@temperat rock6.des
+@temperat rock7.des
+@temperat t01.tem
+@temperat t02.tem
+@temperat t03.tem
+@temperat t04.des
+@temperat t05.tem
+@temperat t06.tem
+@temperat t07.tem
+@temperat t08.tem
+@temperat t09.des
+@temperat t10.tem
+@temperat t11.tem
+@temperat t12.tem
+@temperat t13.tem
+@temperat t14.tem
+@temperat t15.tem
+@temperat t16.tem
+@temperat t17.tem
+@temperat tc01.tem
+@temperat tc02.tem
+@temperat tc03.tem
+@temperat tc04.tem
+@temperat tc05.tem
+@temperat tent.tem
+@temperat tentmake.tem
+@temperat v01.tem
+@temperat v02.tem
+@temperat v03.tem
+@temperat v04.tem
+@temperat v05.tem
+@temperat v06.tem
+@temperat v07.tem
+@temperat v08.tem
+@temperat v09.tem
+@temperat v10.tem
+@temperat v11.tem
+@temperat v12.tem
+@temperat v13.tem
+@temperat v14.tem
+@temperat v15.tem
+@temperat v16.tem
+@temperat v17.tem
+@temperat v18.tem
+@temperat v20.des
+@temperat v21.des
+@temperat v22.des
+@temperat v23.des
+@temperat v24.des
+@temperat v25.des
+@temperat v26.des
+@temperat v27.des
+@temperat v28.des
+@temperat v29.des
+@temperat v30.des
+@temperat v31.des
+@temperat v32.des
+@temperat v33.des
+@temperat v34.des
+@temperat v35.des
+@temperat v36.des
+@temperat v37.des
+@snow bib2.sno
+@snow bib3.sno
+@snow boxes01.int
+@snow boxes02.int
+@snow boxes03.int
+@snow boxes04.int
+@snow boxes05.int
+@snow boxes06.int
+@snow boxes07.int
+@snow boxes08.int
+@snow boxes09.int
+@snow corpse1.sno
+@snow electro.sno
+@snow gmine.sno
+@snow hbox.sno
+@snow hboxmake.sno
+@snow ice01.sno
+@snow ice02.sno
+@snow ice03.sno
+@snow ice04.sno
+@snow ice05.sno
+@snow mbagun.sno
+@snow mbfix.sno
+@snow mbftur.sno
+@snow mbgap.sno
+@snow mbgun.sno
+@snow mbhosp.sno
+@snow mbiron.sno
+@snow mbpbox.sno
+@snow mbpdox.sno
+@snow mbsam.sno
+@snow mbsilo.sno
+@snow mbtsla.sno
+@snow mine.sno
+@snow mslo.sno
+@snow mslomake.sno
+@snow railmine.sno
+@snow rice.tem
+@snow rock1.des
+@snow rock2.des
+@snow rock3.des
+@snow rock4.des
+@snow rock5.des
+@snow rock6.des
+@snow rock7.des
+@snow t01.sno
+@snow t02.sno
+@snow t03.sno
+@snow t04.des
+@snow t05.sno
+@snow t06.sno
+@snow t07.sno
+@snow t08.sno
+@snow t09.des
+@snow t10.sno
+@snow t11.sno
+@snow t12.sno
+@snow t13.sno
+@snow t14.sno
+@snow t15.sno
+@snow t16.sno
+@snow t17.sno
+@snow tc01.sno
+@snow tc02.sno
+@snow tc03.sno
+@snow tc04.sno
+@snow tc05.sno
+@snow tent.sno
+@snow tentmake.sno
+@snow v01.sno
+@snow v02.sno
+@snow v03.sno
+@snow v04.sno
+@snow v05.sno
+@snow v06.sno
+@snow v07.sno
+@snow v08.sno
+@snow v09.sno
+@snow v10.sno
+@snow v11.sno
+@snow v12.sno
+@snow v13.sno
+@snow v14.sno
+@snow v15.sno
+@snow v16.sno
+@snow v17.sno
+@snow v18.sno
+@snow v20.des
+@snow v21.des
+@snow v22.des
+@snow v23.des
+@snow v24.des
+@snow v25.des
+@snow v26.des
+@snow v27.des
+@snow v28.des
+@snow v29.des
+@snow v30.des
+@snow v31.des
+@snow v32.des
+@snow v33.des
+@snow v34.des
+@snow v35.des
+@snow v36.des
+@snow v37.des
+@interior bib2.tem
+@interior bib3.tem
+@interior boxes01.int
+@interior boxes02.int
+@interior boxes03.int
+@interior boxes04.int
+@interior boxes05.int
+@interior boxes06.int
+@interior boxes07.int
+@interior boxes08.int
+@interior boxes09.int
+@interior corpse1.tem
+@interior electro.tem
+@interior gmine.tem
+@interior hbox.tem
+@interior hboxmake.tem
+@interior ice01.sno
+@interior ice02.sno
+@interior ice03.sno
+@interior ice04.sno
+@interior ice05.sno
+@interior mbagun.int
+@interior mbfix.int
+@interior mbftur.int
+@interior mbgap.int
+@interior mbgun.int
+@interior mbhosp.int
+@interior mbiron.int
+@interior mbpbox.int
+@interior mbpdox.int
+@interior mbsam.int
+@interior mbsilo.int
+@interior mbtsla.int
+@interior mine.int
+@interior mslo.tem
+@interior mslomake.tem
+@interior railmine.tem
+@interior rice.tem
+@interior rock1.des
+@interior rock2.des
+@interior rock3.des
+@interior rock4.des
+@interior rock5.des
+@interior rock6.des
+@interior rock7.des
+@interior t01.tem
+@interior t02.tem
+@interior t03.tem
+@interior t04.des
+@interior t05.tem
+@interior t06.tem
+@interior t07.tem
+@interior t08.tem
+@interior t09.des
+@interior t10.tem
+@interior t11.tem
+@interior t12.tem
+@interior t13.tem
+@interior t14.tem
+@interior t15.tem
+@interior t16.tem
+@interior t17.tem
+@interior tc01.tem
+@interior tc02.tem
+@interior tc03.tem
+@interior tc04.tem
+@interior tc05.tem
+@interior tent.tem
+@interior tentmake.tem
+@interior v01.tem
+@interior v02.tem
+@interior v03.tem
+@interior v04.tem
+@interior v05.tem
+@interior v06.tem
+@interior v07.tem
+@interior v08.tem
+@interior v09.tem
+@interior v10.tem
+@interior v11.tem
+@interior v12.tem
+@interior v13.tem
+@interior v14.tem
+@interior v15.tem
+@interior v16.tem
+@interior v17.tem
+@interior v18.tem
+@interior v20.des
+@interior v21.des
+@interior v22.des
+@interior v23.des
+@interior v24.des
+@interior v25.des
+@interior v26.des
+@interior v27.des
+@interior v28.des
+@interior v29.des
+@interior v30.des
+@interior v31.des
+@interior v32.des
+@interior v33.des
+@interior v34.des
+@interior v35.des
+@interior v36.des
+@interior v37.des
+@desert bib2.des
+@desert bib3.des
+@desert boxes01.int
+@desert boxes02.int
+@desert boxes03.int
+@desert boxes04.int
+@desert boxes05.int
+@desert boxes06.int
+@desert boxes07.int
+@desert boxes08.int
+@desert boxes09.int
+@desert corpse1.tem
+@desert electro.tem
+@desert gmine.des
+@desert hbox.des
+@desert hboxmake.des
+@desert ice01.sno
+@desert ice02.sno
+@desert ice03.sno
+@desert ice04.sno
+@desert ice05.sno
+@desert mbagun.des
+@desert mbfix.des
+@desert mbftur.des
+@desert mbgap.des
+@desert mbgun.des
+@desert mbhosp.des
+@desert mbiron.des
+@desert mbpbox.des
+@desert mbpdox.des
+@desert mbsam.des
+@desert mbsilo.des
+@desert mbtsla.des
+@desert mine.des
+@desert mslo.des
+@desert mslomake.des
+@desert railmine.des
+@desert rice.tem
+@desert rock1.des
+@desert rock2.des
+@desert rock3.des
+@desert rock4.des
+@desert rock5.des
+@desert rock6.des
+@desert rock7.des
+@desert t01.tem
+@desert t02.tem
+@desert t03.tem
+@desert t04.des
+@desert t05.tem
+@desert t06.tem
+@desert t07.tem
+@desert t08.des
+@desert t09.des
+@desert t10.tem
+@desert t11.tem
+@desert t12.tem
+@desert t13.tem
+@desert t14.tem
+@desert t15.tem
+@desert t16.tem
+@desert t17.tem
+@desert tc01.des
+@desert tc02.tem
+@desert tc03.tem
+@desert tc04.tem
+@desert tc05.tem
+@desert tent.des
+@desert tentmake.des
+@desert v01.tem
+@desert v02.tem
+@desert v03.tem
+@desert v04.tem
+@desert v05.tem
+@desert v06.tem
+@desert v07.tem
+@desert v08.tem
+@desert v09.tem
+@desert v10.tem
+@desert v11.tem
+@desert v12.tem
+@desert v13.tem
+@desert v14.tem
+@desert v15.tem
+@desert v16.tem
+@desert v17.tem
+@desert v18.tem
+@desert v20.des
+@desert v21.des
+@desert v22.des
+@desert v23.des
+@desert v24.des
+@desert v25.des
+@desert v26.des
+@desert v27.des
+@desert v28.des
+@desert v29.des
+@desert v30.des
+@desert v31.des
+@desert v32.des
+@desert v33.des
+@desert v34.des
+@desert v35.des
+@desert v36.des
+@desert v37.des

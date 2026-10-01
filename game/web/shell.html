@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PocketRA</title>
+<meta name="robots" content="noindex">
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;color:#f0ead8;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+html:fullscreen,body:fullscreen{background:#000}
+canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
+canvas:focus-visible{outline:2px solid #e7bd66;outline-offset:-3px}
+#status{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:.8rem;padding:24px;text-align:center;background:#10120d}
+#status[hidden]{display:none}
+#message{margin:0;max-width:34rem}
+#detail{margin:0;min-height:1.4em;font-size:14px;color:#b7b09a;font-variant-numeric:tabular-nums}
+progress{width:min(340px,78vw);height:14px;accent-color:#e7bd66}
+progress[hidden]{display:none}
+button{background:#302f1c;color:#f0ead8;border:1px solid #b49d61;padding:12px 20px;font:inherit;cursor:pointer}
+button:hover{background:#3d3b24}
+button:focus-visible{outline:2px solid #e7bd66;outline-offset:3px}
+#full{position:absolute;top:8px;right:8px;padding:7px 13px;font-size:14px;opacity:.35;transition:opacity .15s}
+#full:hover,#full:focus-visible{opacity:1}
+#full[hidden]{display:none}
+</style>
+$GODOT_HEAD_INCLUDE
+</head>
+<body>
+<canvas id="canvas" tabindex="0" aria-label="PocketRA Spielfeld. WASD oder Pfeiltasten bewegen die Karte, rechte Maustaste gibt Befehle."></canvas>
+<button id="full" type="button" hidden>Vollbild</button>
+<div id="status" role="status" aria-live="polite">
+ <p id="message">Spiel wird geladen …</p>
+ <progress aria-label="Fortschritt"></progress>
+ <p id="detail"></p>
+ <button id="retry" hidden>Erneut versuchen</button>
+</div>
+<noscript>Bitte JavaScript aktivieren, um PocketRA zu spielen.</noscript>
+<script src="$GODOT_URL"></script>
+<script>
+const config = $GODOT_CONFIG;
+// Sprache kommt von der Website (website/play.html und website/index.html hängen ?lang= an) und
+// geht unverändert als --lang an das Spiel weiter (game/scripts/i18n/lang.gd).
+const english = new URLSearchParams(location.search).get('lang') === 'en';
+document.documentElement.lang = english ? 'en' : 'de';
+const T = english ? {
+ load: 'Loading PocketRA …', start: 'Starting the game …',
+ first: 'First start: the game downloads its data files. This can take a few minutes.',
+ wait: 'Preparing the download …',
+ fail: 'The game could not start. Please try again, or use the version for Windows, macOS, Android or iOS.',
+ unsupported: 'This browser is missing what the game needs (%s). Chrome, Edge, Firefox or Safari in a current version should work.',
+ exit: 'Game ended.', retry: 'Try again', full: 'Fullscreen', of: 'of'
+} : {
+ load: 'PocketRA wird geladen …', start: 'Spiel wird gestartet …',
+ first: 'Erster Start: Das Spiel lädt seine Dateien herunter. Das kann ein paar Minuten dauern.',
+ wait: 'Download wird vorbereitet …',
+ fail: 'Das Spiel konnte nicht starten. Bitte erneut versuchen oder die Fassung für Windows, macOS, Android oder iOS nutzen.',
+ unsupported: 'Diesem Browser fehlt, was das Spiel braucht (%s). Chrome, Edge, Firefox oder Safari in einer aktuellen Fassung sollten laufen.',
+ exit: 'Spiel beendet.', retry: 'Erneut versuchen', full: 'Vollbild', of: 'von'
+};
+const canvas = document.querySelector('canvas');
+const status = document.querySelector('#status');
+const message = document.querySelector('#message');
+const detail = document.querySelector('#detail');
+const progress = document.querySelector('progress');
+const retry = document.querySelector('#retry');
+const full = document.querySelector('#full');
+message.textContent = T.load;
+retry.textContent = T.retry;
+full.textContent = T.full;
+retry.onclick = () => location.reload();
+
+// Der Vollbildknopf gehört nur dieser Seite, wenn sie **allein** im Fenster steht. Im Rahmen der
+// Website (iframe) macht ihn die Seite darüber — sonst stünden zwei Knöpfe übereinander.
+if (window.self === window.top) {
+ full.hidden = false;
+ full.onclick = () => {
+  const el = document.documentElement;
+  if (document.fullscreenElement) document.exitFullscreen();
+  else if (el.requestFullscreen) el.requestFullscreen();
+  canvas.focus();
+ };
+}
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', () => canvas.focus());
+canvas.addEventListener('wheel', e => e.preventDefault(), {passive:false});
+canvas.addEventListener('keydown', e => {
+ if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+});
+
+function fail(error) {
+ console.error(error);
+ status.hidden = false;
+ progress.hidden = true;
+ detail.textContent = '';
+ message.textContent = T.fail;
+ retry.hidden = false;
+}
+
+// Herunterladbare Menge in Megabyte. Das Paket der Vollversion ist groß; „37 %" allein sagt wenig,
+// „48 von 130 MB" beantwortet die einzige Frage, die der Wartende hat: wie lange noch.
+const mb = bytes => (bytes / 1048576).toFixed(bytes < 10485760 ? 1 : 0);
+
+let started = 0;
+function onProgress(current, total) {
+ if (!started) started = Date.now();
+ progress.hidden = false;
+ if (total > 0) {
+  progress.max = total;
+  progress.value = current;
+  detail.textContent = mb(current) + ' ' + T.of + ' ' + mb(total) + ' MB';
+ } else {
+  // Ohne Content-Length (der Server liefert das Paket komprimiert im Strom) gibt es keinen
+  // Anteil, den man anzeigen könnte: dann läuft der Balken unbestimmt und die Zahl zeigt,
+  // dass trotzdem etwas ankommt.
+  progress.removeAttribute('value');
+  detail.textContent = current > 0 ? mb(current) + ' MB' : T.wait;
+ }
+ // Nach ein paar Sekunden sagen, worauf man wartet — nicht sofort, sonst stünde die Warnung auch
+ // vor jedem schnellen zweiten Start, bei dem alles aus dem Zwischenspeicher kommt.
+ if (Date.now() - started > 4000 && message.textContent === T.load) message.textContent = T.first;
+ // Alles da, aber noch kein Bild: das Modul wird jetzt entpackt und übersetzt. Auf schwachen
+ // Geräten dauert das noch einmal spürbar, und ein voller, stehender Balken sieht nach Absturz aus.
+ if (total > 0 && current >= total) message.textContent = T.start;
+}
+
+const missing = Engine.getMissingFeatures({threads:$GODOT_THREADS_ENABLED});
+if (missing.length) {
+ status.hidden = false;
+ progress.hidden = true;
+ message.textContent = T.unsupported.replace('%s', missing.join(', '));
+ console.error('Fehlende Browser-Funktionen:', missing);
+} else {
+ // Prüfhaken NUR vom eigenen Rechner aus (python3 -m http.server, s. docs/WEB.md): `?dev=` hängt
+ // Startschalter an, etwa `?dev=--test-content-ui` für den Inhalte-Prüflauf im echten Browser.
+ // Auf pocketra.net ist der Parameter wirkungslos — sonst könnte jeder Besucher über die Adresse
+ // in die Prüfhaken des Spiels greifen.
+ const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+ const dev = local ? (new URLSearchParams(location.search).get('dev') || '') : '';
+ const devArgs = dev ? dev.split(' ').filter(Boolean) : [];
+ if (devArgs.length) console.log('Prüfhaken (nur lokal):', devArgs.join(' '));
+
+ const engine = new Engine(config);
+ engine.startGame({
+  canvas,
+  args: ['--', '--lang', english ? 'en' : 'de', ...devArgs],
+  onProgress,
+  onExit() {
+   message.textContent = T.exit;
+   detail.textContent = '';
+   progress.hidden = true;
+   status.hidden = false;
+   retry.hidden = false;
+  }
+ }).then(() => {
+  status.hidden = true;
+  canvas.focus();
+ }).catch(fail);
+}
+</script>
+</body>
+</html>

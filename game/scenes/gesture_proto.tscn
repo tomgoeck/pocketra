@@ -1,0 +1,53 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/proto/proto_main.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/proto/proto_world.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/gesture/gesture_recognizer.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/proto/radial_menu.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/proto/minimap.gd" id="5"]
+[ext_resource type="Script" path="res://scripts/proto/build_bar.gd" id="6"]
+[ext_resource type="Script" path="res://scripts/proto/control_groups.gd" id="7"]
+[ext_resource type="Script" path="res://scripts/proto/status_bar.gd" id="8"]
+
+[node name="GestureProto" type="Node"]
+script = ExtResource("1")
+
+[node name="World" type="Node2D" parent="."]
+script = ExtResource("2")
+
+[node name="Gestures" type="Node" parent="."]
+script = ExtResource("3")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Debug" type="Label" parent="UI"]
+text = "Geste: —"
+
+[node name="Status" type="Control" parent="UI"]
+script = ExtResource("8")
+
+[node name="Groups" type="Control" parent="UI"]
+script = ExtResource("7")
+
+[node name="Minimap" type="Control" parent="UI"]
+script = ExtResource("5")
+
+[node name="BuildBar" type="Control" parent="UI"]
+script = ExtResource("6")
+
+[node name="BuildToggle" type="Button" parent="UI"]
+text = "≡"
+
+[node name="PlaceConfirm" type="Button" parent="UI"]
+text = "Bauen"
+visible = false
+
+[node name="PlaceCancel" type="Button" parent="UI"]
+text = "Abbrechen"
+visible = false
+
+[node name="MusicToggle" type="Button" parent="UI"]
+text = "♪"
+
+[node name="RadialMenu" type="Control" parent="UI"]
+script = ExtResource("4")

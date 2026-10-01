@@ -1,0 +1,11 @@
+# Cloudflare Worker, der das Freeware-Paket mit CORS-Freigabe durchreicht (s. worker.js).
+#
+#   npx wrangler login      # einmalig, oeffnet den Browser (macht Tom selbst)
+#   npx wrangler deploy     # aus diesem Verzeichnis
+#
+# Danach steht die Adresse als https://<name>.<konto>.workers.dev bereit und gehoert in
+# game/data/content_sources.json unter dem Schluessel "web".
+name = "pocketra-content"
+main = "worker.js"
+compatibility_date = "2026-09-16"
+workers_dev = true

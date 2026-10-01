@@ -1,0 +1,97 @@
+key,de,en
+1tnk,"Schneller Panzer, gut zum Aufklären.\nStark gegen leichte Fahrzeuge\nSchwach gegen Infanterie, Panzer und Flugzeuge","Fast tank; good for scouting.\nStrong vs Light armor\nWeak vs Infantry, Tanks and Aircraft"
+2tnk,Alliierter Hauptkampfpanzer.\nStark gegen Fahrzeuge\nSchwach gegen Infanterie und Flugzeuge,Allied Main Battle Tank.\nStrong vs Vehicles\nWeak vs Infantry and Aircraft
+3tnk,Sowjetischer Hauptkampfpanzer mit Doppelkanone.\nStark gegen Fahrzeuge\nSchwach gegen Infanterie und Flugzeuge,Soviet Main Battle Tank with dual cannons.\nStrong vs Vehicles\nWeak vs Infantry and Aircraft
+4tnk,"Großer, langsamer Panzer mit Flugabwehr. Kann Betonmauern niederwalzen.\nStark gegen Fahrzeuge, Infanterie und Flugzeuge\nSchwach gegen nichts","Large, slow tank with anti-air capabilities. Can crush concrete walls.\nStrong vs Vehicles, Infantry and Aircraft\nWeak vs Nothing"
+afld,Baut und betankt Flugzeuge.\nFähigkeit: Aufklärungsflug; Fallschirmjäger,Produces and reloads aircraft.\nSpecial: Spy Plane; Paratroopers
+agun,Flugabwehrstellung. Braucht Strom.\nStark gegen Flugzeuge\nSchwach gegen Bodeneinheiten,Anti-Air base defense. Requires power to operate.\nStrong vs Aircraft\nWeak vs Ground units
+ant,"Verstrahltes Insekt, zu abnormer Größe herangewachsen.",Irradiated insect that grew to an abnormally large size.
+apc,Robuster Infanterietransporter.\nStark gegen Infanterie und leichte Fahrzeuge\nSchwach gegen Panzer und Flugzeuge,Tough infantry transport.\nStrong vs Infantry and Light armor\nWeak vs Tanks and Aircraft
+apwr,Liefert doppelt so viel Strom wie ein Kraftwerk.,Provides double the power of a standard Power Plant.
+arty,Artillerie mit großer Reichweite.\nStark gegen Infanterie und Gebäude\nSchwach gegen Fahrzeuge und Flugzeuge,Long-range artillery.\nStrong vs Infantry and Buildings\nWeak vs Vehicles and Aircraft
+atef,Sieht aus wie ein Alliiertes Tech-Zentrum.,Looks like an Allied Tech Center.
+atek,Liefert fortschrittliche alliierte Technologie.\nFähigkeit: GPS-Satellit,Provides advanced Allied technology.\nSpecial: GPS Satellite
+barr,Bildet Infanterie aus.,Trains infantry units.
+bio,"Erobern, um Biolabor-Einheiten zu bauen.",Capture to produce Bio-Lab units.
+brik,Hält Einheiten auf und blockiert feindliches Feuer.,Stops units and blocks enemy fire.
+ca,Sehr langsames Schiff mit großer Reichweite.\nStark gegen Gebäude und Bodeneinheiten\nSchwach gegen Schiffe und Flugzeuge,Very slow long-range ship.\nStrong vs Buildings and Ground units\nWeak vs Naval units and Aircraft
+ctnk,Bewaffnet mit Boden-Boden-Raketen. Teleportiert sich in Reichweite.\nStark gegen Fahrzeuge und Gebäude\nSchwach gegen Infanterie und Flugzeuge\nFähigkeit: Kann teleportieren,Armed with anti-ground missiles. Teleports to any area within range.\nStrong vs Vehicles and Buildings\nWeak vs Infantry and Aircraft\nSpecial: Can teleport
+dd,"Schnelles Mehrzweckschiff. Kann U-Boote aufspüren.\nStark gegen Schiffe, Fahrzeuge und Flugzeuge\nSchwach gegen Infanterie","Fast multi-role ship. Can detect submarines.\nStrong vs Naval units, Vehicles and Aircraft\nWeak vs Infantry"
+dog,Einheit gegen Infanterie. Kann Spione aufspüren.\nStark gegen Infanterie\nSchwach gegen Fahrzeuge und Flugzeuge,Anti-infantry unit. Can detect spies.\nStrong vs Infantry\nWeak vs Vehicles and Aircraft
+dome,Gibt einen Überblick über das Schlachtfeld. Braucht Strom.,Provides an overview of the battlefield. Requires power to operate.
+domf,Sieht aus wie eine Radarkuppel.,Looks like a Radar Dome.
+dtrk,Lkw mit scharfem Atomsprengsatz und sehr schwacher Panzerung.,"Truck carrying armed nuclear explosives, with very weak armor."
+e1,Infanterie für alle Zwecke.\nStark gegen Infanterie\nSchwach gegen Fahrzeuge und Flugzeuge,General-purpose infantry.\nStrong vs Infantry\nWeak vs Vehicles and Aircraft
+e2,Infanterie mit Granaten.\nStark gegen Gebäude und Infanterie\nSchwach gegen Fahrzeuge und Flugzeuge,Infantry with grenades.\nStrong vs Buildings and Infantry\nWeak vs Vehicles and Aircraft
+e3,Infanterie gegen Panzer und Flugzeuge.\nStark gegen Fahrzeuge und Flugzeuge\nSchwach gegen Infanterie,Anti-tank/Anti-aircraft infantry.\nStrong vs Vehicles and Aircraft\nWeak vs Infantry
+e4,Fortschrittliche Einheit gegen Gebäude.\nStark gegen Infanterie und Gebäude\nSchwach gegen Fahrzeuge und Flugzeuge,Advanced anti-structure unit.\nStrong vs Infantry and Buildings\nWeak vs Vehicles and Aircraft
+e6,Infiltriert und erobert feindliche Gebäude.\nUnbewaffnet,Infiltrates and captures enemy structures.\nUnarmed
+e7,Elite-Kommando mit zwei Pistolen und C4. Nur eine kann gebaut werden.\nStark gegen Infanterie und Gebäude\nSchwach gegen Fahrzeuge und Flugzeuge\nFähigkeit: Sprengt Gebäude mit C4,"Elite commando infantry, with dual pistols and C4. Maximum of one can be built.\nStrong vs Infantry and Buildings\nWeak vs Vehicles and Aircraft\nSpecial: Destroys buildings with C4"
+e7.noautotarget,Elite-Kommando mit zwei Pistolen und C4. Nur eine kann gebaut werden.\nStark gegen Infanterie und Gebäude\nSchwach gegen Fahrzeuge und Flugzeuge\nFähigkeit: Sprengt Gebäude mit C4,"Elite commando infantry, with dual pistols and C4. Maximum of one can be built.\nStrong vs Infantry and Buildings\nWeak vs Vehicles and Aircraft\nSpecial: Destroys buildings with C4"
+facf,Sieht aus wie ein Bauhof.,Looks like a Construction Yard.
+fact,Baut Gebäude.,Produces structures.
+fapw,Sieht aus wie ein Fortschrittliches Kraftwerk.,Looks like an Advanced Power Plant.
+fcom,"Erobern, um bebaubare Fläche zu erhalten.",Capture to give buildable area.
+fenc,Hält Infanterie und leichte Fahrzeuge auf. Von Panzern niederwalzbar.,Stops infantry and light vehicles. Can be crushed by tanks.
+fix,Repariert Fahrzeuge gegen Credits.,Repairs vehicles for credits.
+fixf,Sieht aus wie eine Reparaturwerkstatt.,Looks like a Service Depot.
+fpwr,Sieht aus wie ein Kraftwerk.,Looks like a Power Plant.
+ftrk,"Mobile Einheit mit Flak-Kanone.\nStark gegen Infanterie, leichte Fahrzeuge und Flugzeuge\nSchwach gegen Panzer","Mobile unit with a Flak cannon.\nStrong vs Infantry, Light armor and Aircraft\nWeak vs Tanks"
+ftur,Verteidigung gegen Infanterie. Kann getarnte Einheiten aufspüren.\nStark gegen Infanterie und leichte Fahrzeuge\nSchwach gegen Panzer und Flugzeuge,Anti-Infantry base defense. Can detect cloaked units.\nStrong vs Infantry and Light armor\nWeak vs Tanks and Aircraft
+gap,Verdeckt die Sicht des Gegners mit Nebel. Braucht Strom.,Obscures the enemy's view with shroud. Requires power to operate.
+gun,Verteidigung gegen Panzerung. Kann getarnte Einheiten aufspüren.\nStark gegen Fahrzeuge\nSchwach gegen Infanterie und Flugzeuge,Anti-Armor base defense. Can detect cloaked units.\nStrong vs Vehicles\nWeak vs Infantry and Aircraft
+harv,Sammelt Erz und Edelsteine zur Verarbeitung.\nUnbewaffnet,Collects Ore and Gems for processing.\nUnarmed
+hbox,Getarnte Bunkerstellung mit Schießscharte für einen Soldaten. Kann getarnte Einheiten aufspüren.\nStark gegen Infanterie und leichte Fahrzeuge\nSchwach gegen Panzer und Flugzeuge,Camouflaged static defense with a fireport for a garrisoned soldier. Can detect cloaked units.\nStrong vs Infantry and Light armor\nWeak vs Tanks and Aircraft
+heli,"Kampfhubschrauber mit Mehrzweckraketen.\nStark gegen Gebäude, Fahrzeuge und Flugzeuge\nSchwach gegen Infanterie","Helicopter gunship with multi-purpose missiles.\nStrong vs Buildings, Vehicles and Aircraft\nWeak vs Infantry"
+hind,Kampfhubschrauber mit zwei Bordkanonen.\nStark gegen Infanterie und leichte Fahrzeuge\nSchwach gegen Panzer und Flugzeuge,Helicopter gunship with dual chain guns.\nStrong vs Infantry and Light armor\nWeak vs Tanks and Aircraft
+hosp,"Erobern, damit sich Infanterie selbst heilt.",Capture to enable self-healing for infantry.
+hpad,Baut und betankt Hubschrauber.,Produces and reloads helicopters.
+iron,Macht eine Gruppe Einheiten vorübergehend unverwundbar. Braucht Strom. Nur einer kann gebaut werden.\nFähigkeit: Unverwundbarkeit,Grants a group of units temporary invulnerability. Requires power to operate. Maximum of one can be built.\nSpecial: Invulnerability
+jeep,Schneller Aufklärer gegen Infanterie. Trägt genau einen Infanteristen.\nStark gegen Infanterie\nSchwach gegen Fahrzeuge und Flugzeuge,Fast scout and anti-infantry vehicle. Can carry just one infantry unit.\nStrong vs Infantry\nWeak vs Vehicles and Aircraft
+kenn,Bildet Angriffshunde aus.,Trains Attack Dogs.
+lst,Vielseitiger Seetransporter. Trägt Infanterie und Panzer.\nUnbewaffnet,General-purpose naval transport. Carries infantry and tanks\nUnarmed
+mcv,Klappt sich zu einem Bauhof aus.\nUnbewaffnet,Deploys into a Construction Yard.\nUnarmed
+mech,Repariert Fahrzeuge in der Nähe und erobert Wracks zurück in Betrieb.\nUnbewaffnet,Repairs nearby vehicles and restores husks to working condition by capturing them.\nUnarmed
+medi,Heilt Infanterie in der Nähe.\nUnbewaffnet,Heals nearby infantry.\nUnarmed
+mgg,Erzeugt neuen Nebel in der Umgebung.\nUnbewaffnet,Regenerates shroud to obscure nearby areas.\nUnarmed
+mh60,Kampfhubschrauber mit zwei Bordkanonen.\nStark gegen Infanterie und leichte Fahrzeuge\nSchwach gegen Panzer und Flugzeuge,Helicopter gunship with dual chain guns.\nStrong vs Infantry and Light armor\nWeak vs Tanks and Aircraft
+mig,Schnelles Erdkampfflugzeug.\nStark gegen Gebäude und Fahrzeuge\nSchwach gegen Infanterie und Flugzeuge,Fast Ground-Attack Plane.\nStrong vs Buildings and Vehicles\nWeak vs Infantry and Aircraft
+miss,"Erobern, um Sichtweite zu erhalten.",Capture to give visual range.
+mnly,Legt Minen gegen unachtsame Feinde. Kann Minen aufspüren.\nUnbewaffnet,Lays mines to destroy unwary enemy units. Can detect mines.\nUnarmed
+mrj,Stört gegnerische Radarkuppeln in der Nähe und lenkt anfliegende Raketen ab.\nUnbewaffnet,Jams nearby enemy Radar Domes and deflects incoming missiles.\nUnarmed
+mslf,Sieht aus wie ein Raketensilo. Nur eines kann gebaut werden.,Looks like a Missile Silo. Maximum of one can be built.
+mslo,Liefert eine Atombombe. Braucht Strom. Nur eines kann gebaut werden.\nFähigkeit: Atombombe,Provides an atomic bomb. Requires power to operate. Maximum of one can be built.\nSpecial: Atom Bomb
+msub,"Getauchte Einheit gegen Boden und Luft. Kann andere U-Boote aufspüren.\nStark gegen Gebäude, Bodeneinheiten und Flugzeuge\nSchwach gegen Schiffe\nFähigkeit: Kann abtauchen","Submerged anti-ground siege unit with anti-air capabilities. Can detect other submarines.\nStrong vs Buildings, Ground units and Aircraft\nWeak vs Naval units\nSpecial: Submerge"
+oilb,"Erobern, um zusätzliches Geld zu erhalten.",Capture to receive additional funds.
+pbox,Bunkerstellung mit Schießscharte für einen Soldaten. Kann getarnte Einheiten aufspüren.\nStark gegen Infanterie und leichte Fahrzeuge\nSchwach gegen Panzer und Flugzeuge,Static defense with a fireport for a garrisoned soldier. Can detect cloaked units.\nStrong vs Infantry and Light armor\nWeak vs Tanks and Aircraft
+pdof,Sieht aus wie eine Chronosphäre. Nur eine kann gebaut werden.,Looks like a Chronosphere. Maximum of one can be built.
+pdox,Teleportiert eine Gruppe Einheiten für kurze Zeit über die Karte. Braucht Strom. Nur eine kann gebaut werden.\nFähigkeit: Zeitversetzung,Teleports a group of units across the map for a short time. Requires power to operate. Maximum of one can be built.\nSpecial: Chronoshift
+powr,Liefert Strom für andere Gebäude.,Provides power for other structures.
+proc,Verarbeitet Erz und Edelsteine zu Credits.,Refines Ore and Gems into credits.
+pt,Leichtes Aufklärungs- und Unterstützungsschiff. Kann U-Boote aufspüren.\nStark gegen Schiffe\nSchwach gegen Bodeneinheiten und Flugzeuge,Light scout and support ship. Can detect submarines.\nStrong vs Naval units\nWeak vs Ground units and Aircraft
+qtnk,Fügt Fahrzeugen und Gebäuden in der Nähe seismischen Schaden zu.\nStark gegen Fahrzeuge und Gebäude\nSchwach gegen Infanterie und Flugzeuge,Deals seismic damage to nearby vehicles and structures.\nStrong vs Vehicles and Buildings\nWeak vs Infantry and Aircraft
+sam,Flugabwehrstellung. Braucht Strom.\nStark gegen Flugzeuge\nSchwach gegen Bodeneinheiten,Anti-Air base defense. Requires power to operate.\nStrong vs Aircraft\nWeak vs Ground units
+sbag,Hält Infanterie und leichte Fahrzeuge auf. Von Panzern niederwalzbar.,Stops infantry and light vehicles. Can be crushed by tanks.
+shok,Elite-Infanterie mit tragbaren Tesla-Spulen.\nStark gegen Infanterie und Fahrzeuge\nSchwach gegen Flugzeuge,Elite infantry with portable Tesla coils.\nStrong vs Infantry and Vehicles\nWeak vs Aircraft
+silo,Lagert überschüssiges verarbeitetes Erz und Edelsteine.,Stores excess refined Ore and Gems.
+spef,Sieht aus wie ein U-Boot-Bunker.,Looks like a Sub Pen.
+spen,Baut und repariert U-Boote und Transporter.,Produces and repairs submarines and transports.
+spy,Infiltriert feindliche Gebäude für Informationen oder Sabotage. Wirkung je nach Gebäude. Verliert Tarnung beim Angriff. Kann Spione aufspüren.\nStark gegen Infanterie\nSchwach gegen Fahrzeuge und Flugzeuge\nFähigkeit: Getarnt als Zivilist,Infiltrates enemy structures for intel or sabotage. Exact effect depends on the building infiltrated. Loses disguise when attacking. Can detect spies.\nStrong vs Infantry\nWeak vs Vehicles and Aircraft\nSpecial: Disguised
+ss,Getauchtes U-Boot mit Torpedos gegen Schiffe. Kann andere U-Boote aufspüren.\nStark gegen Schiffe\nSchwach gegen Bodeneinheiten und Flugzeuge\nFähigkeit: Kann abtauchen,Submerged anti-ship unit with torpedoes. Can detect other submarines.\nStrong vs Naval units\nWeak vs Ground units and Aircraft\nSpecial: Submerge
+stek,Liefert fortschrittliche sowjetische Technologie.,Provides advanced Soviet technology.
+stnk,"Leicht gepanzerter Infanterietransporter, der sich tarnen kann. Bewaffnet mit Boden-Boden-Raketen.\nStark gegen leichte Fahrzeuge\nSchwach gegen Infanterie, Panzer und Flugzeuge","Light armored infantry transport which can cloak. Armed with anti-ground missiles.\nStrong vs Light armor\nWeak vs Infantry, Tanks and Aircraft"
+syrd,Baut und repariert Schiffe und Transporter.,Produces and repairs ships and transports.
+syrf,Sieht aus wie eine Werft.,Looks like a Naval Yard.
+tenf,Sieht aus wie eine Alliierte Kaserne.,Looks like an Allied Barracks.
+tent,Bildet Infanterie aus.,Trains infantry.
+thf,Stiehlt feindliche Credits. Kapert feindliche Fahrzeuge.\nUnbewaffnet,Steals enemy credits. Hijacks enemy vehicles.\nUnarmed
+tran,Schneller Infanterie-Transporthubschrauber.\nUnbewaffnet,Fast infantry transport helicopter.\nUnarmed
+truk,Bringt Bargeld zu anderen Spielern.\nUnbewaffnet,Transports cash to other players.\nUnarmed
+tsla,Fortschrittliche Verteidigung. Braucht Strom. Kann getarnte Einheiten aufspüren.\nStark gegen Fahrzeuge und Infanterie\nSchwach gegen Flugzeuge,Advanced base defense. Requires power to operate. Can detect cloaked units.\nStrong vs Vehicles and Infantry\nWeak vs Aircraft
+ttnk,"Panzer mit montierter Tesla-Spule.\nStark gegen Infanterie, Fahrzeuge und Gebäude\nSchwach gegen Flugzeuge","Tank with mounted Tesla coil.\nStrong vs Infantry, Vehicles and Buildings\nWeak vs Aircraft"
+v2rl,Raketenartillerie mit großer Reichweite.\nStark gegen Infanterie und Gebäude\nSchwach gegen Fahrzeuge und Flugzeuge,Long-range rocket artillery.\nStrong vs Infantry and Buildings\nWeak vs Vehicles and Aircraft
+volk,"Sowjetischer Spezialagent mit Schalldämpfer-Pistole und C4. Nur einer kann gebaut werden.\nStark gegen Infanterie, Fahrzeuge und Gebäude\nSchwach gegen Flugzeuge\nFähigkeit: Sprengt Gebäude mit C4","Soviet special agent with a silenced pistol and C4. Maximum of one can be built.\nStrong vs Infantry, Vehicles and Buildings\nWeak vs Aircraft\nSpecial: Destroys buildings with C4"
+weaf,Sieht aus wie eine Waffenfabrik.,Looks like a War Factory.
+weap,Baut Fahrzeuge.,Produces vehicles.
+yak,Angriffsflugzeug mit zwei Bordwaffen.\nStark gegen Infanterie und leichte Fahrzeuge\nSchwach gegen Panzer und Flugzeuge,Attack Plane with dual machine guns.\nStrong vs Infantry and Light armor\nWeak vs Tanks and Aircraft
+zombie,"Langsam wandernder Untoter, der im Nahkampf angreift.",Slow-moving undead that attack in close combat.

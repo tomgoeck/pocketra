@@ -1,0 +1,27 @@
+PocketRA: license and origin notes
+
+EA has not endorsed and does not support this product.
+
+PocketRA is a free, non-commercial fan project. It is not endorsed by Electronic Arts and
+not affiliated with Electronic Arts or Westwood Studios. Command & Conquer and Red Alert
+are trademarks of Electronic Arts Inc.
+
+The source code is licensed under the GNU General Public License, version 3 or later
+(see LICENSE). Game rules, maps and mission logic are derived from the data of OpenRA
+(https://github.com/OpenRA/OpenRA, GPL-3.0-or-later).
+
+This repository contains no graphics, sounds, music or videos of the original game.
+The original game files are used, as in OpenRA, under the licence granted by the
+C&C Franchise Modding Guidelines of Electronic Arts: free of charge, non-commercial,
+without music files from C&C games. Anyone building or playing PocketRA obtains those
+files themselves (the freely available base files from the OpenRA mirrors, or their
+own copy of the game).
+
+godot-cpp (gdext/godot-cpp) is licensed under the MIT licence of the Godot Engine.
+
+tools/laya/laya_core.py contains portions ported from Laya
+(https://github.com/NandhaKishorM/laya, laya/common.py and laya/onnx_agent.py) by Convai
+Innovations, licensed under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0). The files were rewritten for onnxruntime without
+PyTorch. The Laya model weights are not part of this repository or of the app; tools/laya is an
+optional desktop experiment and is not used by the game unless the player enables it.

@@ -1,0 +1,57 @@
+; NSIS-Installer für die Windows-Verteilfassung — von tools/win_build.sh per sed aus diesem
+; Template erzeugt (Platzhalter __OUTFILE__/__SRCDIR__/__VERSION__) und mit makensis übersetzt
+; (Homebrew: `brew install makensis`, cross-kompiliert eine echte Windows-.exe, ohne dass Windows
+; oder Wine nötig wären). Toms Wunsch 2026-09-09: "eine exe Datei als Download statt zip" — ein
+; richtiger Installer statt einer selbstentpackenden Zip: Zielordner wählen, Startmenü-Eintrag,
+; Deinstallation über Windows' "Apps"-Liste.
+!include "MUI2.nsh"
+
+!define APPNAME "PocketRA"
+!define COMPANYNAME "Tom Goeckeritz"
+!define EXE "pocketra.exe"
+!define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
+
+Name "${APPNAME}"
+OutFile "__OUTFILE__"
+InstallDir "$PROGRAMFILES64\${APPNAME}"
+RequestExecutionLevel admin
+Unicode true
+SetCompressor /SOLID lzma
+
+!insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_UNPAGE_CONFIRM
+!insertmacro MUI_UNPAGE_INSTFILES
+!insertmacro MUI_LANGUAGE "English"
+
+Section "Install"
+    SetOutPath "$INSTDIR"
+    File "__SRCDIR__/pocketra.exe"
+    File "__SRCDIR__/pocketra.pck"
+    File "__SRCDIR__/librasim.windows.x86_64.dll"
+    WriteUninstaller "$INSTDIR\uninstall.exe"
+
+    CreateDirectory "$SMPROGRAMS\${APPNAME}"
+    CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${EXE}"
+    CreateShortCut "$SMPROGRAMS\${APPNAME}\Uninstall.lnk" "$INSTDIR\uninstall.exe"
+
+    WriteRegStr HKLM "${UNINSTKEY}" "DisplayName" "${APPNAME}"
+    WriteRegStr HKLM "${UNINSTKEY}" "DisplayVersion" "__VERSION__"
+    WriteRegStr HKLM "${UNINSTKEY}" "UninstallString" "$INSTDIR\uninstall.exe"
+    WriteRegStr HKLM "${UNINSTKEY}" "InstallLocation" "$INSTDIR"
+    WriteRegStr HKLM "${UNINSTKEY}" "Publisher" "${COMPANYNAME}"
+    WriteRegDWORD HKLM "${UNINSTKEY}" "NoModify" 1
+    WriteRegDWORD HKLM "${UNINSTKEY}" "NoRepair" 1
+SectionEnd
+
+Section "Uninstall"
+    Delete "$INSTDIR\pocketra.exe"
+    Delete "$INSTDIR\pocketra.pck"
+    Delete "$INSTDIR\librasim.windows.x86_64.dll"
+    Delete "$INSTDIR\uninstall.exe"
+    RMDir "$INSTDIR"
+    Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
+    Delete "$SMPROGRAMS\${APPNAME}\Uninstall.lnk"
+    RMDir "$SMPROGRAMS\${APPNAME}"
+    DeleteRegKey HKLM "${UNINSTKEY}"
+SectionEnd

@@ -1,0 +1,157 @@
+{
+ "summary": {
+  "map": "islands, no land path between the bases",
+  "doctrine": "land_push",
+  "doctrine_age_s": "240",
+  "credits": "high",
+  "income": "medium",
+  "refineries": "medium",
+  "power": "ok",
+  "army": {
+   "land": "medium",
+   "air": "low",
+   "naval": "none"
+  },
+  "enemy": {
+   "land": "low",
+   "air": "none",
+   "naval": "medium",
+   "anti_air": "low",
+   "attacking": "no"
+  },
+  "air_losses_60s": "none",
+  "kills_60s": "low",
+  "base_damage_60s": "none"
+ },
+ "questions": [
+  {
+   "id": "doctrine",
+   "type": "choice",
+   "options": [
+    "land_push",
+    "air_dominance",
+    "naval_dominance",
+    "eco_turtle",
+    "amphibious"
+   ],
+   "descriptions": [
+    "mass tanks and infantry and attack over land",
+    "build aircraft and strike from the air",
+    "build a navy and attack from the sea",
+    "defend the base and grow the economy first",
+    "carry tanks and infantry in landing craft to the enemy island"
+   ]
+  },
+  {
+   "id": "economy",
+   "type": "choice",
+   "options": [
+    "more_refineries",
+    "ok",
+    "save_money"
+   ],
+   "descriptions": [
+    "income is too low, build more refineries and harvesters",
+    "the economy is fine, keep the current balance",
+    "stop extra spending and keep a cash reserve"
+   ]
+  },
+  {
+   "id": "stance",
+   "type": "choice",
+   "options": [
+    "attack",
+    "hold",
+    "defend",
+    "retreat"
+   ],
+   "descriptions": [
+    "send the army against the enemy base",
+    "keep the army at the rally point, ready to strike",
+    "pull the army back to guard the own base",
+    "withdraw damaged units and avoid fights"
+   ]
+  },
+  {
+   "id": "keep_using_air",
+   "type": "noul",
+   "options": [
+    "false",
+    "true"
+   ],
+   "descriptions": [
+    "stop building aircraft, they die too fast or are not useful here",
+    "keep building and using aircraft"
+   ]
+  },
+  {
+   "id": "base_threat",
+   "type": "score",
+   "options": [
+    "none",
+    "low",
+    "medium",
+    "high"
+   ],
+   "descriptions": [
+    "no enemy near the base",
+    "a few enemy scouts or small raids",
+    "a real attack on outlying buildings",
+    "a strong attack on the core of the base"
+   ]
+  }
+ ],
+ "request": {
+  "state": "Real-time strategy battle, AI commander report. Map: islands, no land path between the bases. Current doctrine: land_push. Doctrine age in seconds: 240. Money: high. Income: medium. Refineries: medium. Power: ok. Own army: land medium, air low, naval none. Enemy seen: land low, air none, naval medium, anti air low, attacking no. Aircraft lost in last 60 s: none. Enemy units killed in last 60 s: low. Damage to own base in last 60 s: none.",
+  "questions": {
+   "doctrine": {
+    "type": "choice",
+    "instructions": "Which overall strategy should this AI commander follow for the next minute?",
+    "criteria": {
+     "land_push": "mass tanks and infantry and attack over land",
+     "air_dominance": "build aircraft and strike from the air",
+     "naval_dominance": "build a navy and attack from the sea",
+     "eco_turtle": "defend the base and grow the economy first",
+     "amphibious": "carry tanks and infantry in landing craft to the enemy island"
+    }
+   },
+   "economy": {
+    "type": "choice",
+    "instructions": "What should the commander do with the economy right now?",
+    "criteria": {
+     "more_refineries": "income is too low, build more refineries and harvesters",
+     "ok": "the economy is fine, keep the current balance",
+     "save_money": "stop extra spending and keep a cash reserve"
+    }
+   },
+   "stance": {
+    "type": "choice",
+    "instructions": "Which stance should the commander's army take right now?",
+    "criteria": {
+     "attack": "send the army against the enemy base",
+     "hold": "keep the army at the rally point, ready to strike",
+     "defend": "pull the army back to guard the own base",
+     "retreat": "withdraw damaged units and avoid fights"
+    }
+   },
+   "keep_using_air": {
+    "type": "noul",
+    "instructions": "Should the commander keep building and using aircraft?",
+    "criteria": {
+     "false": "stop building aircraft, they die too fast or are not useful here",
+     "true": "keep building and using aircraft"
+    }
+   },
+   "base_threat": {
+    "type": "score",
+    "instructions": "How strongly is the commander's own base threatened right now?",
+    "criteria": [
+     "none: no enemy near the base",
+     "low: a few enemy scouts or small raids",
+     "medium: a real attack on outlying buildings",
+     "high: a strong attack on the core of the base"
+    ]
+   }
+  }
+ }
+}

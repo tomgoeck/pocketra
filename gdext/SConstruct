@@ -1,0 +1,32 @@
+#!/usr/bin/env python
+
+import os
+
+api = os.path.abspath("extension_api.json")
+ARGUMENTS.setdefault("custom_api_file", api)
+
+env = SConscript("godot-cpp/SConstruct")
+
+env.Append(CPPPATH=["src/", "../sim/include/"])
+env.Append(CXXFLAGS=["-std=c++17"])
+
+sources = (Glob("src/*.cpp") + Glob("src/*/*.cpp") + Glob("src/*/*/*.cpp")
+           + Glob("../sim/src/*.cpp") + Glob("../sim/src/*/*.cpp"))
+
+if env["platform"] == "ios":
+
+
+    objs = env.StaticLibrary(target="bin/librasim_objs.ios." + env["arch"], source=sources)
+    cpplib = env.File("godot-cpp/bin/libgodot-cpp{}{}".format(env["suffix"], env["LIBSUFFIX"]))
+    fat = env.Command("bin/librasim.ios.{}.a".format(env["arch"]), [objs, cpplib],
+                      "libtool -static -o $TARGET $SOURCES 2>/dev/null")
+
+
+    xcf = env.Command("../game/bin/librasim.ios.xcframework/Info.plist", fat,
+                      "rm -rf ${TARGET.dir} && xcodebuild -create-xcframework "
+                      "-library $SOURCE -output ${TARGET.dir} >/dev/null")
+    Default(xcf)
+else:
+    libname = "librasim.{}.{}{}".format(env["platform"], env["arch"], env["SHLIBSUFFIX"])
+    library = env.SharedLibrary(target="../game/bin/" + libname, source=sources)
+    Default(library)

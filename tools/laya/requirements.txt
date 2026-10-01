@@ -1,0 +1,10 @@
+# Laufzeit des Laya-Dienstes (ohne PyTorch). Getestet 2026-09-29 mit Python 3.13 auf macOS arm64.
+onnxruntime==1.30.0
+tokenizers==0.23.2
+numpy==2.5.3
+fastapi==0.141.1
+starlette==1.7.0
+uvicorn==0.54.0
+psutil==7.2.2
+# nur fuer bench.py und proben.py
+httpx==0.28.1
