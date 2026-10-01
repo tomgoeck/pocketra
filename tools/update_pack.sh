@@ -32,8 +32,6 @@ mkdir -p "$OUT"
 BASE_URL=${BASE_URL:-https://example.invalid/pocketra}
 DL_BASE=${DL_BASE:-https://github.com/tomgoeck/pocketra/releases/latest/download}
 
-SHA=$(shasum -a 256 "$PCK" | awk '{print $1}')
-SIZE=$(wc -c < "$PCK" | tr -d ' ')
 COMMIT=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo nogit)
 LABEL="$(date +%Y-%m-%d)-$COMMIT"
 PREV=0
@@ -67,6 +65,8 @@ if [ -z "$VERSION_ONLY" ]; then
         | grep -E 'ERROR|error' | head -5 || true
 fi
 [ -f "$PCK" ] || { echo "kein Paket unter $PCK"; exit 1; }
+SHA=$(shasum -a 256 "$PCK" | awk '{print $1}')
+SIZE=$(wc -c < "$PCK" | tr -d ' ')
 
 MIN_EXT=$(sed -n 's/.*const char\* version() { return "\(.*\)".*/\1/p' "$ROOT/sim/src/world/wmath.cpp")
 MIN_EXT=${MIN_EXT:-0}
