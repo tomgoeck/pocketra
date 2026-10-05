@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <vector>
 
 #include "ra/sim.h"
@@ -2394,8 +2395,10 @@ static void test_bot_commander_rules_v3() {
     CHECK(argmax_of(World::bot_rule_commander(sw, land, p).special_op, SO_COUNT) == SO_NONE);
     BotSummary sc = s; sc.own_special[0] = LV_LOW; sc.enemy_soft = LV_LOW; sc.enemy_base_known = 1;
     CHECK(argmax_of(World::bot_rule_commander(sc, land, p).special_op, SO_COUNT) == SO_COMMANDO_RAID);
-    BotSummary se = s; se.own_special[1] = LV_LOW; se.enemy_base_known = 1;
+    BotSummary se = s; se.own_special[1] = LV_LOW; se.enemy_base_known = 1; se.raw_engineer_op = 1;
     CHECK(argmax_of(World::bot_rule_commander(se, land, p).special_op, SO_COUNT) == SO_ENGINEER_CAPTURE);
+    se.raw_engineer_op = 0;
+    CHECK(argmax_of(World::bot_rule_commander(se, land, p).special_op, SO_COUNT) == SO_NONE);
     BotSummary sy = s; sy.own_special[2] = LV_LOW; sy.enemy_base_known = 1;
     CHECK(argmax_of(World::bot_rule_commander(sy, land, p).special_op, SO_COUNT) == SO_SPY_INFILTRATE);
 
@@ -6123,6 +6126,36 @@ static void test_harvester_gems_cleared() {
     CHECK(w.credits(0) > 1400);
 }
 
+
+static void test_harvester_unreachable_ore() {
+    World w;
+    std::vector<uint8_t> cost(48 * 48, 1);
+    for (int y = 8; y <= 14; ++y)
+        for (int x = 18; x <= 24; ++x)
+            if (x == 18 || x == 24 || y == 8 || y == 14) cost[size_t(y) * 48 + size_t(x)] = 0;
+    w.set_map(48, 48, cost.data());
+    const int t_harv = w.define_type(harv_fixture::harv_type());
+    const int t_proc = w.define_type(harv_fixture::proc_type());
+    w.spawn_building(t_proc, 0, {4, 10});
+    for (int y = 10; y <= 12; ++y)
+        for (int x = 20; x <= 22; ++x) w.set_resource({x, y}, RES_ORE, 12);
+    for (int y = 36; y <= 42; ++y)
+        for (int x = 34; x <= 42; ++x) w.set_resource({x, y}, RES_ORE, 12);
+    const int32_t id = w.spawn(t_harv, 0, {8, 14});
+    const size_t i = size_t(w.index_of(id));
+    uint32_t first_load = 0;
+    for (int t = 0; t < 4000; ++t) {
+        w.step();
+        if (first_load == 0 && w.harvest(i).bales > 0) first_load = w.tick();
+    }
+    std::printf("Ernte, unerreichbares Erz: erster Ballen bei Tick %u, %lld Credits nach 4000 Ticks, "
+                "Erz im Ring unberuehrt (%d Ballen)\n", first_load, static_cast<long long>(w.credits(0)),
+                int(w.resource_density({21, 11})));
+    CHECK(first_load > 0);
+    CHECK(w.credits(0) > 0);
+    CHECK(w.resource_density({21, 11}) == 12);
+}
+
 static void test_harvester_prefers_full_field() {
 
     auto first_target = [](int thin_density, int thin_x0, int thin_x1, int full_x0, int full_x1) {
@@ -7524,20 +7557,26 @@ static void test_bot_vehicle_timing() {
 struct BotOpeningWorld {
     World w;
     int t_fact = -1, t_powr = -1, t_proc = -1, t_barr = -1, t_weap = -1, t_dome = -1, t_gun = -1;
-    int t_harv = -1, t_tank = -1, t_rifle = -1;
+    int t_harv = -1, t_tank = -1, t_rifle = -1, t_fix = -1;
 };
 
-static void bot_opening_setup(BotOpeningWorld& o, int32_t credits) {
+
+static void bot_opening_setup(BotOpeningWorld& o, int32_t credits, uint32_t cannon_targets = 0,
+                              bool with_depot = false) {
     World& w = o.w;
     std::vector<uint8_t> cost(64 * 64, 1);
     w.set_map(64, 64, cost.data());
     Weapon cannon; cannon.range = 6 * CELL; cannon.reload = 50; cannon.damage = 4000; cannon.speed = 0;
+
+
+    cannon.valid_targets = cannon_targets;
     const int wcannon = w.define_weapon(cannon);
     UnitType fact;
     fact.building = true; fact.foot_w = 3; fact.foot_h = 3; fact.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
     fact.build_block = fact.footprint; fact.hp = 150000; fact.armor = ARMOR_WOOD;
     fact.produces = (1u << QUEUE_BUILDING) | (1u << QUEUE_DEFENSE);
     fact.base_provider = true; fact.provides = {"fact"};
+    if (cannon_targets != 0) fact.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
     UnitType powr;
     powr.building = true; powr.foot_w = 2; powr.foot_h = 2; powr.footprint = {1, 1, 1, 1};
     powr.build_block = powr.footprint; powr.hp = 40000; powr.armor = ARMOR_WOOD; powr.power = 100;
@@ -7602,6 +7641,17 @@ static void bot_opening_setup(BotOpeningWorld& o, int32_t credits) {
     o.t_weap = w.define_type(weap);
     o.t_dome = w.define_type(dome);
     o.t_gun = w.define_type(gun);
+    if (with_depot) {
+        UnitType fix;
+        fix.building = true; fix.foot_w = 3; fix.foot_h = 2; fix.footprint = {1, 1, 1, 1, 1, 1};
+        fix.build_block = fix.footprint; fix.hp = 80000; fix.armor = ARMOR_WOOD; fix.power = -30;
+        fix.cost = 1200; fix.queue_kind = QUEUE_BUILDING; fix.prerequisites = {"weap"};
+        fix.provides = {"fix"}; fix.repairs_units = true; fix.ai_building_fraction = 1;
+        fix.ai_building_limit = 1;
+        o.t_fix = w.define_type(fix);
+        tank.prerequisites = {"weap", "fix"};
+        tank.speed = 72;
+    }
     o.t_tank = w.define_type(tank);
     o.t_rifle = w.define_type(rifle);
     w.spawn_building(o.t_fact, 1, {8, 8});
@@ -7657,6 +7707,212 @@ static void test_bot_opening_plan() {
     CHECK(hart > 0 && hart < 4500);
     CHECK(hart_proc == 1 && hart_barr == 1);
     CHECK(leicht > hart);
+}
+
+
+static void test_bot_sparring() {
+    struct Result {
+        uint32_t t_powr = 0, t_proc = 0, t_barr = 0, t_proc2 = 0, t_weap = 0, t_dome = 0;
+        int harvesters = 0, tanks_built = 0, rifles = 0;
+        int64_t min_credits = 0, spent = 0;
+        BotState stat;
+        uint64_t hash = 0;
+        int32_t foe_hp = 0;
+    };
+
+
+    auto run = [](uint32_t seed, int ticks, int reload) {
+        Result r;
+        BotOpeningWorld o;
+        bot_opening_setup(o, 5000, TT_GROUND_ACTOR | TT_STRUCTURE | TT_DEFENSE | TT_VEHICLE | TT_INFANTRY);
+        World& w = o.w;
+        w.set_rng_seed(seed);
+        w.set_alliance(0, 1, false);
+        const int32_t foe = w.spawn_building(o.t_fact, 0, {52, 52});
+        BotParams bp;
+        bp.sparring = 1;
+        bp.reaction_min_ticks = 25; bp.reaction_max_ticks = 60;
+        w.enable_bot(1, bp);
+        r.min_credits = w.credits(1);
+        auto count = [&](int type) {
+            int n = 0;
+            for (size_t i = 0; i < w.actor_count(); ++i)
+                if (w.actor(i).alive && w.actor(i).owner == 1 && w.actor(i).type == type) ++n;
+            return n;
+        };
+        for (int t = 0; t < ticks; ++t) {
+            if (reload > 0 && t == ticks / 2) {
+                std::vector<uint8_t> blob;
+                CHECK(w.save(blob));
+                if (reload > 1) CHECK(w.load(blob));
+            }
+            w.step();
+            r.min_credits = std::min(r.min_credits, w.credits(1));
+            if (r.t_powr == 0 && count(o.t_powr) >= 1) r.t_powr = w.tick();
+            if (r.t_proc == 0 && count(o.t_proc) >= 1) r.t_proc = w.tick();
+            if (r.t_barr == 0 && count(o.t_barr) >= 1) r.t_barr = w.tick();
+            if (r.t_proc2 == 0 && count(o.t_proc) >= 2) r.t_proc2 = w.tick();
+            if (r.t_weap == 0 && count(o.t_weap) >= 1) r.t_weap = w.tick();
+            if (r.t_dome == 0 && count(o.t_dome) >= 1) r.t_dome = w.tick();
+            if (w.tick() == 9000) r.harvesters = count(o.t_harv);
+        }
+        r.rifles = count(o.t_rifle);
+        r.stat = w.bot_state(1);
+        r.tanks_built = r.stat.stat_built_q[BQ_VEHICLE];
+        r.hash = w.state_hash_full();
+        const int fi = w.index_of(foe);
+        r.foe_hp = fi >= 0 && w.actor(size_t(fi)).alive ? w.actor(size_t(fi)).hp : 0;
+        return r;
+    };
+    const Result a = run(11, 12000, 0);
+    std::printf("Sparring: Kraftwerk %u, Raffinerie %u, Kaserne %u, 2. Raffinerie %u, Waffenfabrik %u, "
+                "Radar %u; Sammler bei Tick 9000: %d; Fahrzeugauftraege %d; Wellen %d (erste Tick %u); "
+                "Gegnerbauhof %d HP, Schaden %lld\n",
+                a.t_powr, a.t_proc, a.t_barr, a.t_proc2, a.t_weap, a.t_dome, a.harvesters, a.tanks_built,
+                a.stat.stat_squads_sent, a.stat.stat_first_attack, a.foe_hp,
+                static_cast<long long>(a.stat.stat_bldg_damage));
+
+    CHECK(a.t_powr > 0 && a.t_powr < a.t_proc);
+    CHECK(a.t_proc < a.t_barr);
+    CHECK(a.t_barr < a.t_proc2);
+    CHECK(a.t_proc2 < a.t_weap);
+    CHECK(a.t_weap > 0 && a.t_weap < 4500);
+    CHECK(a.t_dome == 0 || a.t_dome > a.t_weap);
+    CHECK(a.harvesters >= 4 && a.harvesters <= 5);
+    CHECK(a.tanks_built >= 6);
+    CHECK(a.rifles <= 18);
+
+    CHECK(a.min_credits >= 0);
+    CHECK(a.stat.stat_squads_sent >= 1);
+    CHECK(a.stat.stat_first_attack >= 7500);
+    CHECK(a.stat.stat_bldg_damage > 0);
+
+    CHECK(a.stat.stat_army_at[0] >= 0 && a.stat.stat_army_at[1] >= 0 && a.stat.stat_army_at[2] == -1);
+    CHECK(a.stat.stat_harv_at[0] >= 2 && a.stat.stat_harv_at[1] >= 4);
+    CHECK(a.stat.stat_earned_at8 > 0);
+    CHECK(a.stat.stat_t_refinery2 > 0 && uint32_t(a.stat.stat_t_refinery2) <= a.t_proc2 + 25);
+    CHECK(a.stat.stat_t_factory > 0 && uint32_t(a.stat.stat_t_factory) <= a.t_weap + 25);
+
+    const Result b = run(11, 12000, 0);
+    const Result c = run(11, 12000, 1), d = run(11, 12000, 2);
+    CHECK(a.hash == b.hash);
+    CHECK(c.hash == d.hash);
+    std::printf("Sparring: Hash %016llx zweimal identisch, auch nach Speichern und Laden bei Tick 6000\n",
+                static_cast<unsigned long long>(a.hash));
+}
+
+
+static BotParams bot_tempo_params(bool tempo) {
+    BotParams bp;
+    bp.reaction_min_ticks = 25; bp.reaction_max_ticks = 60;
+    bp.opening_factory_after = 2; bp.opening_production_free = 2; bp.opening_defense_per = 4;
+    bp.continuous_production = 1; bp.harvesters_extra = 1; bp.wave_value = 4000;
+    bp.defense_growth_tick = 6000; bp.defense_army_percent = 45;
+    if (tempo) {
+        bp.opening_depot = 1; bp.harvesters_floor = 2; bp.harvesters_floor_max = 5;
+        bp.eco_first = 1; bp.eco_first_until = 18000; bp.opening_infantry = 4; bp.army_min_value = 6000;
+        bp.tank_percent = 100; bp.attack_min_value = 4000; bp.opening_rich_cash = 3000;
+        bp.wave_grow_percent = 50; bp.eco_surplus_cash = 1500;
+    }
+    return bp;
+}
+
+struct BotTempoResult {
+    uint32_t t_proc2 = 0, t_weap = 0, t_fix = 0, t_dome = 0, t_tank = 0, t_gun = 0;
+    int harv_9000 = 0, tanks_end = 0, rifles_at_weap = -1;
+    BotState stat;
+    uint64_t hash = 0;
+};
+
+static BotTempoResult bot_tempo_run(const BotParams& bp, int32_t credits, int ticks) {
+    BotTempoResult r;
+    BotOpeningWorld o;
+    bot_opening_setup(o, credits, TT_GROUND_ACTOR | TT_STRUCTURE | TT_DEFENSE | TT_VEHICLE | TT_INFANTRY, true);
+    World& w = o.w;
+    w.set_rng_seed(5);
+    w.set_alliance(0, 1, false);
+    w.spawn_building(o.t_fact, 0, {52, 52});
+    w.enable_bot(1, bp);
+    auto count = [&](int type) {
+        int n = 0;
+        for (size_t i = 0; i < w.actor_count(); ++i)
+            if (w.actor(i).alive && w.actor(i).owner == 1 && w.actor(i).type == type) ++n;
+        return n;
+    };
+    for (int t = 0; t < ticks; ++t) {
+        w.step();
+        if (r.t_proc2 == 0 && count(o.t_proc) >= 2) r.t_proc2 = w.tick();
+        if (r.t_weap == 0 && count(o.t_weap) >= 1) { r.t_weap = w.tick(); r.rifles_at_weap = count(o.t_rifle); }
+        if (r.t_fix == 0 && count(o.t_fix) >= 1) r.t_fix = w.tick();
+        if (r.t_dome == 0 && count(o.t_dome) >= 1) r.t_dome = w.tick();
+        if (r.t_tank == 0 && count(o.t_tank) >= 1) r.t_tank = w.tick();
+        if (r.t_gun == 0 && count(o.t_gun) >= 1) r.t_gun = w.tick();
+        if (w.tick() == 9000) r.harv_9000 = count(o.t_harv);
+    }
+    r.tanks_end = count(o.t_tank);
+    r.stat = w.bot_state(1);
+    r.hash = w.state_hash_full();
+    return r;
+}
+
+static void test_bot_tempo() {
+
+    const BotTempoResult alt = bot_tempo_run(bot_tempo_params(false), 2500, 9000);
+    const BotTempoResult neu = bot_tempo_run(bot_tempo_params(true), 2500, 9000);
+    std::printf("KI-Tempo 2500 Credits, alt/neu: Fabrik %u/%u, Depot %u/%u, erster Panzer %u/%u, "
+                "erster Turm %u/%u, Radar %u/%u, Sammler bei Tick 9000 %d/%d, Schuetzen vor der Fabrik %d/%d\n",
+                alt.t_weap, neu.t_weap, alt.t_fix, neu.t_fix, alt.t_tank, neu.t_tank, alt.t_gun, neu.t_gun,
+                alt.t_dome, neu.t_dome, alt.harv_9000, neu.harv_9000, alt.rifles_at_weap, neu.rifles_at_weap);
+    CHECK(neu.t_weap > 0 && neu.t_weap < 6000);
+    CHECK(neu.t_proc2 > 0 && neu.t_proc2 < neu.t_weap);
+    CHECK(neu.t_fix > neu.t_weap);
+    CHECK(neu.t_dome == 0 || neu.t_fix < neu.t_dome);
+    CHECK(neu.t_tank > neu.t_fix && neu.t_tank < 9000);
+    CHECK(neu.harv_9000 >= 4);
+    CHECK(neu.harv_9000 > alt.harv_9000);
+    CHECK(neu.rifles_at_weap <= 4);
+    CHECK(neu.t_gun == 0 || neu.t_gun > neu.t_tank);
+    CHECK(alt.t_tank == 0 || neu.t_tank < alt.t_tank);
+
+    const BotTempoResult reich = bot_tempo_run(bot_tempo_params(true), 5000, 6000);
+    std::printf("KI-Tempo 5000 Credits: Fabrik %u, zweite Raffinerie %u, Depot %u\n",
+                reich.t_weap, reich.t_proc2, reich.t_fix);
+    CHECK(reich.t_weap > 0 && reich.t_weap < 4500);
+    CHECK(reich.t_weap < reich.t_proc2);
+    CHECK(reich.t_proc2 < reich.t_fix);
+
+    BotParams hoch = bot_tempo_params(true);
+    hoch.attack_min_value = 1000000;
+    const BotTempoResult nie = bot_tempo_run(hoch, 5000, 15000);
+    const BotTempoResult welle = bot_tempo_run(bot_tempo_params(true), 5000, 15000);
+    std::printf("KI-Tempo Wellen in 15000 Ticks: Untergrenze 4000 -> %d (erste Tick %u), "
+                "unerreichbare Untergrenze -> %d\n",
+                welle.stat.stat_squads_sent, welle.stat.stat_first_attack, nie.stat.stat_squads_sent);
+    CHECK(nie.stat.stat_squads_sent == 0);
+    CHECK(welle.stat.stat_squads_sent >= 1);
+    CHECK(welle.stat.stat_first_attack > welle.t_tank);
+
+    const BotTempoResult neu2 = bot_tempo_run(bot_tempo_params(true), 2500, 9000);
+    CHECK(neu.hash == neu2.hash);
+
+    for (int on = 0; on <= 1; ++on) {
+        BotOpeningWorld o;
+        bot_opening_setup(o, 5000, TT_GROUND_ACTOR | TT_STRUCTURE | TT_DEFENSE | TT_VEHICLE | TT_INFANTRY);
+        BotParams bp = bot_tempo_params(true);
+        bp.counterattack_peak = on;
+        o.w.set_alliance(0, 1, false);
+        o.w.enable_bot(1, bp);
+        const int32_t foe = o.w.spawn(o.t_tank, 0, {14, 8});
+        for (int t = 0; t < 200; ++t) {
+            o.w.step();
+            if (t % 30 != 0) continue;
+            for (size_t i = 0; i < o.w.actor_count(); ++i) {
+                const Actor& a = o.w.actor(i);
+                if (a.alive && a.owner == 1 && a.type == o.t_fact) { o.w.damage_for_test(i, 500, foe); break; }
+            }
+        }
+        CHECK((o.w.bot_state(1).attack_peak > 0) == (on == 1));
+    }
 }
 
 
@@ -12986,6 +13242,390 @@ static void test_retreat_under_fire() {
                 arrived, hp0 - hp1, int(never_targeted && never_back), hit, opp_seen);
 }
 
+
+__attribute__((noinline)) static void test_engineer_sabotage() {
+    struct Setup {
+        World w;
+        int tp = -1, te = -1, tcamp = -1, tthf = -1, tj = -1;
+    };
+    const auto make = [](Setup& s) {
+        std::vector<uint8_t> cost(48 * 48, 1);
+        s.w.set_map(48, 48, cost.data());
+        s.w.set_conquest_victory(false);
+        UnitType powr; powr.building = true; powr.foot_w = 2; powr.foot_h = 2; powr.footprint = {1, 1, 1, 1};
+        powr.sprite_h = 2; powr.hp = 40000; powr.capturable = true; powr.target_types = TT_STRUCTURE;
+        UnitType eng; eng.speed = 54; eng.turn_rate = 1024; eng.infantry = true; eng.hp = 2500;
+        eng.captures = true; eng.capture_types = CAP_BUILDING; eng.capture_delay = 5; eng.locomotor = LOCO_FOOT;
+        eng.sabotage_threshold = 25; eng.sabotage_hp_removal = 33;
+        UnitType camp = eng; camp.sabotage_threshold = 0;
+        UnitType thf = eng; thf.capture_types = CAP_VEHICLE | CAP_AIRCRAFT; thf.sabotage_threshold = 0;
+        UnitType jeep; jeep.speed = 100; jeep.turn_rate = 20; jeep.hp = 15000; jeep.locomotor = LOCO_WHEELED;
+        jeep.capturable = true; jeep.capturable_types = CAP_VEHICLE; jeep.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+        s.tp = s.w.define_type(powr);
+        s.te = s.w.define_type(eng);
+        s.tcamp = s.w.define_type(camp);
+        s.tthf = s.w.define_type(thf);
+        s.tj = s.w.define_type(jeep);
+    };
+    const auto gone = [](World& w, int32_t id) {
+        const int i = w.index_of(id);
+        return i < 0 || !w.actor(size_t(i)).alive;
+    };
+
+    const auto send = [&](World& w, int type, int32_t target, CPos from) {
+        const int32_t e = w.spawn(type, 0, from);
+        w.order_capture(&e, 1, target);
+        for (int t = 0; t < 800 && !gone(w, e); ++t) w.step();
+        CHECK(gone(w, e));
+        return e;
+    };
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        UnitType e34 = w.type(s.te); e34.sabotage_threshold = 34;
+        const int t34 = w.define_type(e34);
+        const int32_t foe = w.spawn_building(s.tp, 1, {24, 10});
+        const int fi = w.index_of(foe);
+        for (int k = 0; k < 2; ++k) {
+            const int32_t probe = w.spawn(t34, 0, {16, 30});
+            CHECK(w.enter_would_sabotage(probe, foe));
+            w.remove_actor(probe);
+            send(w, t34, foe, {16, 10});
+            CHECK(w.actor(size_t(fi)).owner == 1);
+            CHECK(w.actor(size_t(fi)).hp == 40000 - (k + 1) * 13200);
+        }
+        const int32_t probe = w.spawn(t34, 0, {16, 30});
+        CHECK(!w.enter_would_sabotage(probe, foe));
+        w.remove_actor(probe);
+        send(w, t34, foe, {16, 10});
+        CHECK(w.actor(size_t(fi)).alive);
+        CHECK(w.actor(size_t(fi)).owner == 0);
+        CHECK(w.actor(size_t(fi)).hp == 13600);
+    }
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t foe = w.spawn_building(s.tp, 1, {24, 10});
+        const int fi = w.index_of(foe);
+        const int32_t expect[3] = {40000 - 13200, 40000 - 2 * 13200, 40000 - 3 * 13200};
+        std::vector<int32_t> notes;
+        for (int k = 0; k < 3; ++k) {
+            const int32_t probe = w.spawn(s.te, 0, {16, 30});
+            CHECK(w.enter_would_sabotage(probe, foe));
+            w.remove_actor(probe);
+            const int32_t e = send(w, s.te, foe, {16, 10});
+            CHECK(w.actor(size_t(fi)).alive);
+            CHECK(w.actor(size_t(fi)).owner == 1);
+            CHECK(w.actor(size_t(fi)).hp == expect[k]);
+            CHECK(w.actor(size_t(fi)).last_attacker == e);
+            w.drain_notifications(0, notes);
+            CHECK(std::find(notes.begin(), notes.end(), int32_t(NOTIFY_BUILDING_CAPTURED)) == notes.end());
+        }
+        CHECK(w.actor(size_t(fi)).hp * 100 / 40000 == 1);
+
+        const int32_t probe = w.spawn(s.te, 0, {16, 30});
+        CHECK(w.enter_kind_for(size_t(w.index_of(probe)), size_t(fi)) == ENTER_CAPTURE);
+        CHECK(!w.enter_would_sabotage(probe, foe));
+        w.remove_actor(probe);
+        send(w, s.te, foe, {16, 10});
+        CHECK(w.actor(size_t(fi)).alive);
+        CHECK(w.actor(size_t(fi)).owner == 0);
+        CHECK(w.actor(size_t(fi)).hp == 400);
+        w.drain_notifications(0, notes);
+        CHECK(std::find(notes.begin(), notes.end(), int32_t(NOTIFY_BUILDING_CAPTURED)) != notes.end());
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t foe = w.spawn_building(s.tp, 1, {24, 10});
+        w.set_health(foe, 10000);
+        send(w, s.te, foe, {16, 10});
+        CHECK(w.actor(size_t(w.index_of(foe))).owner == 0);
+        CHECK(w.actor(size_t(w.index_of(foe))).hp == 10000);
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        w.set_non_combatant(2, true);
+        const int32_t tech = w.spawn_building(s.tp, 2, {24, 10});
+        const int32_t probe = w.spawn(s.te, 0, {16, 30});
+        CHECK(!w.enter_would_sabotage(probe, tech));
+        w.remove_actor(probe);
+        send(w, s.te, tech, {16, 10});
+        CHECK(w.actor(size_t(w.index_of(tech))).owner == 0);
+        CHECK(w.actor(size_t(w.index_of(tech))).hp == 40000);
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t foe = w.spawn_building(s.tp, 1, {24, 10});
+        w.set_health(foe, 10001);
+        const int32_t e = send(w, s.te, foe, {16, 10});
+        const int fi = w.index_of(foe);
+        CHECK(fi < 0 || !w.actor(size_t(fi)).alive);
+        if (fi >= 0) CHECK(w.actor(size_t(fi)).last_attacker == e);
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t car = w.spawn(s.tj, 1, {24, 30});
+        send(w, s.tthf, car, {16, 30});
+        CHECK(w.actor(size_t(w.index_of(car))).owner == 0);
+        CHECK(w.actor(size_t(w.index_of(car))).hp == 15000);
+        const int32_t foe = w.spawn_building(s.tp, 1, {24, 10});
+        const int32_t probe = w.spawn(s.tcamp, 0, {16, 40});
+        CHECK(!w.enter_would_sabotage(probe, foe));
+        w.remove_actor(probe);
+        send(w, s.tcamp, foe, {16, 10});
+        CHECK(w.actor(size_t(w.index_of(foe))).owner == 0);
+        CHECK(w.actor(size_t(w.index_of(foe))).hp == 40000);
+    }
+
+
+    {
+        auto ap = std::make_unique<Setup>(); Setup& a = *ap; make(a);
+        const int32_t foe = a.w.spawn_building(a.tp, 1, {24, 10});
+        const int32_t e = a.w.spawn(a.te, 0, {16, 10});
+        a.w.order_capture(&e, 1, foe);
+        for (int t = 0; t < 20; ++t) a.w.step();
+        std::vector<uint8_t> blob;
+        CHECK(a.w.save(blob));
+        auto bp = std::make_unique<Setup>(); Setup& b = *bp; make(b);
+        CHECK(b.w.load(blob));
+        for (int t = 0; t < 400; ++t) { a.w.step(); b.w.step(); }
+        CHECK(state_hash(a.w) == state_hash(b.w));
+        CHECK(b.w.actor(size_t(b.w.index_of(foe))).hp == 26800);
+        CHECK(b.w.actor(size_t(b.w.index_of(foe))).owner == 1);
+    }
+    std::printf("Pionier-Sabotage: 100 > 67 > 34 > 1 %%, vierter erobert; rot/neutral sofort; "
+                "Abzug toetet knapp darueber; Dieb/Kampagne unveraendert; Spielstand gleich\n");
+}
+
+
+__attribute__((noinline)) static void test_bot_engineer_plan() {
+    struct Setup {
+        World w;
+        int base = -1, cheap = -1, fab = -1, eng = -1, apc = -1;
+    };
+    const auto make = [](Setup& s) {
+        std::vector<uint8_t> cost(64 * 64, 1);
+        s.w.set_map(64, 64, cost.data());
+        s.w.set_conquest_victory(false);
+        UnitType base; base.building = true; base.foot_w = 2; base.foot_h = 2; base.footprint = {1, 1, 1, 1};
+        base.sprite_h = 2; base.hp = 40000; base.cost = 300; base.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+        UnitType cheap = base; cheap.capturable = true; cheap.cost = 800; cheap.sell_value = 800;
+        UnitType fab = cheap; fab.hp = 100000; fab.cost = 2000; fab.sell_value = 2000;
+        fab.produces = 1u << QUEUE_VEHICLE;
+        UnitType eng; eng.speed = 54; eng.turn_rate = 1024; eng.infantry = true; eng.hp = 2500;
+        eng.captures = true; eng.capture_types = CAP_BUILDING; eng.capture_delay = 5; eng.locomotor = LOCO_FOOT;
+        eng.sabotage_threshold = 25; eng.sabotage_hp_removal = 33; eng.cost = 400; eng.hit_radius = 128;
+        eng.passenger_weight = 1; eng.passenger_type = TT_INFANTRY; eng.target_types = TT_GROUND_ACTOR | TT_INFANTRY;
+        UnitType apc; apc.speed = 128; apc.turn_rate = 20; apc.hp = 35000; apc.hit_radius = 426; apc.cost = 800;
+        apc.cargo_max_weight = 5; apc.cargo_types = TT_INFANTRY; apc.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+        s.base = s.w.define_type(base);
+        s.cheap = s.w.define_type(cheap);
+        s.fab = s.w.define_type(fab);
+        s.eng = s.w.define_type(eng);
+        s.apc = s.w.define_type(apc);
+        s.w.set_enemy(0, 1, true);
+        s.w.set_enemy(1, 0, true);
+        s.w.set_non_combatant(2, true);
+        s.w.set_neutral_player(2);
+        s.w.spawn_building(s.base, 0, {8, 8});
+    };
+    const auto bot = [](World& w, int plan, int army_min = 0) {
+        BotParams p;
+        w.bot_apply_personality(p, BOT_P_NORMAL);
+        p.eng_plan = plan;
+        p.army_min_value = army_min;
+        w.enable_bot(0, p);
+    };
+    const auto alive = [](World& w, int32_t id) {
+        const int i = w.index_of(id);
+        return i >= 0 && w.actor(size_t(i)).alive;
+    };
+    const auto owner_of = [](World& w, int32_t id) { return w.actor(size_t(w.index_of(id))).owner; };
+    const auto hp_of = [](World& w, int32_t id) { return w.actor(size_t(w.index_of(id))).hp; };
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t neutral = w.spawn_building(s.cheap, 2, {30, 8});
+        const int32_t weak = w.spawn_building(s.cheap, 1, {30, 20});
+        w.set_health(weak, 8000);
+        const int32_t e1 = w.spawn(s.eng, 0, {12, 8});
+        bot(w, 1);
+        for (int t = 0; t < 3000 && owner_of(w, neutral) != 0; ++t) w.step();
+        CHECK(owner_of(w, neutral) == 0);
+        CHECK(!alive(w, e1));
+        w.step();
+        CHECK(w.bot_state(0).stat_eng_captured == 1);
+        CHECK(w.bot_state(0).stat_eng_spent == 1);
+        const int32_t e2 = w.spawn(s.eng, 0, {12, 8});
+        for (int t = 0; t < 1500; ++t) w.step();
+        CHECK(alive(w, e2));
+        CHECK(owner_of(w, weak) == 1);
+        CHECK(hp_of(w, weak) == 8000);
+        CHECK(w.bot_state(0).eng_want == 0);
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t weak = w.spawn_building(s.cheap, 1, {30, 20});
+        w.set_health(weak, 8000);
+        const int32_t whole = w.spawn_building(s.fab, 1, {40, 30});
+        const int32_t e1 = w.spawn(s.eng, 0, {12, 8});
+        const int32_t e2 = w.spawn(s.eng, 0, {12, 10});
+        bot(w, 2);
+        for (int t = 0; t < 3000 && owner_of(w, weak) != 0; ++t) w.step();
+        CHECK(owner_of(w, weak) == 0);
+        for (int t = 0; t < 1500; ++t) w.step();
+        CHECK(alive(w, e1) != alive(w, e2));
+        CHECK(owner_of(w, whole) == 1);
+        CHECK(hp_of(w, whole) == 100000);
+        CHECK(w.bot_state(0).eng_ops.empty());
+        CHECK(w.bot_state(0).stat_eng_captured == 1);
+        CHECK(w.bot_state(0).stat_eng_spent == 1);
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t b = w.spawn_building(s.fab, 1, {40, 30});
+        const size_t bi = size_t(w.index_of(b));
+        const int32_t probe = w.spawn(s.eng, 0, {12, 8});
+        bool kills = false;
+        CHECK(w.bot_eng_need(s.eng, bi, kills) == 4 && !kills);
+        CHECK(w.enter_would_sabotage(probe, b));
+        w.set_health(b, 50000);
+        CHECK(w.bot_eng_need(s.eng, bi, kills) == 2 && !kills);
+        w.set_health(b, 30000);
+        CHECK(w.bot_eng_need(s.eng, bi, kills) == 1 && kills);
+        w.set_health(b, 25000);
+        CHECK(w.bot_eng_need(s.eng, bi, kills) == 1 && !kills);
+        CHECK(!w.enter_would_sabotage(probe, b));
+        w.set_health(b, 100000);
+        UnitType e2 = w.type(s.eng); e2.sabotage_threshold = 50; e2.sabotage_hp_removal = 20;
+        const int t2 = w.define_type(e2);
+        CHECK(w.bot_eng_need(t2, bi, kills) == 4 && !kills);
+        UnitType e3 = w.type(s.eng); e3.sabotage_threshold = 10; e3.sabotage_hp_removal = 25;
+        const int t3 = w.define_type(e3);
+        CHECK(w.bot_eng_need(t3, bi, kills) == 4 && kills);
+        UnitType e4 = w.type(s.eng); e4.sabotage_threshold = 0;
+        const int t4 = w.define_type(e4);
+        CHECK(w.bot_eng_need(t4, bi, kills) == 1 && !kills);
+        const int32_t n = w.spawn_building(s.fab, 2, {40, 40});
+        CHECK(w.bot_eng_need(s.eng, size_t(w.index_of(n)), kills) == 1 && !kills);
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t whole = w.spawn_building(s.fab, 1, {44, 30});
+        std::vector<int32_t> engs;
+        for (int k = 0; k < 3; ++k) engs.push_back(w.spawn(s.eng, 0, {12, 8 + k}));
+        const int32_t apc = w.spawn(s.apc, 0, {14, 12});
+        bot(w, 3);
+        w.step(); w.step();
+        CHECK(w.bot_state(0).eng_ops.empty());
+        CHECK(w.bot_state(0).eng_want == 0);
+        w.give_credits(0, 5000);
+        for (int t = 0; t < 400; ++t) w.step();
+        CHECK(w.bot_state(0).eng_ops.empty());
+        CHECK(w.bot_state(0).eng_want == 4);
+        CHECK(w.bot_state(0).eng_ready == 2);
+        CHECK(hp_of(w, whole) == 100000);
+        engs.push_back(w.spawn(s.eng, 0, {12, 12}));
+        bool rode = false;
+        std::vector<uint8_t> blob;
+        auto sp2 = std::make_unique<Setup>(); Setup& s2 = *sp2; make(s2);
+        bool loaded = false;
+        for (int t = 0; t < 8000 && owner_of(w, whole) != 0; ++t) {
+            w.step();
+            if (loaded) s2.w.step();
+            for (int32_t id : engs) {
+                const int i = w.index_of(id);
+                if (i >= 0 && w.actor(size_t(i)).alive && w.actor(size_t(i)).transport == apc) rode = true;
+            }
+
+            if (rode && !loaded && w.bot_state(0).eng_apc_phase == 1) {
+                CHECK(w.save(blob));
+                CHECK(s2.w.load(blob));
+                CHECK(s2.w.bot_state(0).eng_ops == w.bot_state(0).eng_ops);
+                CHECK(s2.w.bot_state(0).eng_apc == apc);
+                CHECK(s2.w.bot_state(0).p.eng_plan == 3);
+                loaded = true;
+            }
+        }
+        CHECK(rode);
+        CHECK(loaded);
+        CHECK(owner_of(w, whole) == 0);
+        CHECK(hp_of(w, whole) == 100000 - 3 * 33000);
+        for (int t = 0; t < 60; ++t) { w.step(); s2.w.step(); }
+        CHECK(w.state_hash_full() == s2.w.state_hash_full());
+        CHECK(w.bot_state(0).stat_eng_captured == 1);
+        CHECK(w.bot_state(0).stat_eng_spent == 4);
+        CHECK(w.bot_state(0).eng_ops.empty());
+        CHECK(w.bot_state(0).eng_apc == -1);
+        CHECK(alive(w, apc));
+    }
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t whole = w.spawn_building(s.fab, 1, {44, 30});
+        std::vector<int32_t> engs;
+        for (int k = 0; k < 4; ++k) engs.push_back(w.spawn(s.eng, 0, {12, 8 + k}));
+        bot(w, 3);
+        for (int t = 0; t < 1500; ++t) w.step();
+        for (int32_t id : engs) CHECK(alive(w, id));
+        CHECK(hp_of(w, whole) == 100000);
+        CHECK(w.bot_state(0).eng_ops.empty());
+        CHECK(w.bot_state(0).eng_ready == 2);
+        auto sq = std::make_unique<Setup>(); Setup& q = *sq; make(q);
+        q.w.spawn_building(q.fab, 1, {44, 30});
+        q.w.spawn(q.eng, 0, {12, 8});
+        q.w.give_credits(0, 5000);
+        bot(q.w, 3, 3000);
+        for (int t = 0; t < 400; ++t) q.w.step();
+        CHECK(q.w.bot_state(0).eng_want == 0);
+        CHECK(q.w.bot_state(0).eng_ready == 0);
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t hut = w.spawn_building(s.cheap, 1, {30, 20});
+        w.set_health(hut, 12000);
+        const int32_t e1 = w.spawn(s.eng, 0, {12, 8});
+        bot(w, 3);
+        for (int t = 0; t < 1500; ++t) w.step();
+        CHECK(alive(w, e1));
+        CHECK(hp_of(w, hut) == 12000);
+        const int32_t fab = w.spawn_building(s.fab, 1, {40, 30});
+        w.set_health(fab, 30000);
+        for (int t = 0; t < 3000 && alive(w, fab); ++t) w.step();
+        CHECK(!alive(w, fab));
+        w.step();
+        CHECK(!alive(w, e1));
+        CHECK(w.bot_state(0).stat_eng_spent == 1);
+        CHECK(w.bot_state(0).stat_eng_captured == 0);
+    }
+    std::printf("KI-Pioniere: neutral mit einem; rot erobert, heil kein Einzelpionier; Paket 4 aus 25/33 "
+                "(50 %%: 2, 30 %%: Abriss); Paket im Transporter erobert, Spielstand gleich; leicht nur neutral\n");
+}
+
 int main() {
     test_math();
     test_flow_field();
@@ -13114,6 +13754,7 @@ int main() {
     test_harvester_gems_and_richness();
     test_harvester_gems();
     test_harvester_gems_cleared();
+    test_harvester_unreachable_ore();
     test_harvester_prefers_full_field();
     test_harvester_park();
     test_harvester_explore();
@@ -13134,6 +13775,8 @@ int main() {
     test_bot_opening_plan();
     test_bot_opening_power_break();
     test_bot_opening_defense_gate();
+    test_bot_sparring();
+    test_bot_tempo();
     test_no_backwards_movement();
     test_cargo();
     test_cargo_helicopter();
@@ -13191,6 +13834,8 @@ int main() {
     test_mechanic_husk();
     test_retreat_under_fire();
     test_low_power_notification();
+    test_engineer_sabotage();
+    test_bot_engineer_plan();
     bench();
     if (failures == 0) std::printf("OK — alle Tests bestanden (sim v%s)\n", version());
     return failures == 0 ? 0 : 1;

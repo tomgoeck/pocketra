@@ -847,6 +847,54 @@ struct BotParams {
     int32_t cmd_sector_min_damage = 300;
     int32_t cmd_special_min_ticks = 1500;
     int32_t cmd_counter_enabled = 1;
+
+
+    int32_t sparring = 0;
+    int32_t sparring_harvesters = 4;
+    int32_t sparring_first_wave_tick = 7500;
+    int32_t sparring_first_wave_units = 6;
+    int32_t sparring_first_wave_late = 9750;
+    int32_t sparring_wave_interval = 3750;
+    int32_t sparring_towers = 2;
+    int32_t sparring_infantry = 6;
+
+
+    int32_t opening_depot = 0;
+
+
+    int32_t harvesters_floor = 1;
+    int32_t harvesters_floor_max = 0;
+
+
+    int32_t eco_first = 0;
+    int32_t eco_first_until = 12000;
+    int32_t opening_infantry = 4;
+    int32_t army_min_value = 3000;
+
+
+    int32_t tank_percent = 0;
+
+    int32_t attack_min_value = 0;
+
+
+    int32_t opening_rich_cash = 0;
+
+
+    int32_t wave_grow_percent = 0;
+
+
+    int32_t counterattack_peak = 0;
+
+
+    int32_t eco_surplus_cash = 1500;
+
+
+    int32_t eng_plan = 0;
+    int32_t eng_single_max = 2;
+    int32_t eng_pack_max = 4;
+    int32_t eng_pack_min_value = 1500;
+    int32_t eng_pack_cash = 1000;
+    int32_t eng_pack_apc = 1;
 };
 
 struct BotSquad {
@@ -1148,6 +1196,35 @@ struct BotState {
 
     CmdTrack cmd_track;
     int32_t cmd_ext_words = 0;
+
+
+    int32_t stat_army_at[3] = {-1, -1, -1};
+    int32_t stat_harv_at[2] = {-1, -1};
+    int32_t stat_earned_at8 = -1;
+    int32_t stat_waves_at12 = -1;
+    int32_t stat_t_refinery2 = 0;
+    int32_t stat_harv_now = 0, stat_refineries_now = 0;
+    int64_t stat_bldg_damage = 0;
+    int32_t stat_bldg_kills = 0;
+    int64_t stat_tempo_cash_sum = 0;
+    int32_t stat_tempo_cash_samples = 0;
+
+    std::vector<int32_t> sp_wave_units;
+    uint32_t sp_wave_next = 0;
+    CPos sp_alarm{-1, -1};
+    uint32_t sp_alarm_tick = 0;
+    int32_t sp_ticks = 0;
+
+    int32_t wave_fails = 0;
+
+
+    std::vector<int32_t> eng_ops;
+    int32_t eng_want = 0;
+    int32_t eng_ready = 0;
+    int32_t eng_apc = -1, eng_apc_target = -1, eng_apc_phase = 0;
+    uint32_t eng_apc_since = 0;
+    int32_t stat_eng_captured = 0;
+    int32_t stat_eng_spent = 0;
 };
 
 struct PlayerState {
@@ -1198,6 +1275,10 @@ struct UnitType {
     bool captures = false;
     int32_t capture_delay = 200;
     uint32_t capture_types = 0;
+
+
+    int32_t sabotage_threshold = 0;
+    int32_t sabotage_hp_removal = 50;
     bool capturable = false;
     uint32_t capturable_types = 0;
 
@@ -2086,6 +2167,9 @@ public:
     int32_t enter_kind_for(size_t i, size_t t) const;
 
 
+    bool capture_sabotages(size_t i, size_t t) const;
+
+
     CPos enter_origin(size_t t) const;
     void step_enter();
 
@@ -2096,6 +2180,13 @@ public:
     void step_demolitions();
 
     int32_t enter_progress(int32_t id) const;
+
+
+    bool enter_would_sabotage(int32_t id, int32_t target_id) const {
+        const int i = index_of(id), t = index_of(target_id);
+        if (i < 0 || t < 0 || enter_kind_for(size_t(i), size_t(t)) != ENTER_CAPTURE) return false;
+        return capture_sabotages(size_t(i), size_t(t));
+    }
     int32_t power_outage(int32_t owner) const { return owner >= 0 && owner < MAX_PLAYERS ? players_[owner].power_outage : 0; }
     int32_t infiltrated_count(int32_t id) const { const int i = index_of(id); return i < 0 ? 0 : actors_[i].infiltrated_count; }
     int32_t infiltrated_by(int32_t id) const { const int i = index_of(id); return i < 0 ? -1 : actors_[i].infiltrated_by; }
@@ -2512,6 +2603,15 @@ public:
     void bot_repair(int32_t owner);
     void bot_repair_units(int32_t owner);
     void bot_saboteurs(int32_t owner);
+
+    void bot_engineers(int32_t owner);
+    void bot_eng_track(int32_t owner);
+    void bot_eng_apc(int32_t owner);
+    void bot_eng_note(int32_t owner, int32_t eng_id, int32_t target_id);
+
+
+    int32_t bot_eng_need(int32_t eng_type, size_t target, bool& destroys) const;
+    bool bot_eng_worth(size_t target) const;
     bool bot_water_building_ok(int32_t owner, int32_t type) const;
     void bot_naval_squads(int32_t owner);
     void bot_update_naval_squad(int32_t owner, BotSquad& s);
@@ -2526,7 +2626,7 @@ public:
     void bot_squad_measure(int32_t owner, BotSquad& s);
     void bot_squad_retire(int32_t owner, BotSquad& s);
     void bot_on_attack(size_t victim, int32_t attacker_id);
-    int32_t bot_choose_building(int32_t owner, int32_t kind);
+    int32_t bot_choose_building(int32_t owner, int32_t kind, bool plan_only = false);
 
     int32_t bot_opening_next(int32_t owner, const std::vector<int32_t>& buildable_list,
                              const std::vector<int32_t>& count) const;
@@ -2636,6 +2736,22 @@ public:
 
 
     void bot_defense_stats(int32_t owner, int32_t& aa, int32_t& spread, int32_t& uncovered) const;
+
+
+    int32_t bot_best_tank(int32_t owner) const;
+    int32_t bot_tank_prereq(int32_t owner, const std::vector<int32_t>& buildable_list,
+                            const std::vector<int32_t>& count) const;
+    int32_t bot_tank_value(int32_t owner) const;
+    bool bot_eco_hold(int32_t owner) const;
+    bool bot_attacked_recently(int32_t owner) const;
+    int32_t bot_harvester_floor(int32_t owner, int32_t refineries) const;
+    void bot_sparring_tick(int32_t owner);
+    int32_t bot_sparring_next_building(int32_t owner, int32_t kind) const;
+    int32_t bot_sparring_next_unit(int32_t owner, int32_t kind) const;
+    void bot_sparring_army(int32_t owner);
+    void bot_sparring_harvesters(int32_t owner);
+    void bot_tempo_tick(int32_t owner);
+    void bot_tempo_note_damage(size_t victim, int64_t dmg, int32_t attacker_owner, bool killed);
     void bot_log_attack(int32_t owner, size_t victim, size_t attacker);
     void bot_attack_decay(int32_t owner);
     bool bot_attack_center(int32_t owner, CPos& out) const;
@@ -3057,6 +3173,10 @@ private:
     void queue_husk(const Actor& dead);
     void step_pending_impacts();
     void kill(size_t i, int32_t damage_type, int32_t attacker_id = -1);
+
+
+    void inflict_damage(size_t k, int64_t dmg, int32_t attacker_id, int32_t attacker_owner,
+                        int32_t damage_type, bool trigger_prone = false);
     bool vt_targetable(size_t k) const;
     uint32_t target_mask(size_t k) const;
     bool weapon_hits(size_t k, const Weapon& w) const;
@@ -3069,7 +3189,8 @@ private:
 
 
     void step_harvester(size_t i);
-    bool closest_harvestable(size_t i, CPos& out, bool ignore_shroud = false);
+    bool closest_harvestable(size_t i, CPos& out, bool ignore_shroud = false,
+                             const std::vector<uint8_t>* reach = nullptr);
     int nearest_refinery(size_t i) const;
 
 

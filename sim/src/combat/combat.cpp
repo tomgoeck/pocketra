@@ -953,43 +953,54 @@ void World::apply_damage_warhead(WVec pos, int32_t attacker_id, int32_t attacker
 
         if (v.prone_ticks > 0 && prone_damage != 100) dmg = dmg * prone_damage / 100;
         if (dmg == 0) continue;
-        if (v.invulnerable_ticks > 0 && dmg > 0) continue;
-        if (dmg < 0) {
-            v.hp = static_cast<int32_t>(std::min<int64_t>(vt.hp, v.hp - dmg));
-            continue;
-        }
-        const int32_t hp_before = v.hp;
-        v.hp -= static_cast<int32_t>(dmg);
-        note_damage_transition(k, hp_before);
-
-
-        if (vt.building) {
-            bot_commander_note_damage(k, std::min<int64_t>(dmg, std::max(0, hp_before)));
-
-            cmd_track_note_hit(k, std::min<int64_t>(dmg, std::max(0, hp_before)), int32_t(attacker_index));
-        }
-
-
-        v.last_attacker = attacker_id;
-        v.last_attacker_owner = attacker_owner;
-        v.last_damage_type = damage_type;
-        v.heal_cooldown = vt.elite_heal_cooldown;
-        v.self_heal_cooldown = vt.heal_damage_cooldown;
-
-        if (trigger_prone && vt.takes_cover) v.prone_ticks = vt.prone_duration;
-        bot_on_attack(k, attacker_id);
-
-
-        Combat& vc = combats_[k];
-        if (is_idle(k) && vc.stance > STANCE_HOLD_FIRE && vt.weapon >= 0 && weapons_[vt.weapon].relation == REL_ENEMY) {
-            const int ai = index_of(attacker_id);
-            if (ai >= 0 && actors_[ai].alive && in_range(k, ai, weapons_[vt.weapon].range)) {
-                vc.target = attacker_id;
-                vc.auto_target = true;
-            }
-        }
-        if (v.hp <= 0) kill(k, damage_type, attacker_id);
+        inflict_damage(k, dmg, attacker_id, attacker_owner, damage_type, trigger_prone);
     }
+}
+
+
+void World::inflict_damage(size_t k, int64_t dmg, int32_t attacker_id, int32_t attacker_owner,
+                           int32_t damage_type, bool trigger_prone) {
+    Actor& v = actors_[k];
+    const UnitType& vt = types_[v.type];
+    const int attacker_index = index_of(attacker_id);
+    if (v.invulnerable_ticks > 0 && dmg > 0) return;
+    if (dmg < 0) {
+        v.hp = static_cast<int32_t>(std::min<int64_t>(vt.hp, v.hp - dmg));
+        return;
+    }
+    const int32_t hp_before = v.hp;
+    v.hp -= static_cast<int32_t>(dmg);
+    note_damage_transition(k, hp_before);
+
+
+    if (vt.building) {
+        bot_commander_note_damage(k, std::min<int64_t>(dmg, std::max(0, hp_before)));
+
+        cmd_track_note_hit(k, std::min<int64_t>(dmg, std::max(0, hp_before)), int32_t(attacker_index));
+
+        bot_tempo_note_damage(k, std::min<int64_t>(dmg, std::max(0, hp_before)), attacker_owner, false);
+    }
+
+
+    v.last_attacker = attacker_id;
+    v.last_attacker_owner = attacker_owner;
+    v.last_damage_type = damage_type;
+    v.heal_cooldown = vt.elite_heal_cooldown;
+    v.self_heal_cooldown = vt.heal_damage_cooldown;
+
+    if (trigger_prone && vt.takes_cover) v.prone_ticks = vt.prone_duration;
+    bot_on_attack(k, attacker_id);
+
+
+    Combat& vc = combats_[k];
+    if (is_idle(k) && vc.stance > STANCE_HOLD_FIRE && vt.weapon >= 0 && weapons_[vt.weapon].relation == REL_ENEMY) {
+        const int ai = index_of(attacker_id);
+        if (ai >= 0 && actors_[ai].alive && in_range(k, ai, weapons_[vt.weapon].range)) {
+            vc.target = attacker_id;
+            vc.auto_target = true;
+        }
+    }
+    if (v.hp <= 0) kill(k, damage_type, attacker_id);
 }
 
 
@@ -1146,6 +1157,7 @@ void World::kill(size_t i, int32_t damage_type, int32_t attacker_id) {
 
     bot_stat_note_death(i);
     bot_stat_note_kill(i, attacker_id);
+    bot_tempo_note_damage(i, 0, atk >= 0 ? actors_[atk].owner : -1, true);
     cmd_track_note_death(i, attacker_id);
 
     on_kill_experience(i, attacker_id);

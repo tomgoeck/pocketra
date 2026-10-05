@@ -44,17 +44,15 @@ toast.boarding,Einsteigen: %s,Boarding: %s
 toast.unloading,Entladen,Unloading
 toast.nobody_aboard,Niemand an Bord,Nobody aboard
 toast.unload_blocked,Hier ist kein Platz zum Aussteigen,No room to unload here
-toast.target_picked,"Ziel: %s — jetzt Aktion wählen","Target: %s — now pick an action"
+toast.target_picked,Ziel: %s. Jetzt Aktion wählen,Target: %s. Now pick an action
 toast.target_dropped,Zielwahl verworfen,Target dropped
-toast.selected_target,%s ausgewählt,%s selected
-toast.added_to_selection,"%s dazu — Auswahl: %d","%s added — selection: %d"
-toast.already_selected,Schon in der Auswahl,Already selected
 toast.order_impossible,Das geht hier nicht,Not possible here
 toast.unload_ordered,Hinfahren und dort entladen,Moving there to unload
 toast.rally_set,Sammelpunkt gesetzt,Rally point set
 toast.no_rally_point,Dieses Gebäude hat keinen Sammelpunkt,This building has no rally point
 toast.rally_ground_only,Sammelpunkt nur auf freien Boden,Rally point on clear ground only
 toast.capturing,Erobern: %s,Capturing: %s
+toast.sabotaging,"Sabotieren: %s. Erobern geht erst ab einem Drittel Leben","Sabotaging: %s. Capture only works at one third health or less"
 toast.repairing_building,Reparieren: %s,Repairing: %s
 toast.demolishing,Sprengen: %s,Demolishing: %s
 toast.demolish_impossible,Hier kann keine Sprengladung gelegt werden,Cannot plant explosives here
@@ -189,8 +187,6 @@ radial.action.attack,Angriff,Attack
 radial.action.force_fire,Zwangsfeuer,Force Fire
 radial.action.force_attack,Zwangsangriff,Force Attack
 radial.action.info,Infokarte,Info card
-radial.action.select,Auswählen,Select
-radial.action.add,Hinzufügen,Add
 radial.action.guard,Bewachen,Guard
 radial.action.scatter,Zerstreuen,Scatter
 radial.action.stop,Stopp,Stop
@@ -213,11 +209,8 @@ radial.action.attack_move,Angriffszug,Attack Move
 radial.action.move,Bewegen,Move
 radial.action.clear,Leeren,Clear
 radial.action.cancel,Abbrechen,Cancel
-radial.action.board,Einsteigen,Board
-radial.action.deliver,Abliefern,Deliver
-radial.action.repair_at,Reparieren,Repair
-radial.action.land,Landen,Land
 radial.action.capture,Erobern,Capture
+radial.action.sabotage,Sabotieren,Sabotage
 radial.action.fix,Instand setzen,Fix up
 radial.action.infiltrate,Infiltrieren,Infiltrate
 radial.action.bridge,Brücke reparieren,Repair bridge
@@ -337,17 +330,19 @@ status.storage,Lager %d / %d,Storage %d / %d
 status.power,Strom,Power
 status.power_detail,Bedarf %d · Strom %d,Drain %d · Power %d
 gesture.one_finger.label,Ein Finger,One finger
-gesture.one_finger.desc,gehört immer den Einheiten — nie der Kamera,always controls units — never the camera
+gesture.one_finger.desc,"gehört immer den Einheiten, nie der Kamera","always controls units, never the camera"
 gesture.tap_own.label,Tippen auf eigene Einheit (ohne Auswahl),Tap own unit (nothing selected)
 gesture.tap_own.desc,auswählen,select
 gesture.tap_friendly.label,Tippen auf eigene Einheit (mit Auswahl),Tap own unit (with selection)
-gesture.tap_friendly.desc,"Ziel markieren — die Aktionsleiste zeigt, was damit geht (Bewachen, Zwangsfeuer, Einsteigen, Bewegen …)","mark it as the target — the action bar shows what you can do (guard, force fire, board, move …)"
+gesture.tap_friendly.desc,die Auswahl fährt hin; ein Transporter nimmt passende Einheiten auf,the selection moves there; a transport picks up units that fit
 gesture.tap_own_building.label,Tippen auf eigenes Gebäude (mit Auswahl),Tap own building (with selection)
-gesture.tap_own_building.desc,"Ziel markieren — Aktionsleiste mit Bewegen, Abliefern, Reparieren, Einsteigen, Landen","mark it as the target — action bar with move, deliver, repair, board, land"
+gesture.tap_own_building.desc,"daneben fahren; Raffinerie: abliefern, Reparaturhof: reparieren, Landeplatz: landen","move next to it; refinery: deliver, service depot: repair, helipad: land"
+gesture.tap_selected.label,Tippen auf gewählte Einheit,Tap a selected unit
+gesture.tap_selected.desc,"ein Transporter entlädt, ein MBF klappt aus, sonst fährt die Auswahl hin","a transport unloads, an MCV deploys, otherwise the selection moves there"
 gesture.action_bar.label,Aktionsleiste,Action bar
-gesture.action_bar.desc,"Eintrag antippen führt ihn aus; ein Tipp daneben wechselt das Ziel oder verwirft es — ohne Befehl","tap an entry to run it; a tap beside it switches the target or drops it — no order is given"
+gesture.action_bar.desc,Eintrag antippen führt ihn aus; ein Tipp daneben schließt sie ohne Befehl,"tap an entry to run it; a tap beside it closes it, no order is given"
 gesture.double_tap.label,Doppeltippen,Double-tap
-gesture.double_tap.desc,"Neuauswahl: alle sichtbaren Einheiten desselben Typs, bei einem Gebäude nur dieses","re-select: all visible units of the same type, or just that one building"
+gesture.double_tap.desc,"nach einem Auswahltipp: alle sichtbaren Einheiten desselben Typs, bei einem Gebäude nur dieses","after a selecting tap: all visible units of the same type, or just that building"
 gesture.drag_empty.label,Ziehen auf leerem Boden,Drag on empty ground
 gesture.drag_empty.desc,Auswahlrahmen; am Bildschirmrand schwenkt die Karte mit,selection box; panning at the screen edge scrolls the map
 gesture.tap_ground.label,Tippen auf Boden,Tap ground
@@ -356,12 +351,12 @@ gesture.tap_enemy.label,Tippen auf Gegner,Tap enemy
 gesture.tap_enemy.desc,angreifen,attack
 gesture.tap_ore.label,Tippen auf Erz (Harvester),Tap ore (harvester)
 gesture.tap_ore.desc,dort ernten,harvest there
-gesture.long_press_selection.label,Langes Drücken mit Auswahl,Long press with selection
-gesture.long_press_selection.desc,"Stelle markieren — Aktionsleiste mit Bewegen, Angriffszug, Zwangsfeuer, Entladen hier, Mine legen, Stopp","mark the spot — action bar with move, attack move, force fire, unload here, lay mine, stop"
+gesture.long_press_selection.label,Langes Drücken auf Boden (mit Auswahl),Long press on ground (with selection)
+gesture.long_press_selection.desc,"Stelle markieren: Aktionsleiste mit Bewegen, Angriffszug, Zwangsfeuer, Entladen hier, Mine legen, Stopp","mark the spot: action bar with move, attack move, force fire, unload here, lay mine, stop"
 gesture.long_press_own.label,Langes Drücken auf eigene Einheit,Long press on own unit
-gesture.long_press_own.desc,"Aktionsleiste für dieses Ziel, dazu Zwangsfeuer auf eigene, verbündete und neutrale Ziele und die Infokarte","action bar for that target, plus force fire on your own, allied and neutral targets, and the info card"
-gesture.long_press_empty.label,Langes Drücken ohne Auswahl,Long press without selection
-gesture.long_press_empty.desc,Name und Zustand des Objekts darunter,name and status of the object underneath
+gesture.long_press_own.desc,"auswählen (mit „Auswahl erweitern“ dazunehmen); auf eine gewählte Einheit: ihre Befehle (Bewachen, Zwangsfeuer, Stopp …) und die Infokarte","select it (adds it while Add is on); on a selected unit: its orders (guard, force fire, stop …) and the info card"
+gesture.long_press_foreign.label,Langes Drücken auf fremdes Objekt,Long press on another object
+gesture.long_press_foreign.desc,"ohne Auswahl die Infokarte; mit Auswahl Aktionsleiste mit Zwangsangriff, Sprengen, Bewachen, Infokarte","nothing selected: the info card; with a selection: action bar with force attack, demolish, guard, info card"
 gesture.two_finger_drag.label,Zwei Finger ziehen,Two-finger drag
 gesture.two_finger_drag.desc,Karte schwenken,pan the map
 gesture.three_finger_spread.label,Drei Finger spreizen,Three-finger spread
@@ -741,6 +736,7 @@ keys.lmb2,Doppelklick links,Left double-click
 keys.shift_lmb,Umschalt + Linksklick,Shift + left-click
 keys.ctrl_lmb,Strg + Linksklick,Ctrl + left-click
 keys.lmb_drag,Linksklick ziehen,Left-click and drag
+keys.lmb_hold,Linke Taste halten,Hold left button
 keys.attack_move,Angriffsbewegung,Attack move
 keys.guard,Bewachen,Guard
 keys.stop,Anhalten,Stop
@@ -764,11 +760,12 @@ keys.build_bar,Bauleiste auf/zu,Toggle build bar
 keys.tabs,Bauleisten-Reiter,Build bar tabs
 keys.pause,Pause,Pause
 keys.music,Musik an/aus,Toggle music
-keys.left_click,"Eigene Einheit wählen; sonst Befehl: bewegen, angreifen, einsteigen, abliefern","Select your own unit; otherwise order: move, attack, board, deliver"
+keys.left_click,"Ohne Auswahl: eigene Einheit wählen. Mit Auswahl: Befehl, auch auf eigene Einheiten (bewegen, angreifen, einsteigen, abliefern)","Nothing selected: select your own unit. With a selection: order, also onto your own units (move, attack, board, deliver)"
 keys.left_drag,Auswahlrahmen,Selection box
 keys.left_click_add,"Auswahl erweitern, oder Befehl anhängen","Add to the selection, or queue the order"
 keys.left_click_force,Zwangsfeuer,Force fire
-keys.double_click,Alle sichtbaren desselben Typs,All visible units of that type
+keys.double_click,Nach einem Auswahlklick: alle sichtbaren desselben Typs,After a selecting click: all visible units of that type
+keys.left_hold,Eigene Einheit auswählen (danach ziehen: Auswahlrahmen),Select your own unit (then drag: selection box)
 keys.right_click,"Radialmenü (Zwangsfeuer, Bewachen, Anhalten …); räumt zuerst Offenes weg","Radial menu (force fire, guard, stop, ...); first closes what is open"
 keys.right_click_build,"In der Bauleiste: anhalten, nochmal abbrechen","In the build bar: hold, again to cancel"
 menu.options.commander,KI-Kommandeur: Laya-Dienst,AI commander: Laya service

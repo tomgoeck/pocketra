@@ -477,7 +477,9 @@ void World::bot_mcv(int32_t owner) {
     if (yards + mcvs >= should_have) return;
 
 
-    const bool below_min = yards > 0 && yards < std::max(1, p.min_construction_yards);
+    const bool eco_wait = p.eco_first > 0 && !bot_land_isolated(owner) && int32_t(tick_) < p.eco_first_until &&
+                          (bot_eco_hold(owner) || bot_tank_value(owner) < 2 * p.army_min_value);
+    const bool below_min = yards > 0 && yards < std::max(1, p.min_construction_yards) && !eco_wait;
     if (yards > 0 && !below_min && free_fields <= 0) return;
 
     constexpr int32_t EXPAND_CASH_RESERVE = 1000;
@@ -703,6 +705,9 @@ void World::bot_rally_points(int32_t owner) {
 void World::bot_tick(int32_t owner) {
 
 
+    bot_tempo_tick(owner);
+
+    if (players_[owner].bot.p.sparring != 0) { bot_sparring_tick(owner); return; }
     bot_fog_tick(owner);
     bot_commander_tick(owner);
     cmd_track_tick(owner);
@@ -716,6 +721,7 @@ void World::bot_tick(int32_t owner) {
 
     bot_repair(owner);
     bot_repair_units(owner);
+    bot_eng_track(owner);
     bot_saboteurs(owner);
     bot_base_builder(owner);
     bot_unit_builder(owner);
@@ -886,13 +892,19 @@ void World::bot_base_builder_queue(int32_t owner, int32_t kind) {
     bool active = true;
     std::vector<BuildItem>& q = players_[owner].queues[kind];
     if (q.empty()) {
-        if (credits(owner) < p.production_min_cash) {
+
+
+        const bool eco_on = p.eco_first > 0 && !bot_land_isolated(owner);
+        const bool poor = eco_on ? credits(owner) - bot_pending_cost(owner) < p.eco_surplus_cash
+                                 : credits(owner) < p.production_min_cash;
+        const bool plan_only = eco_on && kind == QUEUE_BUILDING && (poor || bot_eco_hold(owner));
+        if (poor && !plan_only) {
             active = false;
         } else if (!bot_reaction_ready(owner, kind)) {
 
 
         } else {
-            const int32_t item = bot_choose_building(owner, kind);
+            const int32_t item = bot_choose_building(owner, kind, plan_only);
             if (item >= 0) { queue_build(owner, item); bot_reaction_reset(owner, kind); }
             else active = false;
         }
@@ -1028,11 +1040,16 @@ void World::bot_saboteurs(int32_t owner) {
     BotState& b = players_[owner].bot;
     if (--b.saboteur_ticks > 0) return;
     b.saboteur_ticks = SABOTEUR_INTERVAL;
+
+
+    const bool eng_plan = b.p.eng_plan > 0;
+    if (eng_plan) bot_engineers(owner);
     for (size_t i = 0; i < actors_.size(); ++i) {
         const Actor& a = actors_[i];
         if (!a.alive || a.owner != owner) continue;
         const UnitType& t = types_[a.type];
         if (t.building || t.aircraft || t.husk || t.harvester) continue;
+        if (eng_plan && t.captures) continue;
 
         if (!t.captures && t.demolition_delay < 0 && t.infiltrates == 0) continue;
         if (a.transport >= 0 || a.enter_target >= 0 || a.enter_kind != ENTER_NONE) continue;
@@ -1075,6 +1092,7 @@ void World::bot_saboteurs(int32_t owner) {
         for (const Cand& c : cands) if (c.dist < best->dist) best = &c;
         const int32_t id = a.id;
         order_enter(&id, 1, best->id);
+        if (t.captures) bot_eng_note(owner, id, best->id);
 
 
         for (BotSquad& sq : b.squads)
@@ -1088,7 +1106,9 @@ void World::bot_saboteurs(int32_t owner) {
 
 
 namespace {
-enum OpeningRole { OP_POWER, OP_REFINERY, OP_BARRACKS, OP_FACTORY, OP_RADAR, OP_ROLES };
+
+
+enum OpeningRole { OP_POWER, OP_REFINERY, OP_BARRACKS, OP_FACTORY, OP_RADAR, OP_ROLES, OP_TANKPRE };
 
 
 int32_t opening_role_of(const ra::UnitType& t) {
@@ -1119,6 +1139,13 @@ int32_t World::bot_opening_pick(int32_t owner, int32_t role, const std::vector<i
 }
 
 
+bool World::bot_attacked_recently(int32_t owner) const {
+    const BotState& b = players_[size_t(owner)].bot;
+    return b.last_attack_tick > 0 &&
+           int32_t(tick_) - b.last_attack_tick <= std::max(0, b.p.opening_attack_ticks);
+}
+
+
 int32_t World::bot_opening_next(int32_t owner, const std::vector<int32_t>& buildable_list,
                                 const std::vector<int32_t>& count) const {
     const BotParams& p = players_[size_t(owner)].bot.p;
@@ -1135,18 +1162,41 @@ int32_t World::bot_opening_next(int32_t owner, const std::vector<int32_t>& build
     Step steps[16];
     int n = 0;
     const int32_t procs = std::clamp(p.opening_refineries, 1, 8);
-    const int32_t fa = std::clamp(p.opening_factory_after, 1, procs);
+    const int32_t fa_base = std::clamp(p.opening_factory_after, 1, procs);
+
+
+    const bool land = !bot_land_isolated(owner);
+    const bool rich = land && p.opening_rich_cash > 0 && have[OP_FACTORY] < 1 && credits(owner) >= p.opening_rich_cash;
+    const int32_t fa = rich ? 1 : fa_base;
     steps[n++] = Step{OP_POWER, 1};
     steps[n++] = Step{OP_REFINERY, 1};
     steps[n++] = Step{OP_BARRACKS, 1};
     for (int32_t k = 2; k <= fa; ++k) steps[n++] = Step{OP_REFINERY, k};
     steps[n++] = Step{OP_FACTORY, 1};
-    for (int32_t k = fa + 1; k <= procs && n < 15; ++k) steps[n++] = Step{OP_REFINERY, k};
 
 
-    steps[n++] = Step{OP_RADAR, 1};
+    if (p.opening_depot > 0 && land) {
+        for (int32_t k = fa + 1; k <= std::min(2, procs) && n < 15; ++k) steps[n++] = Step{OP_REFINERY, k};
+        steps[n++] = Step{OP_TANKPRE, 1};
+    }
+
+
+    const bool eco = p.eco_first > 0 && int32_t(tick_) < p.eco_first_until && land;
+    const bool wait_tank = eco && have[OP_FACTORY] >= 1 && bot_tank_value(owner) < 800 &&
+                           !bot_attacked_recently(owner);
+    const bool wait_army = eco && have[OP_FACTORY] >= 1 && bot_eco_hold(owner);
+    if (!wait_tank)
+        for (int32_t k = fa + 1; k <= procs && n < 15; ++k) steps[n++] = Step{OP_REFINERY, k};
+
+
+    if (!wait_army) steps[n++] = Step{OP_RADAR, 1};
 
     for (int i = 0; i < n; ++i) {
+        if (steps[i].role == OP_TANKPRE) {
+            const int32_t t = bot_tank_prereq(owner, buildable_list, count);
+            if (t >= 0) return t;
+            continue;
+        }
         if (have[steps[i].role] >= steps[i].need) continue;
         const int32_t t = bot_opening_pick(owner, steps[i].role, buildable_list, count);
         if (t >= 0) return t;
@@ -1183,7 +1233,7 @@ bool World::bot_opening_hold_defense(int32_t owner) const {
 }
 
 
-int32_t World::bot_choose_building(int32_t owner, int32_t kind) {
+int32_t World::bot_choose_building(int32_t owner, int32_t kind, bool plan_only) {
     BotState& b = players_[owner].bot;
     const BotParams& p = b.p;
     std::vector<int32_t> buildable_list;
@@ -1261,6 +1311,21 @@ int32_t World::bot_choose_building(int32_t owner, int32_t kind) {
         }
     }
 
+    if (plan_only) {
+
+
+        if (kind == QUEUE_BUILDING && bot_opening_done(owner) &&
+            credits(owner) - bot_pending_cost(owner) > bot_surplus_cash(owner)) {
+            for (int32_t t : buildable_list) {
+                const UnitType& ut = types_[t];
+                if ((ut.produces & (1u << QUEUE_VEHICLE)) == 0 || count[t] >= 2 || !under_limit(t)) continue;
+                if (sufficient_power(t)) return t;
+                if (power >= 0) return power;
+            }
+        }
+        return -1;
+    }
+
 
     const int32_t optimal_refineries = productions > 0 ? p.initial_min_refineries + p.additional_min_refineries + bot_extra_refineries(owner) : p.initial_min_refineries;
     const bool adequate = refineries >= optimal_refineries || powers == 0 || yards == 0;
@@ -1287,7 +1352,8 @@ int32_t World::bot_choose_building(int32_t owner, int32_t kind) {
 
 
     const bool hold_defense = kind == QUEUE_DEFENSE &&
-                              (bot_opening_hold_defense(owner) || bot_air_first_hold_towers(owner));
+                              (bot_opening_hold_defense(owner) || bot_air_first_hold_towers(owner) ||
+                               bot_eco_hold(owner));
 
 
     if (b.cmd_mods.silo_first && has_storage_ && storage_capacity(owner) > 0 &&
@@ -1685,21 +1751,33 @@ void World::bot_unit_builder(int32_t owner) {
         if (types_[a.type].refinery) ++refineries;
         if (types_[a.type].harvester) ++harvesters;
     }
-    if (credits(owner) < p.unit_min_cash || refineries < p.initial_min_refineries) return;
+
+
+    const bool eco_on = p.eco_first > 0 && !bot_land_isolated(owner);
+    const bool poor = credits(owner) - (eco_on ? bot_pending_cost(owner) : 0) < p.unit_min_cash;
+    if ((poor && !eco_on) || refineries < p.initial_min_refineries) return;
     if (++b.unit_ticks % std::max(1, p.unit_feedback_time) != 0) return;
+    const int32_t harv_floor = bot_harvester_floor(owner, refineries);
 
 
     int32_t held_kind = -1;
     if (!b.build_requests.empty()) {
         const int32_t type = b.build_requests.front();
-        const bool surplus = types_[type].harvester && harvesters >= std::max(1, refineries);
+
+
+        const bool surplus = types_[type].harvester && harvesters >= harv_floor;
         const int32_t req_kind = types_[type].queue_kind;
 
 
         const bool hold = types_[type].transforms_into >= 0 ||
-                          (types_[type].cargo_max_weight > 0 && req_kind == QUEUE_SHIP);
+                          (types_[type].cargo_max_weight > 0 && req_kind == QUEUE_SHIP) ||
+                          (types_[type].harvester && !surplus && p.harvesters_floor > 1 && eco_on);
         if (hold && req_kind >= 0 && !players_[owner].queues[req_kind].empty()) {
             held_kind = req_kind;
+        } else if ((poor && (surplus || !types_[type].harvester)) ||
+                   (surplus && eco_on && bot_eco_hold(owner))) {
+
+
         } else if (!surplus || credits(owner) >= std::max(types_[type].cost, bot_surplus_cash(owner))) {
             b.build_requests.erase(b.build_requests.begin());
             const int32_t kind = types_[type].queue_kind;
@@ -1719,6 +1797,7 @@ void World::bot_unit_builder(int32_t owner) {
 
 
     if (p.queue_budget[BQ_VEHICLE] <= 0) {
+        if (poor) return;
         static const int32_t UNIT_QUEUES[BQ_COUNT] = {QUEUE_VEHICLE, QUEUE_INFANTRY, QUEUE_AIRCRAFT, QUEUE_SHIP};
         for (int i = 0; i < BQ_COUNT; ++i) {
             b.queue_index = (b.queue_index + 1) % BQ_COUNT;
@@ -1745,11 +1824,33 @@ void World::bot_unit_builder(int32_t owner) {
 
 
     const bool island = bot_land_isolated(owner);
+
+    const bool eco = eco_on;
+    const bool has_factory = eco && find_producer(owner, QUEUE_VEHICLE) >= 0;
+    int32_t infantry = 0;
+    if (eco && !has_factory) {
+        for (const Actor& a : actors_)
+            if (a.alive && a.owner == owner && !types_[a.type].building && types_[a.type].queue_kind == QUEUE_INFANTRY) ++infantry;
+    }
+    const bool attacked = bot_attacked_recently(owner);
+    bool wait_for_tank = false;
+    if (has_factory && p.opening_depot > 0 && !attacked && int32_t(tick_) < p.eco_first_until) {
+        const int32_t tank = bot_best_tank(owner);
+        wait_for_tank = tank >= 0 && !prerequisites_met(owner, tank);
+    }
     int32_t best_bq = -1, best_deficit = INT32_MIN, fallback_bq = -1, island_fallback = -1;
     for (int32_t bq = 0; bq < BQ_COUNT; ++bq) {
         const int32_t kind = bot_queue_kind_of(bq);
         if (kind < 0 || find_producer(owner, kind) < 0) continue;
         if (kind == held_kind) continue;
+
+
+        if (poor && bq != BQ_VEHICLE) continue;
+
+
+        if (eco && bq == BQ_VEHICLE && wait_for_tank) continue;
+        if (eco && bq == BQ_INFANTRY && !has_factory && !attacked && infantry >= p.opening_infantry &&
+            int32_t(tick_) < p.eco_first_until) continue;
         if (!players_[owner].queues[kind].empty()) continue;
 
 
@@ -1759,7 +1860,9 @@ void World::bot_unit_builder(int32_t owner) {
         const int32_t have = total > 0 ? int32_t(int64_t(value[bq]) * 100 / total) : 0;
         const int32_t deficit = target - have;
         const bool land = (bq == BQ_VEHICLE || bq == BQ_INFANTRY);
-        if (fallback_bq < 0 && land) fallback_bq = bq;
+
+
+        if (fallback_bq < 0 && land && !(has_factory && bq == BQ_INFANTRY)) fallback_bq = bq;
         if (island && !land && island_fallback < 0) island_fallback = bq;
 
 
@@ -1863,8 +1966,21 @@ int32_t World::bot_choose_unit(int32_t owner, int32_t kind) {
     }
 
 
+    const bool eng_plan = p.eng_plan > 0;
+    bool eng_more = false;
+    if (eng_plan && kind == QUEUE_INFANTRY && b.eng_want > 0 && !bot_eco_hold(owner)) {
+        int32_t engs = 0;
+        for (const Actor& a : actors_)
+            if (a.alive && a.owner == owner && bot_role_of_type(size_t(a.type)) == ROLE_ENGINEER) ++engs;
+        for (const BuildItem& it : players_[owner].queues[QUEUE_INFANTRY])
+            if (bot_role_of_type(size_t(it.type)) == ROLE_ENGINEER) ++engs;
+        eng_more = engs < b.eng_want;
+    }
+
+
     for (int32_t role = 0; role < ROLE_COUNT; ++role) {
         if (b.vh_orders[role] <= 0) continue;
+        if (eng_plan && role == ROLE_ENGINEER) { b.vh_orders[role] = 0; continue; }
         int32_t best = -1;
         for (int32_t t : list) {
             const UnitType& ut = types_[t];
@@ -1879,12 +1995,58 @@ int32_t World::bot_choose_unit(int32_t owner, int32_t kind) {
         return best;
     }
 
+
+    if (eng_more) {
+        int32_t best = -1;
+        for (int32_t t : list) {
+            if (bot_role_of_type(size_t(t)) != ROLE_ENGINEER) continue;
+            if (bot_table(p.unit_share, size_t(t), types_[t].ai_unit_share) < 0) continue;
+            if (best < 0 || t < best) best = t;
+        }
+        if (best >= 0) return best;
+    }
+
+
+    if (kind == QUEUE_VEHICLE && p.tank_percent > 0 && !bot_land_isolated(owner)) {
+        int32_t fighters = 0, tanks = 0;
+        for (const Actor& a : actors_) {
+            if (!a.alive || a.owner != owner) continue;
+            const UnitType& at = types_[a.type];
+            if (at.building || at.queue_kind != QUEUE_VEHICLE || at.harvester || at.weapon < 0) continue;
+            ++fighters;
+            if (bot_role_of_type(size_t(a.type)) == ROLE_TANK) ++tanks;
+        }
+        if (tanks * 100 < p.tank_percent * (fighters + 1)) {
+            int32_t best = -1, best_share = -1;
+            for (int32_t t : list) {
+                const UnitType& ut = types_[t];
+                if (bot_role_of_type(size_t(t)) != ROLE_TANK) continue;
+                const int32_t share = bot_table(p.unit_share, size_t(t), ut.ai_unit_share);
+                if (share < 0 || count[t] >= bot_table(p.unit_limit, size_t(t), ut.ai_unit_limit)) continue;
+                if (best < 0 || share > best_share || (share == best_share && ut.cost > types_[best].cost) ||
+                    (share == best_share && ut.cost == types_[best].cost && t < best)) {
+                    best = t;
+                    best_share = share;
+                }
+            }
+            if (best >= 0) return best;
+        }
+    }
+
+
+    const bool no_specials = bot_eco_hold(owner);
+
     int32_t desired = -1, desired_error = INT32_MAX;
     for (int32_t t : list) {
         const UnitType& ut = types_[t];
         if (blocked[size_t(t)]) continue;
         int32_t share = bot_table(p.unit_share, size_t(t), ut.ai_unit_share);
         if (share < 0) continue;
+        if (no_specials) {
+            const int32_t role = bot_role_of_type(size_t(t));
+            if (role == ROLE_ENGINEER || role == ROLE_COMMANDO) continue;
+        }
+        if (eng_plan && bot_role_of_type(size_t(t)) == ROLE_ENGINEER) continue;
         share = share * bot_counter_share(owner, size_t(t)) / 100;
         if (count[t] >= bot_table(p.unit_limit, size_t(t), ut.ai_unit_limit)) continue;
         const int32_t error = all > 0 ? count[t] * 100 / all - share : -1;
@@ -1945,7 +2107,12 @@ void World::bot_harvesters(int32_t owner) {
 
 
     const int32_t want = std::max(bot_harvester_target(owner), refineries > 0 ? 0 : std::min(p.initial_harvesters, 1));
-    const bool too_low = harvesters < want;
+
+
+    int32_t queued = 0;
+    if (p.harvesters_floor > 1)
+        for (const BuildItem& it : players_[owner].queues[QUEUE_VEHICLE]) if (types_[size_t(it.type)].harvester) ++queued;
+    const bool too_low = harvesters + queued < want;
     if (too_low && std::find(b.build_requests.begin(), b.build_requests.end(), harvester_type) == b.build_requests.end()) {
         b.build_requests.push_back(harvester_type);
     }
@@ -2216,7 +2383,10 @@ void World::bot_squads(int32_t owner) {
     if (--b.rush_ticks <= 0) {
         b.rush_ticks = p.rush_interval;
         const size_t ground = b.idle_base_units.size();
-        if (ground >= size_t(bot_vorhaben_squad_size(owner)) && !b.idle_base_units.empty()) {
+        if (ground >= size_t(bot_vorhaben_squad_size(owner)) && !b.idle_base_units.empty() &&
+            (p.attack_min_value <= 0 ||
+             int64_t(bot_reserve_value(owner)) * 100 >=
+                 int64_t(p.attack_min_value) * (100 + std::max(0, p.wave_grow_percent) * std::clamp(b.wave_fails, 0, 4)))) {
             std::vector<int32_t> attackers;
             for (int32_t id : b.idle_base_units) {
                 const int i = index_of(id);
@@ -2313,8 +2483,12 @@ void World::bot_squads(int32_t owner) {
         const bool may_form = p.allow_pincer ? assaults < 2 : assaults < 1;
 
 
-        const bool enough = b.idle_base_units.size() >= randomized ||
-                            (p.wave_value > 0 && bot_reserve_value(owner) >= p.wave_value);
+        const int32_t reserve_value = (p.wave_value > 0 || p.attack_min_value > 0) ? bot_reserve_value(owner) : 0;
+        const int32_t grow = 100 + std::max(0, p.wave_grow_percent) * std::clamp(b.wave_fails, 0, 4);
+        const bool enough = (b.idle_base_units.size() >= randomized ||
+                             (p.wave_value > 0 && int64_t(reserve_value) * 100 >= int64_t(p.wave_value) * grow)) &&
+                            (p.attack_min_value <= 0 ||
+                             int64_t(reserve_value) * 100 >= int64_t(p.attack_min_value) * grow);
 
 
         const bool no_land_way = bot_land_isolated(owner);
@@ -2414,7 +2588,11 @@ void World::bot_squad_retire(int32_t owner, BotSquad& s) {
     if (s.type != BotSquad::ASSAULT && s.type != BotSquad::RUSH) return;
     BotState& b = players_[size_t(owner)].bot;
     if (!s.contact) ++b.stat_squads_no_contact;
-    if (s.peak_size > 0 && int32_t(s.units.size()) * 2 <= s.peak_size) ++b.stat_attacks_heavy_loss;
+    if (s.peak_size > 0 && int32_t(s.units.size()) * 2 <= s.peak_size) {
+        ++b.stat_attacks_heavy_loss;
+
+        if (b.p.wave_grow_percent > 0) b.wave_fails = std::min(4, b.wave_fails + 1);
+    }
 }
 
 

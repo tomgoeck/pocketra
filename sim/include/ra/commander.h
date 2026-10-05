@@ -141,6 +141,9 @@ struct BotSummary {
     int32_t raw_outranged = 0, raw_storage_permille = 0, raw_silos = 0, raw_harv_lost = 0;
     int32_t raw_open_back = 0, raw_uncovered = 0, raw_enemy_soft = 0;
     int32_t raw_own_defense[2] = {};
+
+
+    int32_t raw_engineer_op = 0;
 };
 
 

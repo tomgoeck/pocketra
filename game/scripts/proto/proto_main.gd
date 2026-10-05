@@ -140,6 +140,9 @@ var action_bar: Control = null
 
 var _bar_target: ProtoWorld.Unit = null
 
+
+var _bar_member: ProtoWorld.Unit = null
+
 var _bar_cell := Vector2.ZERO
 var _bar_has_cell := false
 
@@ -225,6 +228,8 @@ func _ready() -> void:
 		call_deferred("_run_test_desktop_scroll")
 	if args.has("--test-desktop-input"):
 		call_deferred("_run_test_desktop_input")
+	if args.has("--test-hover-enter"):
+		call_deferred("_run_test_hover_enter")
 	_test_defeat = args.has("--test-defeat")
 	_test_victory = args.has("--test-victory")
 	_test_motion = args.has("--test-motion")
@@ -255,6 +260,7 @@ func _ready() -> void:
 	_test_armaments = args.has("--test-armaments")
 	_test_dog = args.has("--test-dog")
 	_test_placement = args.has("--test-placement")
+	if args.has("--test-order-marker"): get_tree().process_frame.connect(_run_test_order_marker)
 
 	var dbk := args.find("--demo-battle")
 	if dbk >= 0:
@@ -401,6 +407,7 @@ func _ready() -> void:
 
 
 	gestures.mouse_long_press = not Desktop.has_keyboard()
+	gestures.mouse_hold.connect(_on_mouse_hold)
 	radial.chosen.connect(_on_radial)
 
 
@@ -954,7 +961,8 @@ func _finish_order(wp: Vector2) -> void:
 				_toast(tr("toast.no_harvester"))
 		"force_fire":
 
-			_toast(tr("radial.action.force_fire") if world.order_attack_cell(wp) else tr("toast.force_fire_impossible"))
+
+			_force_fire_at(wp)
 		"sp0", "sp2":
 			var kind := 0 if mode == "sp0" else 2
 			_toast(tr("toast.sp_fired") % tr(SupportPowersPanel.LABELS[kind]) if world.activate_support_power(kind, wp) else tr("toast.sp_failed"))
@@ -1022,6 +1030,7 @@ func _on_tap_gesture(p: Vector2) -> void:
 	if world.sim != null and (Input.is_key_pressed(KEY_CTRL) or Input.is_key_pressed(KEY_META)) \
 			and not world.selection.is_empty() \
 			and world.placing_type < 0 and _order_mode == "" and _click_mode == "" and _confirm_mode == "":
+		_tap_selected = false
 		_desktop_force_fire(p)
 		return
 	var shift := Input.is_key_pressed(KEY_SHIFT)
@@ -1034,6 +1043,8 @@ func _on_tap_gesture(p: Vector2) -> void:
 
 
 func _on_tap(p: Vector2) -> void:
+
+	_tap_selected = false
 
 
 	if _sp_panel != null and _sp_panel.expanded():
@@ -1067,109 +1078,155 @@ func _on_tap(p: Vector2) -> void:
 		_end_click_mode()
 
 
-	if _touch_model() and _bar_candidate(hit):
-		_open_target_bar(hit, p)
-		return
+	_do_click_action(_click_action(hit, wp), wp)
 
 
-	if hit != null and hit.player == world.local_player and not world.selection.is_empty() and world.selected_building() == null \
-			and world.order_land_at(hit):
-		_toast(tr("toast.landing") % _type_label(hit.type))
-		return
-	if hit != null and hit.player == world.local_player and not world.selection.is_empty() and world.selected_building() == null \
-			and world.types[hit.type].get("repairs_units", false) and world.order_repair(hit):
-		_toast(tr("toast.repair_at_depot"))
-		return
-
-	if hit != null and hit.player == world.local_player and not world.selection.is_empty() and world.selected_building() == null \
-			and world.order_deliver(hit):
-		_toast(tr("toast.deliver_ore") % _type_label(hit.type))
-		return
+func _click_action(hit: ProtoWorld.Unit, wp: Vector2, allow_disguise: bool = true) -> Dictionary:
+	var own: bool = hit != null and hit.player == world.local_player
+	var unit_sel := not world.selection.is_empty() and world.selected_building() == null
 
 
-	if not world.selection.is_empty() and world.selected_building() == null:
+	if world.additive_select and own and world.selectable(hit):
+		return _act("select_add", hit)
+
+
+	if own and hit.selected:
+		var member := _tap_on_selected(hit, unit_sel)
+		if not member.is_empty():
+			return member
+
+
+	if own and unit_sel and not world.land_ids(hit).is_empty():
+		return _act("land", hit)
+	if own and unit_sel and not world.repair_ids(hit).is_empty():
+		return _act("repair", hit, OrderMarker.ENTER)
+
+	if own and unit_sel and not world.deliver_ids(hit).is_empty():
+		return _act("deliver", hit, OrderMarker.ENTER)
+
+
+	if unit_sel:
 		var br: ProtoWorld.Unit = world.pick_bridge(wp)
-		if br != null:
-			var bwhat := world.order_enter(br)
-			if bwhat != "":
-				_toast(tr(bwhat) % _type_label(br.type))
-				return
+		if br != null and world.enter_kind(br) != 0:
+			return _act("enter", br, OrderMarker.ENTER)
 
 
-	if hit != null and not world.selection.is_empty() and world.selected_building() == null:
-		var ek := world.enter_kind(hit)
-		if ek != 0:
-			var what := world.order_enter(hit)
-			if what != "":
-				_toast(tr(what) % _type_label(hit.type))
-				return
+	if hit != null and unit_sel and world.enter_kind(hit) != 0:
+		return _act("enter", hit, OrderMarker.ENTER)
 
-	if hit != null and hit.player != world.local_player and not world.selection.is_empty() and world.has_disguiser() \
-			and not world.types[hit.type].get("building", false) and world.order_disguise(hit):
-		_toast(tr("toast.disguised_as") % _type_label(hit.type))
-		return
-
-	if hit != null and hit.player == world.local_player and not hit.selected and not world.selection.is_empty() \
-			and world.order_enter_transport(hit):
-		_toast(tr("toast.boarding") % _type_label(hit.type))
-		return
+	if allow_disguise and hit != null and not own and not world.selection.is_empty() and world.has_disguiser() \
+			and not world.types[hit.type].get("building", false) \
+			and world.sim != null and world.sim.has_method("order_disguise"):
+		return _act("disguise", hit)
 
 
-	if hit != null and hit.player == world.local_player and hit.selected and world.selection.size() == 1 \
-			and world.has_deploy_action(hit.type):
-		_do_deploy_action(world.deploy_action(hit.type))
-		return
+	if own and not world.board_ids(hit).is_empty():
+		return _act("board", hit, OrderMarker.ENTER)
 
 
-	if _tap_order_on_friendly(hit):
-		return
-
-
-	if hit != null and hit.player == world.local_player and world.selectable(hit):
-		_select_tapped(hit)
-	elif world.selected_building() != null:
+	if own and world.selectable(hit) and not unit_sel:
+		return _act("select", hit)
+	if world.selected_building() != null:
 
 
 		if hit != null and world.hostile(world.local_player, hit.player) and world.selection_armed():
+			return _act("attack", hit)
+
+		return _act("rally" if hit == null else "rally_blocked", hit)
+	if hit != null:
+		if world.selection.is_empty():
+			return _act("inspect", hit)
+
+
+		return _act("attack" if world.hostile(world.local_player, hit.player) else "move_to_actor", hit)
+
+	return _act("none" if world.selection.is_empty() else "ground", null)
+
+
+func _act(kind: String, target: ProtoWorld.Unit, marker: int = -1) -> Dictionary:
+	return {"kind": kind, "target": target, "marker": marker}
+
+
+func _do_click_action(act: Dictionary, wp: Vector2) -> void:
+	var hit: ProtoWorld.Unit = act["target"]
+	match act["kind"]:
+		"select_add", "select":
+			_select_tapped(hit)
+			_tap_selected = true
+		"unload":
+
+			if world.unload_ids(PackedInt32Array([hit.id])):
+				_toast(tr("toast.unloading"))
+				_last_gesture = "Entladen: %s" % hit.type
+			else:
+				_toast(tr("toast.unload_blocked"))
+				_last_gesture = "Entladen blockiert: %s" % hit.type
+		"unload_blocked":
+
+			_toast(tr("toast.unload_blocked"))
+			_last_gesture = "Entladen blockiert: %s" % hit.type
+		"board_selected":
+			world.order_enter_transport(hit)
+			_toast(tr("toast.boarding") % _type_label(hit.type))
+			_last_gesture = "Einsteigen: %s" % hit.type
+		"deploy":
+			_do_deploy_action(world.deploy_action(hit.type))
+			_last_gesture = "Sonderfunktion: %s" % hit.type
+		"move_to_selected":
+			world.order_move(hit.pos)
+			_last_gesture = "Bewegen (%d)" % world.selection.size()
+		"land":
+			world.order_land_at(hit)
+			_toast(tr("toast.landing") % _type_label(hit.type))
+		"repair":
+			world.order_repair(hit)
+			_toast(tr("toast.repair_at_depot"))
+		"deliver":
+			world.order_deliver(hit)
+			_toast(tr("toast.deliver_ore") % _type_label(hit.type))
+		"enter":
+
+
+			var what := world.order_enter(hit)
+			if what != "":
+				_toast(tr(what) % _type_label(hit.type))
+		"disguise":
+			if world.order_disguise(hit):
+				_toast(tr("toast.disguised_as") % _type_label(hit.type))
+			else:
+				_do_click_action(_click_action(hit, wp, false), wp)
+		"board":
+			world.order_enter_transport(hit)
+			_toast(tr("toast.boarding") % _type_label(hit.type))
+		"attack":
 			world.order_attack(hit)
 			_last_gesture = "Angriff (%d)" % world.selection.size()
 			_toast(tr("toast.attacking") % [_type_label(hit.type), world.selection.size()])
-
-		elif hit == null and world.set_rally(wp):
-			_toast(tr("toast.rally_set"))
-		elif hit == null:
-			_toast(tr("toast.no_rally_point"))
-		else:
+		"rally":
+			_toast(tr("toast.rally_set") if world.set_rally(wp) else tr("toast.no_rally_point"))
+		"rally_blocked":
 			_toast(tr("toast.rally_ground_only"))
-	elif hit != null:
-		if not world.selection.is_empty():
+		"move_to_actor":
 
 
-			if world.hostile(world.local_player, hit.player):
-				world.order_attack(hit)
-				_last_gesture = "Angriff (%d)" % world.selection.size()
-				_toast(tr("toast.attacking") % [_type_label(hit.type), world.selection.size()])
-			else:
-				world.order_move(hit.pos)
-				_last_gesture = "Bewegen (%d)" % world.selection.size()
-		else:
-			_inspect(hit)
-	elif not world.selection.is_empty():
-
-		if world.has_ore(wp) and world.order_harvest(wp):
-			_toast(tr("radial.action.harvest"))
-		else:
-			world.order_move(wp)
+			world.order_move(hit.pos)
+			if world.types[hit.type].get("building", false):
+				_toast(tr("toast.move_next_to") % _type_label(hit.type))
 			_last_gesture = "Bewegen (%d)" % world.selection.size()
-	else:
-		_last_gesture = "Tippen ins Leere"
+		"inspect":
+			_inspect(hit)
+		"ground":
+			if world.has_ore(wp) and world.order_harvest(wp):
+				_toast(tr("radial.action.harvest"))
+			else:
+				world.order_move(wp)
+				_last_gesture = "Bewegen (%d)" % world.selection.size()
+		_:
+			_last_gesture = "Tippen ins Leere"
 
 
-func _select_tapped(hit: ProtoWorld.Unit, mode: String = "") -> void:
-	if mode == "only":
-		world.select_exclusive(hit)
-	else:
-		world.select_only(hit)
+func _select_tapped(hit: ProtoWorld.Unit) -> void:
+	world.select_only(hit)
 	_show_selection_info()
 	var kind := world.producer_kind(hit)
 	if kind >= 0:
@@ -1178,61 +1235,120 @@ func _select_tapped(hit: ProtoWorld.Unit, mode: String = "") -> void:
 		build_bar.mark_ready_offered()
 
 
-func _tap_order_on_friendly(hit: ProtoWorld.Unit) -> bool:
-	if hit == null or world.selection.is_empty() or world.selected_building() != null:
-		return false
+const HOVER_RECHECK_FRAMES := 6
+var _hover_pos := Vector2.ZERO
+var _hover_has_pos := false
+var _hover_dirty := false
+var _hover_frames := 0
+var _hover_sel_sig := 0
 
 
-	if hit.player != world.local_player:
-		if hit.player == ProtoWorld.PLAYER_NEUTRAL or hit.player == ProtoWorld.PLAYER_CREEPS \
-				or world.hostile(world.local_player, hit.player):
-			return false
-
-	if not world.selectable(hit):
-		return false
-
-
-	if hit.selected:
-		return false
+func _hover_note_motion(m: InputEventMouseMotion) -> void:
+	if m.device == InputEvent.DEVICE_ID_EMULATION:
+		return
+	_hover_pos = m.position
+	_hover_has_pos = true
+	_hover_dirty = true
 
 
-	if _mouse_model() and hit.player == world.local_player:
-		return false
+func _hover_forget() -> void:
+	_hover_has_pos = false
+	if world != null and world.order_marker != null:
+		world.order_marker.clear_hover()
 
 
-	if world.types[hit.type].get("building", false):
-		world.order_move(hit.pos)
-		_toast(tr("toast.move_next_to") % _type_label(hit.type))
-		_last_gesture = "Bewegen neben Gebäude (%d)" % world.selection.size()
+func _hover_blocked() -> bool:
+	if world == null or world.sim == null or world.order_marker == null:
 		return true
-	if world.order_guard(hit):
-		_toast(tr("toast.guarding") % _type_label(hit.type))
-		_last_gesture = "Bewachen (%d)" % world.selection.size()
+	if not Desktop.has_keyboard() or _force_touch or not _hover_has_pos:
 		return true
-	world.order_move(hit.pos)
-	_last_gesture = "Bewegen (%d)" % world.selection.size()
-	return true
+	if world.selection.is_empty():
+		return true
+
+	if Input.get_mouse_button_mask() != 0 or _boxing or _rmb_down:
+		return true
+	if radial.visible or _radial_sticky or _info_card != null or (action_bar != null and action_bar.visible):
+		return true
+
+	if world.placing_type >= 0 or _order_mode != "" or _click_mode != "" or _confirm_mode != "":
+		return true
+	if _sp_panel != null and _sp_panel.expanded():
+		return true
+
+	if Input.is_key_pressed(KEY_CTRL) or Input.is_key_pressed(KEY_META):
+		return true
+	return _scroll_blocked()
+
+
+func _hover_repair_useful(depot: ProtoWorld.Unit) -> bool:
+	var ids := world.repair_ids(depot)
+	for u in world.selection:
+		if u.alive and ids.has(u.id) and (u.hp < 1.0 or (u.ammo_max > 0 and u.ammo < u.ammo_max)):
+			return true
+	return false
+
+
+func _hover_order_at(p: Vector2) -> Dictionary:
+	if _hover_blocked() or _over_hud(p):
+		return {}
+	var wp := world.screen_to_world(p)
+	var hit := world.pick_unit(wp, Dp.px(HIT_RADIUS_DP) / world.zoom)
+	var add_before := world.additive_select
+	world.additive_select = add_before or Input.is_key_pressed(KEY_SHIFT)
+	var act := _click_action(hit, wp)
+	world.additive_select = add_before
+	var target: ProtoWorld.Unit = act["target"]
+	var kind: int = act["marker"]
+
+
+	if kind < 0 or target == null or not world.actor_shown(target):
+		return {}
+	if act["kind"] == "repair" and not _hover_repair_useful(target):
+		return {}
+	return {"unit": target, "kind": kind}
+
+
+func _update_hover_marker() -> void:
+	if world == null or world.order_marker == null:
+		return
+	if _hover_blocked():
+		world.order_marker.clear_hover()
+		_hover_dirty = true
+		return
+	var sig := world.selection.size()
+	for u in world.selection:
+		sig = (sig * 31 + u.id) & 0x7fffffff
+	_hover_frames += 1
+	if not _hover_dirty and sig == _hover_sel_sig and _hover_frames < HOVER_RECHECK_FRAMES:
+		return
+	_hover_dirty = false
+	_hover_sel_sig = sig
+	_hover_frames = 0
+	var res := _hover_order_at(_hover_pos)
+	if res.is_empty():
+		world.order_marker.clear_hover()
+	else:
+		world.order_marker.set_hover(res["unit"], res["kind"])
+
+
+var _tap_selected := false
+
+
+func _tap_on_selected(hit: ProtoWorld.Unit, unit_sel: bool) -> Dictionary:
+	if hit.passengers > 0 and world.sim != null and world.sim.has_method("order_unload"):
+		if world.unit_can_unload(hit):
+			return _act("unload", hit, OrderMarker.UNLOAD)
+		return _act("unload_blocked", hit)
+	if world.selection.size() > 1 and not world.board_ids(hit).is_empty():
+		return _act("board_selected", hit, OrderMarker.ENTER)
+	if world.selection.size() == 1 and world.has_deploy_action(hit.type):
+		return _act("deploy", hit)
+	if not unit_sel:
+		return {}
+	return _act("move_to_selected", hit)
 
 
 const ENTER_ACTIONS := {1: "capture", 2: "fix", 3: "c4", 4: "infiltrate", 5: "bridge"}
-
-
-func _bar_candidate(hit: ProtoWorld.Unit) -> bool:
-	if hit == null or not hit.alive or world.selection.is_empty() or world.selected_building() != null:
-		return false
-
-
-	if hit.selected:
-		return false
-
-
-	if not world.selectable(hit):
-		return false
-	if hit.player != world.local_player:
-		if hit.player == ProtoWorld.PLAYER_NEUTRAL or hit.player == ProtoWorld.PLAYER_CREEPS \
-				or world.hostile(world.local_player, hit.player):
-			return false
-	return true
 
 
 func _target_items(hit: ProtoWorld.Unit) -> Array:
@@ -1247,16 +1363,8 @@ func _target_items(hit: ProtoWorld.Unit) -> Array:
 			and hit.player != ProtoWorld.PLAYER_CREEPS)
 	var ek := world.enter_kind(hit)
 	if ENTER_ACTIONS.has(ek):
-		items.append(ENTER_ACTIONS[ek])
-	if own:
-		if world.can_land_at(hit):
-			items.append("land")
-		if world.can_board(hit):
-			items.append("board")
-		if world.can_deliver_to(hit):
-			items.append("deliver")
-		if world.can_repair_at(hit):
-			items.append("repair_at")
+
+		items.append("sabotage" if world.enter_sabotages(hit) else ENTER_ACTIONS[ek])
 
 
 	if friendly and not world.types[hit.type].get("building", false) and world.sim != null \
@@ -1266,18 +1374,11 @@ func _target_items(hit: ProtoWorld.Unit) -> Array:
 		items.append("attack")
 	elif world.selection_can_force_attack(hit):
 
-
 		items.append("force_attack")
 	if friendly:
 		items.append("move")
 	items.append("info")
 	items.append("cancel")
-
-
-	if own and world.selectable(hit):
-		if not world.selection.is_empty():
-			items.push_front("add")
-		items.push_front("select")
 	return items
 
 
@@ -1315,12 +1416,9 @@ func _cell_items() -> Array:
 	return items
 
 
-func _open_target_bar(hit: ProtoWorld.Unit, press: Vector2, extra: Array = []) -> void:
+func _open_target_bar(hit: ProtoWorld.Unit, press: Vector2) -> void:
 	_clear_pending_unload()
-	var items: Array = extra.duplicate()
-	for a in _target_items(hit):
-		if not items.has(a):
-			items.append(a)
+	_bar_member = null
 	_bar_target = hit
 	_bar_has_cell = false
 	_bar_press = press
@@ -1330,7 +1428,7 @@ func _open_target_bar(hit: ProtoWorld.Unit, press: Vector2, extra: Array = []) -
 
 	var r := world.unit_rect(hit)
 	var ring_r: float = maxf(Dp.px(16), maxf(r.size.x, r.size.y) * 0.75 * world.zoom)
-	action_bar.open(items, press, tr("bar.target") % _type_label(hit.type),
+	action_bar.open(_target_items(hit), press, tr("bar.target") % _type_label(hit.type),
 			world.world_to_screen(r.get_center()), ring_r, _bar_min_y())
 	_toast(tr("toast.target_picked") % _type_label(hit.type))
 	_last_gesture = "Ziel: %s" % hit.type
@@ -1338,6 +1436,7 @@ func _open_target_bar(hit: ProtoWorld.Unit, press: Vector2, extra: Array = []) -
 
 func _open_cell_bar(wp: Vector2, press: Vector2) -> void:
 	_clear_pending_unload()
+	_bar_member = null
 	_bar_target = null
 	_bar_cell = wp
 	_bar_has_cell = true
@@ -1349,22 +1448,51 @@ func _open_cell_bar(wp: Vector2, press: Vector2) -> void:
 	_last_gesture = "Ziel: Stelle"
 
 
+func _open_member_bar(member: ProtoWorld.Unit, press: Vector2) -> void:
+	_clear_pending_unload()
+	_force_target = null
+	_c4_target = null
+	_bar_member = member
+	_bar_target = null
+	_bar_has_cell = false
+	_bar_press = press
+	var items: Array = _radial_items()
+	items.append("info")
+	items.append("cancel")
+	var r := world.unit_rect(member)
+	var ring_r: float = maxf(Dp.px(16), maxf(r.size.x, r.size.y) * 0.75 * world.zoom)
+	action_bar.open(items, press, tr("bar.target") % _type_label(member.type),
+			world.world_to_screen(r.get_center()), ring_r, _bar_min_y())
+	_last_gesture = "Befehle: %s" % member.type
+
+
 func _bar_min_y() -> float:
 	return status_bar.position.y + status_bar.size.y + Dp.px(8)
 
 
 func _on_action_bar(action: String) -> void:
 	var target := _bar_target
+	var member := _bar_member
 	var cell := _bar_cell
 	var has_cell := _bar_has_cell
 	var press := _bar_press
 	_bar_target = null
+	_bar_member = null
 	_bar_has_cell = false
 	if action == "" or action == "cancel":
 		_force_target = null
 		_c4_target = null
 		_last_gesture = "Zielwahl verworfen"
 		_toast(tr("toast.target_dropped"))
+		return
+
+
+	if member != null:
+		if action == "info":
+			world.sfx.play_ui("ramenu1")
+			_show_info_card(member, press)
+			return
+		_on_radial(action)
 		return
 
 
@@ -1408,43 +1536,20 @@ func _on_action_bar(action: String) -> void:
 			if world.order_attack(target):
 				_toast(tr("toast.attacking") % [_type_label(target.type), world.selection.size()])
 				_last_gesture = "Angriff (%d)" % world.selection.size()
-		"land":
-			_toast(tr("toast.landing") % _type_label(target.type) if world.order_land_at(target) else tr("toast.order_impossible"))
-		"board":
-			_toast(tr("toast.boarding") % _type_label(target.type) if world.order_enter_transport(target) else tr("toast.order_impossible"))
-		"deliver":
-			_toast(tr("toast.deliver_ore") % _type_label(target.type) if world.order_deliver(target) else tr("toast.order_impossible"))
-		"repair_at":
-			_toast(tr("toast.repair_at_depot") if world.order_repair(target) else tr("toast.order_impossible"))
-		"capture", "fix", "infiltrate", "bridge":
+		"capture", "sabotage", "fix", "infiltrate", "bridge":
 
 
 			var what := world.order_enter(target)
 			_toast(tr(what) % _type_label(target.type) if what != "" else tr("toast.order_impossible"))
 			_last_gesture = "Enter (%s)" % action
-		"select":
-			if target != null:
-				_select_tapped(target, "only")
-				_toast(tr("toast.selected_target") % _type_label(target.type))
-				_last_gesture = "Auswählen: %s" % target.type
-		"add":
-			if target != null and world.select_append(target):
-				_show_selection_info()
-				_toast(tr("toast.added_to_selection") % [_type_label(target.type), world.selection.size()])
-				_last_gesture = "Hinzugefügt: %s (%d)" % [target.type, world.selection.size()]
-			else:
-				_toast(tr("toast.already_selected"))
 		"info":
 			if target != null:
 				_show_info_card(target, press)
 
 
-func _on_action_bar_dismissed(pos: Vector2) -> void:
-	var hit := world.pick_unit(world.screen_to_world(pos), Dp.px(HIT_RADIUS_DP) / world.zoom)
-	if hit != null and hit != _bar_target and _bar_candidate(hit):
-		_open_target_bar(hit, pos)
-		return
+func _on_action_bar_dismissed(_pos: Vector2) -> void:
 	_bar_target = null
+	_bar_member = null
 	_bar_has_cell = false
 	_force_target = null
 	_c4_target = null
@@ -1509,6 +1614,7 @@ func _input(e: InputEvent) -> void:
 
 	if e is InputEventMouseMotion:
 		var mm: InputEventMouseMotion = e
+		_hover_note_motion(mm)
 		if (_radial_mouse or _radial_sticky) and radial.visible:
 			radial.update(mm.position)
 			return
@@ -1517,6 +1623,9 @@ func _input(e: InputEvent) -> void:
 	if not (e is InputEventScreenTouch):
 		return
 	var t: InputEventScreenTouch = e
+
+	if t.device != InputEvent.DEVICE_ID_EMULATION:
+		_hover_forget()
 	if t.index != 0:
 		return
 	if t.pressed:
@@ -1662,16 +1771,52 @@ func _edge_scroll(delta: float) -> void:
 
 
 func _on_double_tap(p: Vector2) -> void:
+	var first_selected := _tap_selected
+	_tap_selected = false
+	if world.placing_type >= 0:
+		_on_tap_gesture(p)
+		return
+	if not first_selected:
+		_last_gesture = "Doppeltipp verworfen"
+		return
 	var wp := world.screen_to_world(p)
 	var hit := world.pick_unit(wp, Dp.px(HIT_RADIUS_DP) / world.zoom)
-	if hit != null and hit.player == world.local_player and world.selectable(hit):
-		if world.types[hit.type].get("building", false):
-			_select_tapped(hit)
-			_last_gesture = "Gebäude gewählt: %s" % hit.type
-		else:
-			world.select_same_type_visible(hit)
-			_show_selection_info()
-			_last_gesture = "Alle sichtbaren %s: %d" % [hit.type, world.selection.size()]
+	if hit == null or hit.player != world.local_player or not world.selectable(hit):
+		return
+	if hit.selected and _second_tap_acts(hit):
+		_on_tap_gesture(p)
+		return
+	if world.types[hit.type].get("building", false):
+		_select_tapped(hit)
+		_last_gesture = "Gebäude gewählt: %s" % hit.type
+	else:
+		world.select_same_type_visible(hit)
+		_show_selection_info()
+		_last_gesture = "Alle sichtbaren %s: %d" % [hit.type, world.selection.size()]
+
+
+func _second_tap_acts(hit: ProtoWorld.Unit) -> bool:
+	if hit.passengers > 0:
+		return true
+	return world.selection.size() == 1 and world.has_deploy_action(hit.type)
+
+
+func _on_mouse_hold(p: Vector2) -> void:
+	if world == null or world.sim == null or _scroll_blocked():
+		return
+	if world.placing_type >= 0 or _order_mode != "" or _click_mode != "" or _confirm_mode != "":
+		return
+	if action_bar != null and action_bar.visible:
+		return
+	var hit := world.pick_unit(world.screen_to_world(p), Dp.px(HIT_RADIUS_DP) / world.zoom)
+	if hit == null or hit.player != world.local_player or not world.selectable(hit) or hit.selected:
+		return
+	var add_before := world.additive_select
+	world.additive_select = add_before or Input.is_key_pressed(KEY_SHIFT)
+	_select_tapped(hit)
+	world.additive_select = add_before
+	gestures.hold_consumed = true
+	_last_gesture = "Halten wählt: %s" % hit.type
 
 
 func _on_long_press(p: Vector2) -> void:
@@ -1701,6 +1846,14 @@ func _on_long_press(p: Vector2) -> void:
 
 
 		if _touch_model():
+
+
+			if hit.player == world.local_player and world.selectable(hit) and not hit.selected:
+				_force_target = null
+				_c4_target = null
+				_select_tapped(hit)
+				_last_gesture = "Langdruck wählt: %s" % hit.type
+				return
 			if world.selection.is_empty():
 				_show_info_card(hit, p)
 				_last_gesture = "Infokarte"
@@ -1708,8 +1861,10 @@ func _on_long_press(p: Vector2) -> void:
 
 
 			if hit.selected:
-				_open_cell_bar(wp, p)
+				_open_member_bar(hit, p)
 				return
+
+
 			_open_target_bar(hit, p)
 			return
 		if hit.player != world.local_player or not world.selectable(hit):
@@ -5152,6 +5307,9 @@ func _run_test_tap_orders() -> void:
 		_tap_o["mate"] = world.spawn_unit("e1", 0, origin + Vector2i(9, 2))
 		_tap_o["bld"] = world.call("_add_building", "powr", 0, origin + Vector2i(6, 6))
 
+
+		_tap_o["victim"] = world.spawn_unit("2tnk", 0, origin + Vector2i(12, 2))
+
 		_tap_o["apc"] = world.spawn_unit("apc", 0, origin + Vector2i(3, 1))
 		_tap_o["pax"] = world.spawn_unit("e1", 0, origin + Vector2i(4, 1))
 
@@ -5181,135 +5339,241 @@ func _tap_orders_cases() -> void:
 		get_tree().quit()
 		return
 	var fails := 0
+	var sagen := func(nr: String, ok: bool, text: String) -> void:
+		print("T --test-tap-orders: %s %s %s" % [nr, text, "OK" if ok else "FEHLER"])
 
 
 	world.clear_selection()
 	await _tap_o_map(await _tap_o_aim(cmd.pos))
 	var ok1: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
 	fails += 0 if ok1 else 1
-	print("T --test-tap-orders: 1 Tipp ohne Auswahl auf %s → gewählt=%s (%s) %s" % [
-			cmd.type, ok1, _last_gesture, "OK" if ok1 else "FEHLER: keine Auswahl"])
+	sagen.call("1", ok1, "Tipp ohne Auswahl auf %s → gewählt=%s (%s)" % [cmd.type, ok1, _last_gesture])
 
 
 	world.select_only(cmd)
 	cmd.goal_kind = -1
 	await _tap_o_map(await _tap_o_aim(mate.pos))
-	var open2: bool = action_bar.visible
-	var miss2: Array = []
-	for a in ["guard", "force_attack", "move", "info", "cancel"]:
-		if not action_bar.ITEMS.has(a):
-			miss2.append(a)
-	var quiet2: bool = cmd.goal_kind == -1
+	var near2: float = cmd.goal.distance_to(mate.pos) / ProtoWorld.CELL
 	var keeps2: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
-	var ok2: bool = open2 and miss2.is_empty() and quiet2 and keeps2
+	var ok2: bool = cmd.goal_kind == 0 and near2 < 2.0 and keeps2 and not action_bar.visible
 	fails += 0 if ok2 else 1
-	print("T --test-tap-orders: 2 Tipp mit Auswahl auf eigene %s → Leiste=%s %s, fehlend %s, Sofortbefehl=%d (−1 = keiner), Auswahl bleibt=%s %s" % [
-			mate.type, open2, str(action_bar.ITEMS), str(miss2), cmd.goal_kind, keeps2,
-			"OK" if ok2 else "FEHLER"])
-
-
-	var hit3: bool = await _tap_o_bar("guard")
-	var ok3: bool = hit3 and cmd.goal_kind == 1 and not action_bar.visible
-	fails += 0 if ok3 else 1
-	print("T --test-tap-orders: 3 Eintrag „Bewachen\" → Befehlsart=%d (1=Bewachen), Leiste zu=%s, Meldung \"%s\" %s" % [
-			cmd.goal_kind, not action_bar.visible, _last_gesture, "OK" if ok3 else "FEHLER"])
+	sagen.call("2", ok2, "Tipp mit Auswahl auf eigene %s → Befehlsart=%d (0=Bewegen), Ziel %.1f Zellen daneben, Auswahl bleibt=%s, Leiste zu=%s" % [
+			mate.type, cmd.goal_kind, near2, keeps2, not action_bar.visible])
 
 
 	world.select_only(cmd)
 	cmd.goal_kind = -1
 	await _tap_o_map(await _tap_o_aim(bld.pos))
-	var items4: bool = action_bar.visible and action_bar.ITEMS.has("move") and not action_bar.ITEMS.has("guard")
-	var list4 := str(action_bar.ITEMS)
-	var hit4: bool = await _tap_o_bar("move")
-	var near4: float = cmd.goal.distance_to(bld.pos) / ProtoWorld.CELL
-	var ok4: bool = items4 and hit4 and cmd.goal_kind == 0 and near4 > 0.5
+	var near3: float = cmd.goal.distance_to(bld.pos) / ProtoWorld.CELL
+	var ok3: bool = cmd.goal_kind == 0 and near3 > 0.5 and world.selection.size() == 1 \
+			and world.selection[0].id == cmd.id and not action_bar.visible
+	fails += 0 if ok3 else 1
+	sagen.call("3", ok3, "Tipp mit Auswahl auf eigenes %s → Befehlsart=%d, Ziel %.1f Zellen vom Gebäude, Auswahl=%d" % [
+			bld.type, cmd.goal_kind, near3, world.selection.size()])
+
+
+	world.select_units([cmd, mate])
+	cmd.goal_kind = -1
+	mate.goal_kind = -1
+	await _tap_o_map(await _tap_o_aim(mate.pos))
+	var ok4: bool = world.selection.size() == 2 and cmd.goal_kind == 0
 	fails += 0 if ok4 else 1
-	print("T --test-tap-orders: 4 Ziel eigenes %s → Leiste %s, Eintrag „Bewegen\" → Befehlsart=%d (0=Bewegen), Ziel %.1f Zellen vom Gebäude %s" % [
-			bld.type, list4, cmd.goal_kind, near4,
-			"OK" if ok4 else "FEHLER"])
+	sagen.call("4", ok4, "Tipp auf gewähltes %s in einer Zweierauswahl → Auswahl=%d (2 erwartet), Befehlsart Panzer=%d (0)" % [
+			mate.type, world.selection.size(), cmd.goal_kind])
 
 
 	world.select_only(cmd)
 	cmd.goal_kind = -1
-	await _tap_o_map(await _tap_o_aim(mate.pos))
-	var was5: bool = action_bar.visible and action_bar.ITEMS.has("guard")
-	await _tap_o_beside(world.world_to_screen(bld.pos))
-	var now5: bool = action_bar.visible and not action_bar.ITEMS.has("guard") and action_bar.ITEMS.has("move")
-	var ok5: bool = was5 and now5 and cmd.goal_kind == -1
+	_on_long_press(await _tap_o_aim(mate.pos))
+	await get_tree().process_frame
+	var ok5: bool = world.selection.size() == 1 and world.selection[0].id == mate.id \
+			and cmd.goal_kind == -1 and not action_bar.visible and not radial.visible
 	fails += 0 if ok5 else 1
-	print("T --test-tap-orders: 5 Zielwechsel %s → %s: Leiste erst Einheit=%s, dann Gebäude=%s, Befehl dazwischen=%d (−1 = keiner) %s" % [
-			mate.type, bld.type, was5, now5, cmd.goal_kind, "OK" if ok5 else "FEHLER"])
+	sagen.call("5", ok5, "Langdruck auf eigene %s → Auswahl=%d × %s, kein Befehl=%s, Leiste/Ring zu=%s" % [
+			mate.type, world.selection.size(), "—" if world.selection.is_empty() else world.selection[0].type,
+			cmd.goal_kind == -1, not action_bar.visible and not radial.visible])
 
 
-	var void6 := world.world_to_screen(_tap_o_free_spot(_test_origin))
-	await _tap_o_beside(void6)
-	var ok6: bool = not action_bar.visible and cmd.goal_kind == -1
+	world.select_only(cmd)
+	world.additive_select = true
+	_on_long_press(await _tap_o_aim(mate.pos))
+	world.additive_select = false
+	var ok6: bool = world.selection.size() == 2 and world.selection.has(cmd) and world.selection.has(mate)
 	fails += 0 if ok6 else 1
-	print("T --test-tap-orders: 6 Tipp ins Leere bei offener Leiste → Leiste zu=%s, Befehlsart=%d (−1 = kein Befehl) %s" % [
-			not action_bar.visible, cmd.goal_kind, "OK" if ok6 else "FEHLER"])
+	sagen.call("6", ok6, "Langdruck mit „Auswahl erweitern\" → Auswahl=%d (2 erwartet)" % world.selection.size())
+
+
+	world.select_only(cmd)
+	cmd.goal_kind = -1
+	_on_long_press(await _tap_o_aim(cmd.pos))
+	await get_tree().process_frame
+	var miss7: Array = []
+	for a in ["move", "attack_move", "force_fire", "guard", "stop", "info", "cancel"]:
+		if not action_bar.ITEMS.has(a):
+			miss7.append(a)
+	var list7 := str(action_bar.ITEMS)
+	var hit7: bool = await _tap_o_bar("guard")
+	var mode7: bool = _order_mode == "guard"
+	await _tap_o_map(await _tap_o_aim(mate.pos))
+	var ok7: bool = miss7.is_empty() and hit7 and mode7 and cmd.goal_kind == 1
+	fails += 0 if ok7 else 1
+	sagen.call("7", ok7, "Langdruck auf gewählten %s → Leiste %s, fehlend %s, „Bewachen\" → Zielwahl=%s, Tipp auf %s → Befehlsart=%d (1=Bewachen)" % [
+			cmd.type, list7, str(miss7), mode7, mate.type, cmd.goal_kind])
+
+
+	var victim = _tap_o.get("victim")
+	if victim != null:
+		world.select_only(cmd)
+		cmd.goal_kind = -1
+		_on_long_press(await _tap_o_aim(cmd.pos))
+		await get_tree().process_frame
+		var hit8: bool = await _tap_o_bar("force_fire")
+		await _tap_o_map(await _tap_o_aim(victim.pos))
+		var ok8: bool = hit8 and cmd.goal_kind == 2
+		world.order_stop()
+		fails += 0 if ok8 else 1
+		sagen.call("8", ok8, "„Zwangsfeuer\" aus der Leiste, Tipp auf eigenen %s → Befehlsart=%d (2=Angriff), Meldung \"%s\"" % [
+				victim.type, cmd.goal_kind, _last_gesture])
+	else:
+		print("T --test-tap-orders: 8 kein Zielpanzer, übersprungen")
 
 
 	world.select_only(cmd)
 	cmd.goal_kind = -1
 	var spot := _tap_o_free_spot(_test_origin)
-	var p7 := await _tap_o_aim(spot)
-	_on_long_press(p7)
+	var p9 := await _tap_o_aim(spot)
+	_on_long_press(p9)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var miss7: Array = []
+	var miss9: Array = []
 	for a in ["move", "attack_move", "force_fire", "stop", "scatter", "clear", "cancel"]:
 		if not action_bar.ITEMS.has(a):
-			miss7.append(a)
-	var items7 := str(action_bar.ITEMS)
-	var hit7: bool = await _tap_o_bar("attack_move")
-	var near7: float = cmd.goal.distance_to(world.screen_to_world(p7)) / ProtoWorld.CELL
-	var ok7: bool = miss7.is_empty() and hit7 and cmd.goal_kind == 1 and near7 < 2.0
-	fails += 0 if ok7 else 1
-	print("T --test-tap-orders: 7 Langdruck auf Boden → Leiste %s, fehlend %s, Eintrag „Angriffszug\" → Befehlsart=%d (1), %.1f Zellen neben der Stelle %s" % [
-			items7, str(miss7), cmd.goal_kind, near7, "OK" if ok7 else "FEHLER"])
-
-
-	if apc != null and pax != null:
-		world.select_only(pax)
-		world.order_enter_transport(apc)
-		var loaded: bool = await _tap_o_wait(func(): return apc.passengers > 0, 900)
-		world.select_only(apc)
-		var drop := (Vector2(_test_origin + Vector2i(9, 8)) + Vector2(0.5, 0.5)) * ProtoWorld.CELL
-		var p8 := await _tap_o_aim(drop)
-		_on_long_press(p8)
-		await get_tree().process_frame
-		await get_tree().process_frame
-		var has8: bool = action_bar.ITEMS.has("unload")
-		var hit8: bool = await _tap_o_bar("unload")
-		var queued8: bool = not _unload_ids.is_empty()
-		var done8: bool = await _tap_o_wait(func(): return apc.passengers == 0, 2000)
-		var ok8: bool = loaded and has8 and hit8 and queued8 and done8
-		fails += 0 if ok8 else 1
-		print("T --test-tap-orders: 8 Entladen hier → beladen=%s, Eintrag „Entladen\"=%s, Fahrbefehl gemerkt=%s, ausgestiegen=%s (Rest an Bord %d) %s" % [
-				loaded, has8, queued8, done8, apc.passengers, "OK" if ok8 else "FEHLER"])
-	else:
-		print("T --test-tap-orders: 8 Entladen hier — kein Transporter, übersprungen")
+			miss9.append(a)
+	var items9 := str(action_bar.ITEMS)
+	var hit9: bool = await _tap_o_bar("attack_move")
+	var near9: float = cmd.goal.distance_to(world.screen_to_world(p9)) / ProtoWorld.CELL
+	var ok9: bool = miss9.is_empty() and hit9 and cmd.goal_kind == 1 and near9 < 2.0
+	fails += 0 if ok9 else 1
+	sagen.call("9", ok9, "Langdruck auf Boden → Leiste %s, fehlend %s, „Angriffszug\" → Befehlsart=%d (1), %.1f Zellen neben der Stelle" % [
+			items9, str(miss9), cmd.goal_kind, near9])
 
 
 	world.select_only(cmd)
-	_on_double_tap(await _tap_o_aim(mate.pos))
+	cmd.goal_kind = -1
+	_on_long_press(await _tap_o_aim(spot))
 	await get_tree().process_frame
-	var ok9: bool = world.selection.size() >= 1 and not world.selection.has(cmd) and world.selection[0].type == mate.type
-	fails += 0 if ok9 else 1
-	print("T --test-tap-orders: 9 Doppeltipp auf eigene %s → Auswahl=%d × %s %s" % [
-			mate.type, world.selection.size(),
-			"—" if world.selection.is_empty() else world.selection[0].type,
-			"OK" if ok9 else "FEHLER: keine Neuauswahl"])
+	var was10: bool = action_bar.visible
+	await _tap_o_beside(world.world_to_screen(bld.pos))
+	var ok10: bool = was10 and not action_bar.visible and cmd.goal_kind == -1
+	fails += 0 if ok10 else 1
+	sagen.call("10", ok10, "Tipp neben die Leiste → offen vorher=%s, zu=%s, Befehlsart=%d (−1 = kein Befehl)" % [
+			was10, not action_bar.visible, cmd.goal_kind])
+
+	if apc != null and pax != null:
+
+		world.select_only(pax)
+		await _tap_o_map(await _tap_o_aim(apc.pos))
+		var loaded11: bool = await _tap_o_wait(func(): return apc.passengers > 0, 900)
+		fails += 0 if loaded11 else 1
+		sagen.call("11", loaded11, "Tipp auf %s mit gewähltem %s → eingestiegen=%s (%s)" % [
+				apc.type, pax.type, loaded11, _last_gesture])
+
+
+		world.select_only(apc)
+		var drop := (Vector2(_test_origin + Vector2i(9, 8)) + Vector2(0.5, 0.5)) * ProtoWorld.CELL
+		_on_long_press(await _tap_o_aim(drop))
+		await get_tree().process_frame
+		var has12: bool = action_bar.ITEMS.has("unload")
+		var hit12: bool = await _tap_o_bar("unload")
+		var queued12: bool = not _unload_ids.is_empty()
+		var done12: bool = await _tap_o_wait(func(): return apc.passengers == 0, 2000)
+		var ok12: bool = loaded11 and has12 and hit12 and queued12 and done12
+		fails += 0 if ok12 else 1
+		sagen.call("12", ok12, "Entladen hier → Eintrag=%s, Fahrbefehl gemerkt=%s, ausgestiegen=%s (Rest %d)" % [
+				has12, queued12, done12, apc.passengers])
+
+
+		await _tap_o_wait(func(): return not pax.moving, 200)
+		world.select_units([pax, apc])
+		await _tap_o_map(await _tap_o_aim(apc.pos))
+		var ok13: bool = await _tap_o_wait(func(): return apc.passengers > 0, 900)
+		fails += 0 if ok13 else 1
+		sagen.call("13", ok13, "Auswahl %s + leerer %s, Tipp auf den Transporter → eingestiegen=%s (%s)" % [
+				pax.type, apc.type, ok13, _last_gesture])
+
+
+		world.clear_selection()
+		var p14 := await _tap_o_aim(apc.pos)
+		await _tap_o_map(p14)
+		var sel14: bool = world.selection.size() == 1 and world.selection[0].id == apc.id
+		await _tap_o_map(p14)
+		var ok14: bool = sel14 and await _tap_o_wait(func(): return apc.passengers == 0, 900)
+		fails += 0 if ok14 else 1
+		sagen.call("14", ok14, "Tipp, Tipp auf beladenen %s → erst gewählt=%s, dann ausgestiegen=%s (%s)" % [
+				apc.type, sel14, apc.passengers == 0, _last_gesture])
+
+
+		await _tap_o_wait(func(): return not pax.moving, 200)
+		world.select_only(pax)
+		await _tap_o_map(await _tap_o_aim(apc.pos))
+		var re15: bool = await _tap_o_wait(func(): return apc.passengers > 0, 900)
+		world.clear_selection()
+		var p15 := await _tap_o_aim(apc.pos)
+		await _tap_o_map(p15)
+		_on_double_tap(p15)
+		var ok15: bool = re15 and await _tap_o_wait(func(): return apc.passengers == 0, 900)
+		fails += 0 if ok15 else 1
+		sagen.call("15", ok15, "Tipp + Doppeltipp auf beladenen %s → wieder beladen=%s, ausgestiegen=%s (%s)" % [
+				apc.type, re15, apc.passengers == 0, _last_gesture])
+	else:
+		print("T --test-tap-orders: 11-15 Transporter — kein MTW, übersprungen")
+
+
+	world.clear_selection()
+	var p16 := await _tap_o_aim(mate.pos)
+	await _tap_o_map(p16)
+	_on_double_tap(p16)
+	await get_tree().process_frame
+	var ok16: bool = world.selection.size() >= 1 and not world.selection.has(cmd) and world.selection[0].type == mate.type
+	fails += 0 if ok16 else 1
+	sagen.call("16", ok16, "Tipp + Doppeltipp ohne Auswahl auf %s → Auswahl=%d × %s" % [
+			mate.type, world.selection.size(), "—" if world.selection.is_empty() else world.selection[0].type])
+
+
+	world.select_only(cmd)
+	cmd.goal_kind = -1
+	var p17 := await _tap_o_aim(mate.pos)
+	await _tap_o_map(p17)
+	var goal17: Vector2 = cmd.goal
+	_on_double_tap(p17)
+	await get_tree().process_frame
+	var ok17: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id \
+			and cmd.goal_kind == 0 and cmd.goal == goal17
+	fails += 0 if ok17 else 1
+	sagen.call("17", ok17, "Tipp + Doppeltipp mit Auswahl auf %s → Auswahl bleibt=%s, Befehlsart=%d (0), Ziel unverändert=%s (%s)" % [
+			mate.type, world.selection.size() == 1 and world.selection[0].id == cmd.id, cmd.goal_kind,
+			cmd.goal == goal17, _last_gesture])
+
+
+	world.select_only(cmd)
+	cmd.goal_kind = -1
+	world.additive_select = true
+	await _tap_o_map(await _tap_o_aim(mate.pos))
+	world.additive_select = false
+	var ok18: bool = world.selection.size() == 2 and world.selection.has(mate) and cmd.goal_kind == -1
+	fails += 0 if ok18 else 1
+	sagen.call("18", ok18, "Tipp mit „Auswahl erweitern\" auf %s → Auswahl=%d (2), kein Befehl=%s" % [
+			mate.type, world.selection.size(), cmd.goal_kind == -1])
 
 
 	world.select_only(cmd)
 	cmd.goal_kind = -1
 	await _tap_o_map(await _tap_o_aim(foe.pos))
-	var ok10: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id \
+	var ok19: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id \
 			and cmd.goal_kind == 2 and not action_bar.visible
-	fails += 0 if ok10 else 1
-	print("T --test-tap-orders: 10 Tipp auf gegnerisches %s → Befehlsart=%d (2=Angriff), Leiste zu=%s, Meldung \"%s\" %s" % [
-			foe.type, cmd.goal_kind, not action_bar.visible, _last_gesture, "OK" if ok10 else "FEHLER"])
+	fails += 0 if ok19 else 1
+	sagen.call("19", ok19, "Tipp auf gegnerisches %s → Befehlsart=%d (2=Angriff), Leiste zu=%s, Meldung \"%s\"" % [
+			foe.type, cmd.goal_kind, not action_bar.visible, _last_gesture])
 
 
 	for i in 3:
@@ -5336,38 +5600,10 @@ func _tap_orders_cases() -> void:
 	groups._press_slot = -1
 	var attacked: bool = cmd.goal_kind == 2
 	var grouped: bool = world.selection.size() == 1 and world.selection[0].id == cmd.id
-	var ok11: bool = aligned and attacked and grouped
-	fails += 0 if ok11 else 1
-	print("T --test-tap-orders: 11 Tipp auf Gruppenknopf 1 über gegnerischem %s bei %s → darunter=%s, Befehlsart=%d (2=Angriff), Gruppe danach gewählt=%s (vorher %d) %s" % [
-			foe.type, sp2, _tap_o_name(under), cmd.goal_kind, grouped, before_sel,
-			"OK" if ok11 else "FEHLER"])
-
-
-	world.select_only(cmd)
-	world.additive_select = true
-	await _tap_o_map(await _tap_o_aim(mate.pos))
-	var first12: bool = action_bar.ITEMS.size() >= 2 and action_bar.ITEMS[0] == "select" \
-			and action_bar.ITEMS[1] == "add"
-	var list12 := str(action_bar.ITEMS)
-	var hit12: bool = await _tap_o_bar("select")
-	world.additive_select = false
-	var ok12: bool = first12 and hit12 and world.selection.size() == 1 \
-			and world.selection[0].id == mate.id
-	fails += 0 if ok12 else 1
-	print("T --test-tap-orders: 12 Ziel eigene %s → Leiste %s (》Auswählen《 zuerst, 》Hinzufügen《 danach=%s), nach 》Auswählen《 Auswahl=%d × %s %s" % [
-			mate.type, list12, first12, world.selection.size(),
-			"—" if world.selection.is_empty() else world.selection[0].type,
-			"OK" if ok12 else "FEHLER"])
-
-
-	world.select_exclusive(cmd)
-	await _tap_o_map(await _tap_o_aim(mate.pos))
-	var hit13: bool = await _tap_o_bar("add")
-	var ok13: bool = hit13 and world.selection.size() == 2 and world.selection.has(cmd) \
-			and world.selection.has(mate)
-	fails += 0 if ok13 else 1
-	print("T --test-tap-orders: 13 Eintrag „Hinzufügen\" → Auswahl=%d (%s + %s erwartet) %s" % [
-			world.selection.size(), cmd.type, mate.type, "OK" if ok13 else "FEHLER"])
+	var ok20: bool = aligned and attacked and grouped
+	fails += 0 if ok20 else 1
+	sagen.call("20", ok20, "Tipp auf Gruppenknopf 1 über gegnerischem %s bei %s → darunter=%s, Befehlsart=%d (2=Angriff), Gruppe danach gewählt=%s (vorher %d)" % [
+			foe.type, sp2, _tap_o_name(under), cmd.goal_kind, grouped, before_sel])
 
 	print("T --test-tap-orders: fertig — %d Fehlschläge" % fails)
 	get_tree().quit()
@@ -5827,6 +6063,8 @@ var _cap_targets: Array = []
 var _cap_engineers: Array = []
 var _cap_fail := 0
 var _cap_before := {}
+var _cap_sabotage = null
+var _cap_sabotage_eng = null
 
 
 func _cap_visible(kind: int) -> Array:
@@ -5903,6 +6141,38 @@ func _run_test_capture() -> void:
 		_test_tick = tick
 	elif _test_step == 1 and tick >= _test_tick + 30:
 		_cap_before = _cap_report("VOR der Eroberung (Sowjet mit eigener Basis)")
+
+
+		_cap_sabotage = _cap_targets[0] if not _cap_targets.is_empty() else null
+		if _cap_sabotage != null:
+			var seng := world.spawn_unit("e6", 0, Vector2i(_cap_sabotage.pos / ProtoWorld.CELL) + Vector2i(0, 3))
+			if seng != null:
+				_cap_sabotage_eng = seng
+				world.select_only(seng)
+				_on_tap(world.world_to_screen(_cap_sabotage.pos))
+				var soll: String = tr("toast.sabotaging") % _type_label(_cap_sabotage.type)
+				var ist: String = _toasts.back()[0] if not _toasts.is_empty() else ""
+				if ist != soll:
+					_cap_fail += 1
+				print("T --test-capture: Hinweis beim heilen Ziel „%s\" %s" % [ist, "OK" if ist == soll else "FEHLER (erwartet „%s\")" % soll])
+		_test_step = 5
+		_test_tick = tick
+	elif _test_step == 5:
+		if _cap_sabotage_eng != null and _cap_sabotage_eng.alive and tick < _test_tick + 1500:
+			return
+		if _cap_sabotage != null:
+
+			var ok_sab: bool = _cap_sabotage.alive and _cap_sabotage.player == 1 \
+					and absf(_cap_sabotage.hp - 0.67) < 0.011 \
+					and (_cap_sabotage_eng == null or not _cap_sabotage_eng.alive)
+			if not ok_sab:
+				_cap_fail += 1
+			print("T --test-capture: Sabotage an der heilen %s: Besitzer %d, Leben %.3f, Pionier verbraucht=%s %s" % [
+					_cap_sabotage.type, _cap_sabotage.player, _cap_sabotage.hp,
+					_cap_sabotage_eng == null or not _cap_sabotage_eng.alive, "OK" if ok_sab else "FEHLER"])
+
+		for t in _cap_targets:
+			sim.set_health(t.id, int(world.types[t.type]["hp"]) * 20 / 100)
 
 		for t in _cap_targets:
 			var cell := Vector2i(t.pos / ProtoWorld.CELL) + Vector2i(0, 3)
@@ -7780,7 +8050,11 @@ func _run_test_air_player() -> void:
 			return
 		_ap_tank_hp = _ap_tank.hp
 		_ap_ammo0 = _ap_heli.ammo
-		_ap_tap_unit(_ap_heli)
+
+
+		if not _ap_heli.selected:
+			world.clear_selection()
+			_ap_tap_unit(_ap_heli)
 		_ap_tap_unit(_ap_tank)
 		print("T: Tipp auf %s → %s" % [_ap_tank.type, _ap_state(_ap_heli)])
 		_ap_step = 8
@@ -7807,7 +8081,9 @@ func _run_test_air_player() -> void:
 	elif _ap_step == 10 and tick >= _ap_tick + 400:
 		print("T: nach dem Bewegen: ", _ap_state(_ap_heli))
 		if _ap_pad != null:
-			_ap_tap_unit(_ap_heli)
+			if not _ap_heli.selected:
+				world.clear_selection()
+				_ap_tap_unit(_ap_heli)
 			_ap_tap_unit(_ap_pad)
 			var sel2: Array = []
 			for u in world.selection:
@@ -7838,6 +8114,9 @@ func _run_test_air_player() -> void:
 
 		_ap_extra_hp = _ap_extra_tank.hp
 		_ap_ammo0 = _ap_extra.ammo
+
+
+		world.clear_selection()
 		_ap_tap_unit(_ap_extra)
 		_ap_tap_unit(_ap_extra_tank)
 		print("T: zweiter Flieger %s: Tipp auf %s → %s" % [
@@ -8971,7 +9250,118 @@ func _run_test_cargo() -> void:
 			await get_tree().process_frame
 			get_viewport().get_texture().get_image().save_png(_screenshot_path)
 			print("Screenshot: ", _screenshot_path)
-		get_tree().quit()
+		_cargo_tap_cases()
+
+
+func _cargo_tap_cases() -> void:
+	var fails := 0
+	fails += await _cargo_tap_cycle("MTW", _cargo_apc, _cargo_troop)
+
+	var heli = null
+	var heli_troop: Array = []
+	if world.type_ids.has("tran"):
+		var hc := _test_origin + Vector2i(4, 10)
+		heli = world.spawn_unit("tran", 0, hc, 256, 100, true)
+		for i in 3:
+			var e = world.spawn_unit("e1", 0, hc + Vector2i(-2 + i, 3))
+			if e != null:
+				heli_troop.append(e)
+	if heli != null and not heli_troop.is_empty():
+
+
+		await _tap_o_wait(func(): return false, 40)
+		fails += await _cargo_tap_cycle("Chinook", heli, heli_troop)
+	else:
+		print("T --test-cargo Tipp: Chinook nicht setzbar, übersprungen")
+
+	var shore := _shore_cells(_test_origin)
+	var boat = null
+	var boat_troop: Array = []
+	if shore.size() == 2 and world.type_ids.has("lst"):
+		boat = world.spawn_unit("lst", 0, shore[0])
+		var land: Vector2i = shore[1]
+		for i in 2:
+			var e = world.spawn_unit("e1", 0, land + (land - shore[0]) * i)
+			if e != null:
+				boat_troop.append(e)
+	if boat != null and not boat_troop.is_empty():
+		await _tap_o_wait(func(): return false, 40)
+		fails += await _cargo_tap_cycle("Landungsboot", boat, boat_troop)
+	else:
+		print("T --test-cargo Tipp: keine Küste in Reichweite (%s) oder kein Landungsboot, übersprungen" % str(shore))
+	print("T --test-cargo Tipp: fertig — %d Fehlschläge" % fails)
+	get_tree().quit()
+
+
+func _cargo_tap_cycle(what: String, tr_unit, troop: Array) -> int:
+	var fails := 0
+	var aim := func() -> Vector2:
+		return await _tap_o_aim(tr_unit.pos - Vector2(0.0, tr_unit.altitude))
+	var board := func() -> bool:
+		var pax: Array = []
+		for e in troop:
+			if e.alive and world.sim.transport_of(e.id) < 0:
+				pax.append(e)
+		world.select_units(pax)
+		await _tap_o_map(await aim.call())
+		return await _tap_o_wait(func(): return tr_unit.passengers >= pax.size() and pax.size() > 0, 1500)
+	var settle := func() -> void:
+
+
+		await _tap_o_wait(func(): return not tr_unit.moving, 300)
+		await _tap_o_wait(func(): return false, 60)
+
+	var in1: bool = await board.call()
+	fails += 0 if in1 else 1
+	print("T --test-cargo Tipp: %s 1 Fahrgäste gewählt, Transporter angetippt → an Bord %d (%s) %s" % [
+			what, tr_unit.passengers, _last_gesture, "OK" if in1 else "FEHLER"])
+
+	await settle.call()
+	world.clear_selection()
+	var p2: Vector2 = await aim.call()
+	await _tap_o_map(p2)
+	var sel2: bool = world.selection.size() == 1 and world.selection[0].id == tr_unit.id
+	await _tap_o_map(p2)
+	var out2: bool = await _tap_o_wait(func(): return tr_unit.passengers == 0, 1500)
+	var ok2: bool = in1 and sel2 and out2
+	fails += 0 if ok2 else 1
+	print("T --test-cargo Tipp: %s 2 Tipp wählt=%s, zweiter Tipp entlädt → an Bord %d (%s) %s" % [
+			what, sel2, tr_unit.passengers, _last_gesture, "OK" if ok2 else "FEHLER"])
+
+	await _tap_o_wait(func(): return false, 120)
+	var in3: bool = await board.call()
+	await settle.call()
+	world.clear_selection()
+	var p3: Vector2 = await aim.call()
+	await _tap_o_map(p3)
+	_on_double_tap(p3)
+	var out3: bool = await _tap_o_wait(func(): return tr_unit.passengers == 0, 1500)
+	var ok3: bool = in3 and out3
+	fails += 0 if ok3 else 1
+	print("T --test-cargo Tipp: %s 3 wieder an Bord=%s, Tipp + Doppeltipp entlädt → an Bord %d (%s) %s" % [
+			what, in3, tr_unit.passengers, _last_gesture, "OK" if ok3 else "FEHLER"])
+	return fails
+
+
+func _shore_cells(from: Vector2i) -> Array:
+	for r in range(1, 80):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if absi(dx) != r and absi(dy) != r:
+					continue
+				var c := from + Vector2i(dx, dy)
+				if world.terrain_type(c) != ProtoWorld.TER_WATER:
+					continue
+				for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					var l: Vector2i = c + d
+					var t := world.terrain_type(l)
+					var l2: Vector2i = l + d
+					var t2 := world.terrain_type(l2)
+					if t != ProtoWorld.TER_WATER and t != ProtoWorld.TER_ROCK \
+							and t2 != ProtoWorld.TER_WATER and t2 != ProtoWorld.TER_ROCK \
+							and world.pick_unit((Vector2(l) + Vector2(0.5, 0.5)) * ProtoWorld.CELL, 0.0) == null:
+						return [c, l]
+	return []
 
 
 func _run_test_toasts() -> void:
@@ -9866,13 +10256,13 @@ func _run_test_ui() -> void:
 					var za := world.spawn_unit("2tnk", 0, zo + Vector2i(-3, 4))
 					var zb := world.spawn_unit("2tnk", 0, zo + Vector2i(2, 4))
 					if za != null and zb != null:
-						world.select_only(za)
+						world.select_units([za, zb])
 						world.center_on((za.pos + zb.pos) / 2.0)
-						_on_tap(world.world_to_screen(zb.pos))
-						print("T: Zielleiste offen=%s, Einträge=%s (Sollwert: 》Auswählen《 zuerst)" % [
+						_open_member_bar(za, world.world_to_screen(za.pos))
+						print("T: Befehlsleiste offen=%s, Einträge=%s" % [
 							action_bar.visible, str(action_bar.ITEMS)])
 					else:
-						print("T: Zielleiste — konnte keine zwei Einheiten setzen")
+						print("T: Befehlsleiste — konnte keine zwei Einheiten setzen")
 				"win": world.sim.set_win_state(0, 1)
 				"lose":
 
@@ -11310,6 +11700,37 @@ func _run_test_desktop_input() -> void:
 			await get_tree().process_frame
 	var rechts := func(at: Vector2) -> void:
 		await klick.call(MOUSE_BUTTON_RIGHT, at)
+
+
+	var halten_links := func(at: Vector2, bis) -> void:
+		var down := InputEventMouseButton.new()
+		down.button_index = MOUSE_BUTTON_LEFT
+		down.pressed = true
+		down.position = at
+		down.global_position = at
+		Input.parse_input_event(down)
+		var t0 := Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t0 < gestures.long_press_ms + 150:
+			await get_tree().process_frame
+		var ende: Vector2 = at
+		if bis != null:
+			ende = bis
+			for k in 4:
+				var mm := InputEventMouseMotion.new()
+				mm.button_mask = MOUSE_BUTTON_MASK_LEFT
+				mm.position = at.lerp(ende, (k + 1) / 4.0)
+				mm.global_position = mm.position
+				mm.relative = (ende - at) / 4.0
+				Input.parse_input_event(mm)
+				await get_tree().process_frame
+		var up := InputEventMouseButton.new()
+		up.button_index = MOUSE_BUTTON_LEFT
+		up.pressed = false
+		up.position = ende
+		up.global_position = ende
+		Input.parse_input_event(up)
+		await get_tree().process_frame
+		await get_tree().process_frame
 	var halten := func(code: int, pressed: bool) -> void:
 		var ev := InputEventKey.new()
 		ev.keycode = code
@@ -11383,12 +11804,37 @@ func _run_test_desktop_input() -> void:
 
 
 		world.select_only(panzer)
+		panzer.goal_kind = -1
 		var p_kamerad0: Vector2 = stelle.call(kamerad.pos)
 		await klick.call(MOUSE_BUTTON_LEFT, p_kamerad0)
-		var l_d: bool = world.selection.size() == 1 and world.selection[0].id == kamerad.id
+		var l_d: bool = world.selection.size() == 1 and world.selection[0].id == panzer.id \
+			and panzer.goal_kind == 0 and panzer.goal.distance_to(kamerad.pos) < 2.0 * ProtoWorld.CELL
 		fehler += 0 if l_d else 1
-		sagen.call("Linksklick waehlt eigene Einheit statt zu bewachen", l_d, " - Auswahl %d, id passt %s" % [
-			world.selection.size(), world.selection.size() == 1 and world.selection[0].id == kamerad.id])
+		sagen.call("Linksklick auf eigene Einheit bewegt", l_d, " - Auswahl bleibt %s, Befehlsart %d (0=Bewegen), Ziel %.1f Zellen daneben" % [
+			world.selection.size() == 1 and world.selection[0].id == panzer.id, panzer.goal_kind,
+			panzer.goal.distance_to(kamerad.pos) / ProtoWorld.CELL])
+
+
+		world.select_only(panzer)
+		panzer.goal_kind = -1
+		kamerad.goal_kind = -1
+		var p_kamerad1: Vector2 = stelle.call(kamerad.pos)
+		await halten_links.call(p_kamerad1, null)
+		var l_d2: bool = world.selection.size() == 1 and world.selection[0].id == kamerad.id \
+			and panzer.goal_kind == -1 and kamerad.goal_kind == -1
+		fehler += 0 if l_d2 else 1
+		sagen.call("Linke Taste halten waehlt", l_d2, " - Auswahl %d, Kamerad gewaehlt %s, kein Befehl %s (%s)" % [
+			world.selection.size(), kamerad.selected, panzer.goal_kind == -1 and kamerad.goal_kind == -1,
+			_last_gesture])
+
+
+		world.select_only(panzer)
+		var p_kamerad2: Vector2 = stelle.call(kamerad.pos)
+		await halten_links.call(p_kamerad2, p_kamerad2 + Vector2(Dp.px(40), Dp.px(30)))
+		var l_d3: bool = _last_gesture.begins_with("Rahmenauswahl") and not _boxing
+		fehler += 0 if l_d3 else 1
+		sagen.call("Halten, dann ziehen = Rahmen", l_d3, " - letzte Geste '%s', Auswahl %d" % [
+			_last_gesture, world.selection.size()])
 
 
 		world.select_only(panzer)
@@ -12326,7 +12772,12 @@ const AI_STAT_KEYS := ["gebaut", "superwaffen", "trupps", "erster_angriff", "arm
 	"luftangriffe", "flieger_verloren", "schiffe_verloren", "schiffe_versenkt",
 	"gebaut_fahrzeuge", "gebaut_infanterie", "gebaut_luft", "gebaut_schiffe", "armee_land", "armee_marine",
 	"t_raffinerie", "t_kaserne", "t_fabrik", "t_radar", "insel", "bauhoefe", "see_luft_gebaeude",
-	"t_gefunden", "aufklaerung", "landungen", "t_landung", "gelandet", "boote_verloren", "landung_kontakt"]
+	"t_gefunden", "aufklaerung", "landungen", "t_landung", "gelandet", "boote_verloren", "landung_kontakt",
+
+	"armee_m4", "armee_m8", "armee_m12", "sammler_m4", "sammler_m8", "sammler", "raffinerien",
+	"ertrag_m8", "wellen_m12", "t_raffinerie2", "kasse_mittel", "gebaeudeschaden", "gebaeude_zerstoert",
+
+	"erobert", "pioniere_verbraucht"]
 
 func _ai_stats(pl: int) -> Dictionary:
 	var sim = world.sim
@@ -12364,12 +12815,21 @@ func _print_tournament_rows(tick: int) -> void:
 		print("ERZNACHSCHUB tick=%d wert=%d" % [tick, int(sim.seeded_value())])
 	var ws: int = world.win_state()
 	for e in world.player_roster:
-		if str(e.get("kind", "human")) != "bot":
-			continue
 		var pl := int(e.get("sim", -1))
+
+		if str(e.get("kind", "human")) != "bot" and not (ProtoWorld.next_sparring and pl == 0):
+			continue
 		if pl < 0:
 			continue
 		var st := _ai_stats(pl)
+
+
+		var tempo := " armee_m4=%d armee_m8=%d armee_m12=%d sammler_m4=%d sammler_m8=%d sammler=%d raffinerien=%d ertrag_m8=%d wellen_m12=%d t_raffinerie2=%d kasse_mittel=%d gebaeudeschaden=%d gebaeude_zerstoert=%d sieg=%d sparring=%d erobert=%d pioniere_verbraucht=%d" % [
+			st["armee_m4"], st["armee_m8"], st["armee_m12"], st["sammler_m4"], st["sammler_m8"],
+			st["sammler"], st["raffinerien"], st["ertrag_m8"], st["wellen_m12"], st["t_raffinerie2"],
+			st["kasse_mittel"], st["gebaeudeschaden"], st["gebaeude_zerstoert"],
+			int(sim.win_state(pl)), 1 if ProtoWorld.next_sparring else 0,
+			st["erobert"], st["pioniere_verbraucht"]]
 		print("TURNIER tick=%d pl=%d strategie=%s staerke=%s plan=%s gebaut=%d superwaffen=%d trupps=%d erster_angriff=%d lebend=%d ertrag=%d credits=%d spieler_lebend=%d ausgang=%d armee=%d bargeld=%d belagerer_verloren=%d in_turmreichweite=%d tuerme=%d trupp_verluste=%d schwere_verluste=%d sammler_still_max=%d sammler_still_spitze=%d sammler_still_proben=%d sammler_still_erz=%d sammler_soll=%d sammler_still_zustand=%s trupp_gather_ticks=%d trupp_marsch_ticks=%d trupp_kontakte=%d trupp_bis_schuss=%d trupp_ohne_schuss=%d sammel_neu=%d nachzuegler_stops=%d flaktuerme=%d turm_streuung=%d ungedeckt=%d luftangriffe=%d flieger_verloren=%d schiffe_verloren=%d schiffe_versenkt=%d gebaut_fahrzeuge=%d gebaut_infanterie=%d gebaut_luft=%d gebaut_schiffe=%d armee_land=%d armee_marine=%d t_raffinerie=%d t_kaserne=%d t_fabrik=%d t_radar=%d insel=%d bauhoefe=%d see_luft_gebaeude=%d t_gefunden=%d aufklaerung=%d landungen=%d t_landung=%d gelandet=%d boote_verloren=%d landung_kontakt=%d" % [
 			tick, pl, _ai_strategy_of(pl), _ai_level_of(pl), _ai_plan_name(pl),
 			st["gebaut"], st["superwaffen"], st["trupps"], st["erster_angriff"],
@@ -12386,7 +12846,7 @@ func _print_tournament_rows(tick: int) -> void:
 			st["gebaut_fahrzeuge"], st["gebaut_infanterie"], st["gebaut_luft"], st["gebaut_schiffe"], st["armee_land"], st["armee_marine"],
 			st["t_raffinerie"], st["t_kaserne"], st["t_fabrik"], st["t_radar"], st["insel"], st["bauhoefe"], st["see_luft_gebaeude"],
 			st["t_gefunden"], st["aufklaerung"], st["landungen"], st["t_landung"], st["gelandet"],
-			st["boote_verloren"], st["landung_kontakt"]])
+			st["boote_verloren"], st["landung_kontakt"]] + tempo)
 
 
 func _print_commander_end(tick: int) -> void:
@@ -12508,6 +12968,10 @@ func _run_test_ai() -> void:
 		_ai_attacked = true
 		print("T%d Angriff: eigene Einheiten %d → %d" % [tick, _ai_alive, alive])
 	_ai_alive = mini(_ai_alive, alive) if _ai_attacked else alive
+
+	if ProtoWorld.next_sparring and world.win_state() != 0 and tick < _test_ai_until:
+		_test_ai_until = tick
+		_test_tick = tick - 1000
 	if _test_ai_audit and tick >= _audit_tick + 60:
 		_audit_tick = tick
 		_ai_audit("T%d" % tick)
@@ -12519,7 +12983,7 @@ func _run_test_ai() -> void:
 
 		var per := {}
 		for u in world.units:
-			if u.alive and u.player != 0 and u.player != ProtoWorld.PLAYER_NEUTRAL and u.player != ProtoWorld.PLAYER_CREEPS:
+			if u.alive and (u.player != 0 or ProtoWorld.next_sparring) and u.player != ProtoWorld.PLAYER_NEUTRAL and u.player != ProtoWorld.PLAYER_CREEPS:
 				if not per.has(u.player):
 					per[u.player] = {}
 				per[u.player][u.type] = per[u.player].get(u.type, 0) + 1
@@ -12605,12 +13069,12 @@ func _run_test_ai() -> void:
 
 			if sim.has_method("harvester_info"):
 				for e in sim.harvester_info(int(pl)):
-					print("   KI%d Sammler %d (%d,%d) zustand=%s still=%d ballen=%d automat=%d faehrt=%d claim=%d proc=%d ziel=(%d,%d)" % [
+					print("   KI%d Sammler %d (%d,%d) zustand=%s still=%d ballen=%d automat=%d faehrt=%d claim=%d proc=%d ziel=(%d,%d) erreichbar=%d" % [
 						pl, int(e.get("id", -1)), int(e.get("x", -1)), int(e.get("y", -1)),
 						HARV_STATE_NAMES[clampi(int(e.get("zustand", 0)), 0, HARV_STATE_NAMES.size() - 1)],
 						int(e.get("still", 0)), int(e.get("ballen", 0)), int(e.get("automat", 0)),
 						int(e.get("faehrt", 0)), int(e.get("claim", -1)), int(e.get("proc", -1)),
-						int(e.get("ziel_x", -1)), int(e.get("ziel_y", -1))])
+						int(e.get("ziel_x", -1)), int(e.get("ziel_y", -1)), int(e.get("erreichbar", -1))])
 		if world.mission_api != null:
 			print("   Mission: Ziele ", world.mission_api.objectives.get(0, []), " Zeit ", world.mission_api.time_left, " Sieg ", world.win_state())
 		if tick >= mini(3000, _test_ai_until) and _screenshot_path != "" and not _ai_shot:
@@ -13506,6 +13970,10 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_autosave("pause")
 		return
+
+	if what == NOTIFICATION_WM_MOUSE_EXIT:
+		_hover_forget()
+		return
 	if what != NOTIFICATION_WM_GO_BACK_REQUEST:
 		return
 	_go_back()
@@ -13616,7 +14084,10 @@ var _radial_sticky := false
 
 
 func _desktop_force_fire(p: Vector2) -> void:
-	var wp := world.screen_to_world(p)
+	_force_fire_at(world.screen_to_world(p))
+
+
+func _force_fire_at(wp: Vector2) -> void:
 	var hit := world.pick_unit(wp, Dp.px(HIT_RADIUS_DP) / world.zoom)
 	if hit != null and world.selection_can_force_attack(hit) and world.order_attack(hit, true):
 		_toast(tr("toast.attacking") % [_type_label(hit.type), world.selection.size()])
@@ -13869,6 +14340,7 @@ func _process(delta: float) -> void:
 	_update_info()
 	if Desktop.has_keyboard():
 		_desktop_mouse_tick()
+		_update_hover_marker()
 	_edge_scroll(delta)
 	_step_pending_unload()
 	_tick_auto_build_bar(delta)
@@ -15796,3 +16268,448 @@ func _mp_shot(tag: String, who: String) -> void:
 	var path := "%s/%s-%s.png" % [_mp_shot_dir, tag, who]
 	get_viewport().get_texture().get_image().save_png(path)
 	print("Screenshot: ", path)
+
+
+var _om_step := 0
+var _om_tick := 0
+var _om_apc = null
+var _om_troop: Array = []
+var _om_foe_apc = null
+var _om_foe_troop: Array = []
+var _om_fail := 0
+var _om_cell := Vector2.ZERO
+var _om_drawn := 0
+var _om_msec := 0
+
+
+func _om_check(ok: bool, text: String) -> void:
+	print("T: ", "ok     " if ok else "FEHLER ", text)
+	if not ok:
+		_om_fail += 1
+
+
+func _run_test_order_marker() -> void:
+	if world == null or world.sim == null or world.order_marker == null:
+		return
+	var sim = world.sim
+	var mk: OrderMarker = world.order_marker
+	var tick: int = sim.tick()
+	if _om_step == 0 and tick >= 10:
+		var origin := Vector2i(10, 10)
+		var foe := Vector2i(-1, -1)
+		for u in world.units:
+			if u.alive and u.player == 0 and origin == Vector2i(10, 10):
+				origin = Vector2i(u.pos / ProtoWorld.CELL)
+			elif u.alive and u.player == 1 and foe.x < 0:
+				foe = Vector2i(u.pos / ProtoWorld.CELL)
+		if foe.x < 0:
+			foe = origin + Vector2i(30, 0)
+		_test_origin = origin
+		_om_apc = world.spawn_unit("apc", 0, origin + Vector2i(2, 2))
+		for i in 3:
+			var e = world.spawn_unit("e1", 0, origin + Vector2i(5 + i, 5))
+			if e != null:
+				_om_troop.append(e)
+		_om_foe_apc = world.spawn_unit("apc", 1, foe + Vector2i(2, 2))
+		for i in 2:
+			var e = world.spawn_unit("e1", 1, foe + Vector2i(4 + i, 4))
+			if e != null:
+				_om_foe_troop.append(e)
+		world.center_on((Vector2(origin) + Vector2(3, 3)) * ProtoWorld.CELL)
+		print("T: Befehlsmarke: MTW ", _om_apc != null, ", Infanterie ", _om_troop.size(),
+				", fremder MTW ", _om_foe_apc != null, ", fremde Infanterie ", _om_foe_troop.size())
+		_om_step = 1
+		_om_tick = tick
+	elif _om_step == 1 and tick >= _om_tick + 20:
+		var foe_ids := PackedInt32Array()
+		for e in _om_foe_troop:
+			foe_ids.append(e.id)
+
+		sim.order_enter_transport(foe_ids, _om_foe_apc.id)
+		NetOrders.apply(sim, 1, NetOrders.make(NetOrders.OP_ENTER_TRANSPORT, _om_foe_apc.id, 0, 0, 0, foe_ids))
+		_om_check(mk.count() == 0, "fremdes Einsteigen (Sim + NetOrders.apply) ohne Marke: %d" % mk.count())
+		world.select_units(_om_troop)
+		var bad: bool = world.order_enter_transport(_om_foe_apc)
+		_om_check(not bad and mk.count() == 0, "eigene Infanterie an fremden MTW abgewiesen, keine Marke: %s/%d" % [bad, mk.count()])
+		world.select_units(_om_troop)
+		var ok: bool = world.order_enter_transport(_om_apc)
+		_om_check(ok and mk.count(OrderMarker.ENTER, _om_apc) == 1 and mk.count() == 1,
+				"eigenes Einsteigen: Marke am MTW (%s, %d)" % [ok, mk.count(OrderMarker.ENTER, _om_apc)])
+
+		var seq: Array = [mk.frame_of(_om_apc, OrderMarker.ENTER)]
+		for i in 3:
+			mk.step(OrderMarker.FRAME_SEC + 0.001)
+			seq.append(mk.frame_of(_om_apc, OrderMarker.ENTER))
+		_om_check(seq == [0, 1, 2, 0], "Einsteigen: Zeigerbilder schreiten fort %s (erwartet [0, 1, 2, 0])" % [seq])
+		mk.step(OrderMarker.ENTER_SECONDS - mk.age_of(_om_apc, OrderMarker.ENTER) - 0.01)
+		_om_check(mk.count() == 1, "Einsteigen: kurz vor Ablauf (%.2f s) noch da" % OrderMarker.ENTER_SECONDS)
+		mk.step(0.02)
+		_om_check(mk.count() == 0, "Einsteigen: nach %.2f s verschwunden" % OrderMarker.ENTER_SECONDS)
+		_om_step = 2
+		_om_tick = tick
+	elif _om_step == 2 and tick >= _om_tick + 400:
+		_om_check(_om_apc.passengers == _om_troop.size(), "an Bord %d von %d" % [_om_apc.passengers, _om_troop.size()])
+
+		NetOrders.apply(sim, 1, NetOrders.make(NetOrders.OP_UNLOAD, 0, 0, 0, 0, PackedInt32Array([_om_foe_apc.id])))
+		_om_check(mk.count() == 0, "fremdes Entladen ohne Marke: %d" % mk.count())
+
+		world.select_only(_om_apc)
+		_om_cell = (Vector2(_test_origin) + Vector2(9.5, 2.5)) * ProtoWorld.CELL
+		_begin_unload_at(_om_cell)
+		_om_check(mk.count() == 0, "Entladen hier: beim Losfahren noch keine Marke")
+		_om_step = 3
+		_om_tick = tick
+	elif _om_step == 3:
+		if mk.count(OrderMarker.UNLOAD, _om_apc) == 1:
+			_om_check(not _om_apc.moving and _om_apc.pos.distance_to(_om_cell) <= ProtoWorld.CELL * 1.9,
+					"Entladen hier: Marke beim Absetzen nach %d Ticks, %.1f Zellen vom Ziel" % [
+					tick - _om_tick, _om_apc.pos.distance_to(_om_cell) / ProtoWorld.CELL])
+			_om_drawn = mk.drawn
+			_om_step = 4
+			_om_tick = tick
+		elif tick > _om_tick + 800:
+			_om_check(false, "Entladen hier: keine Marke nach 800 Ticks")
+			_om_step = 4
+			_om_tick = tick
+	elif _om_step == 4 and tick >= _om_tick + 200:
+		_om_check(mk.drawn > _om_drawn, "Marke wurde gezeichnet (%d Zeichenläufe)" % (mk.drawn - _om_drawn))
+		var out := 0
+		for e in _om_troop:
+			if e.alive and sim.transport_of(e.id) < 0:
+				out += 1
+		_om_check(out == _om_troop.size(), "Entladen hier: ausgestiegen %d von %d" % [out, _om_troop.size()])
+		world.select_units(_om_troop)
+		world.order_enter_transport(_om_apc)
+		_om_step = 5
+		_om_tick = tick
+	elif _om_step == 5 and tick >= _om_tick + 400:
+		world.select_only(_om_apc)
+		var ok: bool = world.unload_selected()
+		_om_check(ok and mk.count(OrderMarker.UNLOAD, _om_apc) == 1, "Entladen (Aktionsleiste): Marke am MTW (%s)" % ok)
+		var seq: Array = [mk.frame_of(_om_apc, OrderMarker.UNLOAD)]
+		for i in 9:
+			mk.step(OrderMarker.FRAME_SEC + 0.001)
+			seq.append(mk.frame_of(_om_apc, OrderMarker.UNLOAD))
+		_om_check(seq == [0, 1, 2, 3, 4, 5, 6, 7, 8, 0], "Entladen: Zeigerbilder %s (erwartet 0..8, dann 0)" % [seq])
+		mk.step(OrderMarker.UNLOAD_SECONDS)
+		_om_check(mk.count() == 0, "Entladen: nach %.2f s verschwunden" % OrderMarker.UNLOAD_SECONDS)
+
+		world.select_only(_om_troop[0])
+		_om_check(not world.unload_selected() and mk.count() == 0, "Entladen ohne Transporter: keine Marke")
+		_om_step = 6
+		_om_tick = tick
+	elif _om_step == 6 and tick >= _om_tick + 200:
+
+		world.flash_enter(_om_apc)
+		_om_check(mk.count(OrderMarker.ENTER, _om_apc) == 1, "Marke vor dem Zerstören gesetzt")
+		_om_msec = Time.get_ticks_msec()
+		sim.destroy(_om_apc.id)
+		_om_step = 7
+		_om_tick = tick
+	elif _om_step == 7:
+		if mk.count() == 0:
+			var ms := Time.get_ticks_msec() - _om_msec
+			_om_check(not _om_apc.alive and ms < int(OrderMarker.ENTER_SECONDS * 1000.0),
+					"Tod des MTW: Marke nach %d ms weg (Ablauf erst nach %d ms), alive=%s" % [
+					ms, int(OrderMarker.ENTER_SECONDS * 1000.0), _om_apc.alive])
+			_om_step = 8
+		elif tick > _om_tick + 100:
+			_om_check(false, "Tod des MTW: Marke nach 100 Ticks noch da")
+			_om_step = 8
+	elif _om_step == 8:
+		_om_step = 9
+		print("T: Befehlsmarke fertig, %d Fehler" % _om_fail)
+		get_tree().quit()
+
+
+func _run_test_hover_enter() -> void:
+	while world == null or world.sim == null:
+		await get_tree().process_frame
+	while world.sim.tick() < 10:
+		await get_tree().process_frame
+	var sim = world.sim
+	var mk: OrderMarker = world.order_marker
+	var fehler := 0
+	var st := {"f": 0}
+	var art := func(k: int) -> String:
+		return "ENTER" if k == OrderMarker.ENTER else ("UNLOAD" if k == OrderMarker.UNLOAD else "keine")
+	if not Desktop.has_keyboard():
+		print("T: --test-hover-enter kein Desktop, uebersprungen")
+		get_tree().quit()
+		return
+
+	get_window().size = Vector2i(1280, 720)
+	if _menu_panel != null and _menu_panel.visible:
+		_toggle_menu(false)
+	build_bar.visible = false
+	for _f in 3:
+		await get_tree().process_frame
+	var vs := get_viewport().get_visible_rect().size
+	var o := _place_test_fact()
+	sim.give_credits(0, 20000)
+	sim.set_enemy(0, 1, true)
+	sim.set_enemy(1, 0, true)
+	var e1 = world.spawn_unit("e1", 0, o + Vector2i(6, 2))
+	var e1b = world.spawn_unit("e1", 0, o + Vector2i(6, 4))
+	var e1c = world.spawn_unit("e1", 0, o + Vector2i(7, 5))
+	var apc = world.spawn_unit("apc", 0, o + Vector2i(9, 2))
+	var voll = world.spawn_unit("apc", 0, o + Vector2i(13, 2))
+	var fracht: Array = []
+	for i in 5:
+		var f = world.spawn_unit("e1", 0, o + Vector2i(12 + i, 4))
+		if f != null:
+			fracht.append(f)
+	var harv = world.spawn_unit("harv", 0, o + Vector2i(6, 9))
+	var proc = world.call("_add_building", "proc", 0, o + Vector2i(9, 7))
+	var e6 = world.spawn_unit("e6", 0, o + Vector2i(4, 4))
+	var heil = world.spawn_unit("2tnk", 0, o + Vector2i(15, 8))
+	var wund = world.spawn_unit("2tnk", 0, o + Vector2i(17, 8), -1, 50)
+	var fix = world.call("_add_building", "fix", 0, o + Vector2i(15, 11))
+	var foe_cell := o + Vector2i(2, -9)
+	var foe = world.call("_add_building", "barr", 1, foe_cell)
+	sim.reveal(0, foe_cell.x, foe_cell.y, 8)
+	if e1 == null or e1b == null or e1c == null or apc == null or voll == null or fracht.size() < 5 or harv == null or proc == null \
+			or e6 == null or heil == null or wund == null or fix == null or foe == null:
+		print("T: --test-hover-enter Aufbau unvollstaendig (e1=%s apc=%s voll=%s fracht=%d harv=%s proc=%s e6=%s 2tnk=%s/%s fix=%s barr=%s) FEHLER" % [
+				e1 != null, apc != null, voll != null, fracht.size(), harv != null, proc != null,
+				e6 != null, heil != null, wund != null, fix != null, foe != null])
+		get_tree().quit()
+		return
+
+	world.select_units(fracht)
+	world.order_enter_transport(voll)
+	var ist_voll: bool = await _tap_o_wait(func() -> bool: return voll.passengers >= voll.cargo_max and voll.cargo_max > 0, 900)
+	world.clear_selection()
+	mk.step(10.0)
+	print("T: --test-hover-enter Aufbau: voller MTW %d/%d (%s), Sammler %s, Raffinerie %s, Depot %s" % [
+			voll.passengers, voll.cargo_max, ist_voll, harv.type, proc.type, fix.type])
+
+
+	var stelle := func(ziel: Vector2) -> Vector2:
+		var frei: Vector2 = vs * 0.5
+		for k in [vs * 0.5, Vector2(vs.x * 0.5, vs.y * 0.35), Vector2(vs.x * 0.35, vs.y * 0.5),
+				Vector2(vs.x * 0.6, vs.y * 0.4)]:
+			if not _over_hud(k):
+				frei = k
+				break
+		world.center_on(ziel + (vs * 0.5 - frei) / world.zoom)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		return world.world_to_screen(ziel)
+	var maus := func(p: Vector2) -> void:
+		var mm := InputEventMouseMotion.new()
+		mm.position = p
+		mm.global_position = p
+		Input.parse_input_event(mm)
+		for _f in 3:
+			await get_tree().process_frame
+
+
+	var fall := func(name: String, auswahl: Array, ziel: Vector2, soll: int, an) -> Vector2:
+		world.select_units(auswahl)
+		var p: Vector2 = await stelle.call(ziel)
+		await maus.call(p)
+		var ist: int = mk.hover_kind()
+		var ok: bool = ist == soll and (soll < 0 or mk.hover_unit() == an)
+		if not ok:
+			st["f"] += 1
+		print("T: --test-hover-enter %s: Marke %s (erwartet %s)%s, Stelle %s HUD-frei=%s - %s" % [
+				name, art.call(ist), art.call(soll),
+				"" if soll < 0 else (" am Ziel=%s" % (mk.hover_unit() == an)), p, not _over_hud(p),
+				"OK" if ok else "FEHLER"])
+		return p
+	var boden: Vector2 = _tap_o_free_spot(o)
+
+	var kam: bool = _hover_has_pos
+	await maus.call(vs * 0.5)
+	if not _hover_has_pos:
+		fehler += 1
+	print("T: --test-hover-enter Mausbewegung kommt headless an: vorher=%s nachher=%s - %s" % [
+			kam, _hover_has_pos, "OK" if _hover_has_pos else "FEHLER"])
+
+	var p_apc: Vector2 = await fall.call("1 Infanterist ueber MTW mit Platz", [e1], apc.pos, OrderMarker.ENTER, apc)
+
+	mk.step(OrderMarker.ENTER_SECONDS * 3.0)
+	for _f in 8:
+		await get_tree().process_frame
+	var bleibt: bool = mk.hover_kind(apc) == OrderMarker.ENTER and mk.count() == 0
+	fehler += 0 if bleibt else 1
+	print("T: --test-hover-enter 1b Vorschau bleibt stehen (nach %.1f s noch da, kein Blitz): %s - %s" % [
+			OrderMarker.ENTER_SECONDS * 3.0, bleibt, "OK" if bleibt else "FEHLER"])
+	await fall.call("2 Infanterist ueber vollem MTW", [e1], voll.pos, -1, null)
+	await fall.call("3 Infanterist ueber Gegnergebaeude", [e1], foe.pos, -1, null)
+	await fall.call("4 Infanterist ueber leerem Gelaende", [e1], boden, -1, null)
+	await fall.call("5 Sammler ueber eigener Raffinerie", [harv], proc.pos, OrderMarker.ENTER, proc)
+	await fall.call("6 Infanterist ueber eigener Raffinerie", [e1], proc.pos, -1, null)
+	await fall.call("7 Pionier ueber Gegnergebaeude", [e6], foe.pos, OrderMarker.ENTER, foe)
+	print("T: --test-hover-enter 7 Pionier: enter_kind=%d, nur Sabotage=%s (dieselbe Marke)" % [
+			world.enter_kind(foe), world.enter_sabotages(foe)])
+	if world.enter_kind(foe) == 0:
+		fehler += 1
+	await fall.call("8 beschaedigter Panzer ueber Reparaturdepot", [wund], fix.pos, OrderMarker.ENTER, fix)
+	await fall.call("9 heiler Panzer ueber Reparaturdepot", [heil], fix.pos, -1, null)
+	await fall.call("10 gewaehlter voller MTW unter dem Zeiger (Entladen)", [voll], voll.pos, OrderMarker.UNLOAD, voll)
+	await fall.call("11 gewaehlter leerer MTW unter dem Zeiger", [apc], apc.pos, -1, null)
+
+
+	p_apc = await fall.call("12a Infanterist ueber MTW", [e1], apc.pos, OrderMarker.ENTER, apc)
+	world.clear_selection()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var weg12: bool = mk.hover_kind() < 0
+	world.select_units([e1])
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var da12: bool = mk.hover_kind(apc) == OrderMarker.ENTER
+	fehler += 0 if (weg12 and da12) else 1
+	print("T: --test-hover-enter 12 Auswahl aufgehoben: Marke weg=%s, wieder gewaehlt: Marke da=%s - %s" % [
+			weg12, da12, "OK" if (weg12 and da12) else "FEHLER"])
+
+
+	await maus.call(world.world_to_screen(boden))
+	var weg13: bool = mk.hover_kind() < 0
+	fehler += 0 if weg13 else 1
+	print("T: --test-hover-enter 13 Zeiger verlaesst das Ziel: Marke weg=%s - %s" % [weg13, "OK" if weg13 else "FEHLER"])
+
+
+	await maus.call(p_apc)
+	var da14: bool = mk.hover_kind(apc) == OrderMarker.ENTER
+	_order_mode = "move"
+	await get_tree().process_frame
+	var s_modus: bool = mk.hover_kind() < 0
+	_order_mode = ""
+	await get_tree().process_frame
+	var zurueck: bool = mk.hover_kind(apc) == OrderMarker.ENTER
+	_boxing = true
+	await get_tree().process_frame
+	var s_rahmen: bool = mk.hover_kind() < 0
+	_boxing = false
+	_toggle_menu(true)
+	await get_tree().process_frame
+	var s_menu: bool = mk.hover_kind() < 0
+	_toggle_menu(false)
+	radial.visible = true
+	await get_tree().process_frame
+	var s_ring: bool = mk.hover_kind() < 0
+	radial.visible = false
+	await get_tree().process_frame
+	_force_touch = true
+	await maus.call(p_apc)
+	var s_touch: bool = mk.hover_kind() < 0
+	_force_touch = false
+	await maus.call(p_apc)
+	var da14b: bool = mk.hover_kind(apc) == OrderMarker.ENTER
+
+	var finger := InputEventScreenTouch.new()
+	finger.index = 1
+	finger.pressed = true
+	finger.position = p_apc
+	_input(finger)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var s_finger: bool = mk.hover_kind() < 0 and not _hover_has_pos
+	await maus.call(p_apc)
+	var da14d: bool = mk.hover_kind(apc) == OrderMarker.ENTER
+	notification(NOTIFICATION_WM_MOUSE_EXIT)
+	for _f in 8:
+		await get_tree().process_frame
+	var s_exit: bool = mk.hover_kind() < 0
+	var ok14: bool = da14 and s_modus and zurueck and s_rahmen and s_menu and s_ring and s_touch and da14b \
+			and s_finger and da14d and s_exit
+	fehler += 0 if ok14 else 1
+	print("T: --test-hover-enter 14 Sperren: Zielwahl=%s (danach wieder da=%s), Rahmen=%s, Pausenmenue=%s, Ring=%s, Fingermodell=%s, echter Finger=%s, Fenster verlassen=%s; dazwischen wieder da=%s/%s/%s - %s" % [
+			s_modus, zurueck, s_rahmen, s_menu, s_ring, s_touch, s_finger, s_exit,
+			da14, da14b, da14d, "OK" if ok14 else "FEHLER"])
+
+
+	world.select_units([e1])
+	world.center_on(apc.pos)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var unter := Vector2(-1, -1)
+	var apc_hud = null
+	for y in range(8, int(vs.y), 24):
+		for x in range(8, int(vs.x), 24):
+			if apc_hud != null or not _hud_button_at(Vector2(x, y)):
+				continue
+			var zelle := Vector2i((world.screen_to_world(Vector2(x, y)) / ProtoWorld.CELL).floor())
+			var kandidat = world.spawn_unit("apc", 0, zelle)
+			if kandidat == null:
+				continue
+			await get_tree().process_frame
+			var q := Vector2(x, y)
+			if world.pick_unit(world.screen_to_world(q), Dp.px(HIT_RADIUS_DP) / world.zoom) == kandidat:
+				apc_hud = kandidat
+				unter = q
+			else:
+				sim.destroy(kandidat.id)
+	if apc_hud == null:
+		print("T: --test-hover-enter 15 kein HUD-Knopf, unter den ein MTW passt, uebersprungen")
+	else:
+		await maus.call(unter)
+		var ohne: bool = mk.hover_kind() < 0
+
+		$UI.visible = false
+		await maus.call(unter + Vector2(1, 0))
+		var mit: bool = mk.hover_kind(apc_hud) == OrderMarker.ENTER
+		$UI.visible = true
+		var ok15: bool = ohne and mit
+		fehler += 0 if ok15 else 1
+		print("T: --test-hover-enter 15 Zeiger ueber HUD-Knopf %s, MTW liegt darunter: keine Marke=%s, HUD ausgeblendet: Marke da=%s - %s" % [
+				unter, ohne, mit, "OK" if ok15 else "FEHLER"])
+		sim.destroy(apc_hud.id)
+		await get_tree().process_frame
+
+
+	mk.step(10.0)
+	var p16: Vector2 = await fall.call("16 Gegenprobe Infanterist ueber vollem MTW", [e1c], voll.pos, -1, null)
+	var vorher: int = mk.count()
+	_on_tap(p16)
+	var ok16: bool = mk.count() == vorher
+	fehler += 0 if ok16 else 1
+	print("T: --test-hover-enter 16 Klick ohne Vorschau blitzt nicht: %s (%s) - %s" % [ok16, _last_gesture, "OK" if ok16 else "FEHLER"])
+
+
+	var paare: Array = [["Einsteigen", [e1b], apc, OrderMarker.ENTER], ["Abliefern", [harv], proc, OrderMarker.ENTER],
+			["Reparaturdepot", [wund], fix, OrderMarker.ENTER], ["Entladen", [voll], voll, OrderMarker.UNLOAD]]
+	for paar in paare:
+		var z = paar[2]
+		mk.step(10.0)
+		var p17: Vector2 = await fall.call("17 %s Vorschau" % paar[0], paar[1], z.pos, paar[3], z)
+		_on_tap(p17)
+		var blitz: int = mk.count(paar[3], z)
+		fehler += 0 if blitz == 1 else 1
+		print("T: --test-hover-enter 17 %s Klick: Blitz am selben Actor=%d - %s" % [
+				paar[0], blitz, "OK" if blitz == 1 else "FEHLER"])
+
+
+	mk.step(10.0)
+	var p18: Vector2 = await fall.call("18 Vorschau vor dem echten Klick", [e1], apc.pos, OrderMarker.ENTER, apc)
+	var mb := InputEventMouseButton.new()
+	mb.button_index = MOUSE_BUTTON_LEFT
+	mb.pressed = true
+	mb.button_mask = MOUSE_BUTTON_MASK_LEFT
+	mb.position = p18
+	mb.global_position = p18
+	Input.parse_input_event(mb)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var s_taste: bool = mk.hover_kind() < 0
+	var mb2 := InputEventMouseButton.new()
+	mb2.button_index = MOUSE_BUTTON_LEFT
+	mb2.pressed = false
+	mb2.position = p18
+	mb2.global_position = p18
+	Input.parse_input_event(mb2)
+	for _f in 3:
+		await get_tree().process_frame
+	var blitz18: int = mk.count(OrderMarker.ENTER, apc)
+	fehler += 0 if s_taste else 1
+	print("T: --test-hover-enter 18 gedrueckte Taste: Vorschau weg=%s (Tastenmaske %d) - %s" % [
+			s_taste, Input.get_mouse_button_mask(), "OK" if s_taste else "FEHLER"])
+	print("T: --test-hover-enter 18 echter Klick: Blitz am MTW=%d (%s) - %s" % [blitz18, _last_gesture,
+			"OK" if blitz18 == 1 else "HINWEIS (Klick kam headless nicht bis zur Gestenerkennung)"])
+
+	fehler += st["f"]
+	print("T: --test-hover-enter Ende: %d Fehler" % fehler)
+	get_tree().quit()

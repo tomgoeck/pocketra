@@ -187,7 +187,7 @@ def map_rules_override(extras: dict[str, str], mod: Path, campaign: bool) -> dic
                 act = extract_actor(name, r, b["seqs"], b["fluent"])
 
 
-                apply_actor_balance(act)
+                apply_actor_balance(act, campaign=campaign)
 
 
                 at = r.child("AutoTarget")

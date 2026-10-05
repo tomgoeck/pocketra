@@ -50,6 +50,13 @@ SPALTEN = [
 
 
     "landungen", "t_landung", "gelandet", "boote_verloren", "landung_kontakt",
+
+
+    "armee_m4", "armee_m8", "armee_m12", "sammler_m4", "sammler_m8", "ertrag_m8", "wellen_m12",
+    "t_raffinerie2", "kasse_mittel", "gebaeudeschaden", "gebaeude_zerstoert", "sieg",
+
+
+    "erobert", "pioniere_verbraucht",
 ]
 
 
@@ -76,6 +83,12 @@ TITEL = {
     "t_gefunden": ("gefunden", 10), "aufklaerung": ("Aufkl.", 8),
     "landungen": ("Landungen", 11), "t_landung": ("1. Landung", 12), "gelandet": ("gelandet", 10),
     "boote_verloren": ("Boote weg", 11), "landung_kontakt": ("Landkontakt", 13),
+    "armee_m4": ("Armee M4", 10), "armee_m8": ("Armee M8", 10), "armee_m12": ("Armee M12", 11),
+    "sammler_m4": ("Samml.M4", 10), "sammler_m8": ("Samml.M8", 10), "ertrag_m8": ("Ertrag M8", 11),
+    "wellen_m12": ("Wellen M12", 12), "t_raffinerie2": ("2.Raff.", 9), "kasse_mittel": ("Kasse", 7),
+    "gebaeudeschaden": ("Geb.schaden", 13), "gebaeude_zerstoert": ("Geb.zerst.", 12),
+    "sieg": ("Ausgang", 9),
+    "erobert": ("erobert", 9), "pioniere_verbraucht": ("Pion.weg", 10),
 }
 
 
@@ -186,7 +199,8 @@ def schreibe_kommandeur(out: str, log_dir: Path, karte: str, strategien: list[st
 
 def run_match(godot: str, karte: str, strategien: list[str], seed: int, ticks: int,
               staerke: str, credits: int, verbose: bool, log_dir: Path | None = None,
-              einheiten: str = "") -> list[dict]:
+              einheiten: str = "", turbo: int = 0, sparring: bool = False,
+              roh: Path | None = None, param: str = "") -> list[dict]:
 
     args = [
         godot, "--headless", "--path", str(ROOT / "game"),
@@ -194,6 +208,8 @@ def run_match(godot: str, karte: str, strategien: list[str], seed: int, ticks: i
 
         "--quit-after", str(max(120000, ticks * 80)),
         "--",
+
+        "--no-update-pack",
         "--autostart", "--map", karte,
         "--ai", str(len(strategien)),
         "--seed", str(seed),
@@ -209,8 +225,18 @@ def run_match(godot: str, karte: str, strategien: list[str], seed: int, ticks: i
     if einheiten:
 
         args += ["--ai-unit-share", einheiten]
+    if turbo > 0:
+        args += ["--turbo", str(turbo)]
+    if sparring:
+        args += ["--sparring"]
+    if param:
+
+        args += ["--ai-param", param]
     proc = subprocess.run(args, capture_output=True, text=True, timeout=60 * 30)
     out = proc.stdout + proc.stderr
+    if roh is not None:
+        roh.parent.mkdir(parents=True, exist_ok=True)
+        roh.write_text(out, encoding="utf-8")
     if verbose:
         sys.stderr.write(out)
     if log_dir is not None:
@@ -247,6 +273,13 @@ def main() -> int:
     ap.add_argument("--einheiten", default="", metavar="TYP=ANTEIL,...",
                     help="Einheitenanteile aller KIs überschreiben, z. B. arty=300,v2rl=300 "
                          "(Belagerungsgegner erzwingen, docs/KI-LAYA.md §6.8)")
+    ap.add_argument("--turbo", type=int, default=0, metavar="N",
+                    help="je Bild N Sim-Ticks rechnen (gleiches Ergebnis, viel schneller; 25 ist ein guter Wert)")
+    ap.add_argument("--sparring", action="store_true",
+                    help="Sparringspartner auf Platz 0 (docs/KI-STRATEGIE.md §21); der Prüfstand "
+                         "dazu ist tools/ai_bench.py")
+    ap.add_argument("--param", default="", metavar="NAME=WERT,...",
+                    help="Stellschrauben aller KI-Plätze überschreiben, z. B. eco_first=0")
     ap.add_argument("--csv", default="", help="Ergebnisse zusätzlich als CSV ablegen")
     ap.add_argument("--laut", action="store_true", help="Godot-Ausgabe durchreichen")
     ap.add_argument("--ki-log", default=str(ROOT / "build" / "ai_log"),
@@ -272,7 +305,8 @@ def main() -> int:
         for seed in a.seeds:
             print(f"… {' gegen '.join(paar)} (Seed {seed}, {a.ticks} Ticks)", flush=True)
             alle += run_match(a.godot, a.karte, paar, seed, a.ticks, a.staerke, a.credits, a.laut,
-                              Path(a.ki_log) if a.ki_log else None, a.einheiten)
+                              Path(a.ki_log) if a.ki_log else None, a.einheiten, a.turbo, a.sparring,
+                              None, a.param)
 
     if not alle:
         print("Keine Ergebnisse.")

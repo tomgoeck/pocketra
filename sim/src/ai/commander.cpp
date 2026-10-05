@@ -860,6 +860,12 @@ void World::commander_perceive(int32_t pl, const BotParams& p, const CmdTrack& t
         s.enemy_class[c] = bot_level(cls[c], c >= EC_COMMANDO ? p.cmd_special_lv : p.cmd_class_lv);
     }
     for (int k = 0; k < 3; ++k) s.own_special[k] = bot_level(specials[k], p.cmd_special_lv);
+
+
+    {
+        const BotState& bs = players_[size_t(pl)].bot;
+        s.raw_engineer_op = (bs.enabled && bs.p.eng_plan > 0) ? bs.eng_ready : s.enemy_base_known;
+    }
     s.raw_own_defense[0] = ground_towers;
     s.raw_own_defense[1] = aa_towers;
     s.own_defense[0] = bot_level(ground_towers, p.cmd_tower_lv);
@@ -1034,7 +1040,9 @@ void World::commander_rules_v3(const BotSummary& s, const BotMapInfo& m, const B
     int64_t so[SO_COUNT] = {500, 0, 0, 0, 0};
     if (s.own_superweapon == SW_READY && s.enemy_base_known) so[SO_SUPERWEAPON_NOW] += 900;
     if (s.own_special[0] >= LV_LOW && s.enemy_soft >= LV_LOW) so[SO_COMMANDO_RAID] += 700;
-    if (s.own_special[1] >= LV_LOW && s.enemy_base_known) so[SO_ENGINEER_CAPTURE] += 600;
+
+
+    if (s.own_special[1] >= LV_LOW && s.raw_engineer_op > 0) so[SO_ENGINEER_CAPTURE] += 600;
     if (s.own_special[2] >= LV_LOW && s.enemy_base_known) so[SO_SPY_INFILTRATE] += 600;
     normalize(so, d.special_op);
 }

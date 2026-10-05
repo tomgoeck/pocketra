@@ -129,6 +129,7 @@ void RaSim::_bind_methods() {
     ClassDB::bind_method(D_METHOD("order_enter", "ids", "target_id"), &RaSim::order_enter);
     ClassDB::bind_method(D_METHOD("enter_kind_for", "id", "target_id"), &RaSim::enter_kind_for);
     ClassDB::bind_method(D_METHOD("enter_progress", "id"), &RaSim::enter_progress);
+    ClassDB::bind_method(D_METHOD("enter_would_sabotage", "id", "target_id"), &RaSim::enter_would_sabotage);
     ClassDB::bind_method(D_METHOD("order_disguise", "id", "target_id"), &RaSim::order_disguise);
     ClassDB::bind_method(D_METHOD("set_disguise", "id", "type", "owner"), &RaSim::set_disguise);
     ClassDB::bind_method(D_METHOD("order_demolish", "ids", "target_id"), &RaSim::order_demolish);
@@ -326,6 +327,8 @@ int RaSim::enter_kind_for(int id, int target_id) const {
     return (i < 0 || t < 0) ? int(ra::ENTER_NONE) : world_.enter_kind_for(size_t(i), size_t(t));
 }
 int RaSim::enter_progress(int id) const { return world_.enter_progress(id); }
+
+bool RaSim::enter_would_sabotage(int id, int target_id) const { return world_.enter_would_sabotage(id, target_id); }
 bool RaSim::order_disguise(int id, int target_id) { return world_.order_disguise(id, target_id); }
 bool RaSim::set_disguise(int id, int type, int owner) { return world_.set_disguise(id, type, owner); }
 void RaSim::order_demolish(const PackedInt32Array& ids, int target_id) { world_.order_enter(ids.ptr(), ids.size(), target_id, ra::ENTER_DEMOLISH); }
@@ -791,6 +794,9 @@ int RaSim::define_type(const Dictionary& def) {
     t.captures = bool(def.get("captures", false));
     t.capture_delay = int(def.get("capture_delay", 200));
     t.capture_types = uint32_t(int64_t(def.get("capture_types", 0)));
+
+    t.sabotage_threshold = int(def.get("sabotage_threshold", 0));
+    t.sabotage_hp_removal = int(def.get("sabotage_hp_removal", 50));
     t.capturable = bool(def.get("capturable", false));
     t.capturable_types = uint32_t(int64_t(def.get("capturable_types", 0)));
 
@@ -1366,6 +1372,38 @@ void RaSim::enable_bot(int owner, const Dictionary& params) {
     p.cmd_sector_min_damage = int(params.get("cmd_sector_min_damage", p.cmd_sector_min_damage));
     p.cmd_special_min_ticks = int(params.get("cmd_special_min_ticks", p.cmd_special_min_ticks));
     p.cmd_counter_enabled = int(params.get("cmd_counter_enabled", p.cmd_counter_enabled));
+
+    p.sparring = int(params.get("sparring", p.sparring));
+    p.sparring_harvesters = int(params.get("sparring_harvesters", p.sparring_harvesters));
+    p.sparring_first_wave_tick = int(params.get("sparring_first_wave_tick", p.sparring_first_wave_tick));
+    p.sparring_first_wave_units = int(params.get("sparring_first_wave_units", p.sparring_first_wave_units));
+    p.sparring_first_wave_late = int(params.get("sparring_first_wave_late", p.sparring_first_wave_late));
+    p.sparring_wave_interval = int(params.get("sparring_wave_interval", p.sparring_wave_interval));
+    p.sparring_towers = int(params.get("sparring_towers", p.sparring_towers));
+    p.sparring_infantry = int(params.get("sparring_infantry", p.sparring_infantry));
+
+    p.opening_depot = int(params.get("opening_depot", p.opening_depot));
+    p.harvesters_floor = int(params.get("harvesters_floor", p.harvesters_floor));
+    p.harvesters_floor_max = int(params.get("harvesters_floor_max", p.harvesters_floor_max));
+    p.eco_first = int(params.get("eco_first", p.eco_first));
+    p.eco_first_until = int(params.get("eco_first_until", p.eco_first_until));
+    p.opening_infantry = int(params.get("opening_infantry", p.opening_infantry));
+    p.army_min_value = int(params.get("army_min_value", p.army_min_value));
+    p.tank_percent = int(params.get("tank_percent", p.tank_percent));
+    p.attack_min_value = int(params.get("attack_min_value", p.attack_min_value));
+    p.opening_rich_cash = int(params.get("opening_rich_cash", p.opening_rich_cash));
+    p.wave_grow_percent = int(params.get("wave_grow_percent", p.wave_grow_percent));
+    p.counterattack_peak = int(params.get("counterattack_peak", p.counterattack_peak));
+    p.eco_surplus_cash = int(params.get("eco_surplus_cash", p.eco_surplus_cash));
+
+    p.eng_plan = int(params.get("eng_plan", p.eng_plan));
+    p.eng_single_max = int(params.get("eng_single_max", p.eng_single_max));
+    p.eng_pack_max = int(params.get("eng_pack_max", p.eng_pack_max));
+    p.eng_pack_min_value = int(params.get("eng_pack_min_value", p.eng_pack_min_value));
+    p.eng_pack_cash = int(params.get("eng_pack_cash", p.eng_pack_cash));
+    p.eng_pack_apc = int(params.get("eng_pack_apc", p.eng_pack_apc));
+
+    p.structure_active_delay = int(params.get("structure_active_delay", p.structure_active_delay));
     {
 
         static const char* LV_KEYS[11] = {"cmd_credits_lv", "cmd_army_lv", "cmd_aa_lv", "cmd_loss_lv",
@@ -1852,6 +1890,24 @@ Dictionary RaSim::bot_stats(int owner) {
     d["gelandet"] = int(b.stat_landed_units);
     d["boote_verloren"] = int(b.stat_boats_lost);
     d["landung_kontakt"] = int(b.stat_landing_contacts);
+
+
+    d["armee_m4"] = int(b.stat_army_at[0]);
+    d["armee_m8"] = int(b.stat_army_at[1]);
+    d["armee_m12"] = int(b.stat_army_at[2]);
+    d["sammler_m4"] = int(b.stat_harv_at[0]);
+    d["sammler_m8"] = int(b.stat_harv_at[1]);
+    d["sammler"] = int(b.stat_harv_now);
+    d["raffinerien"] = int(b.stat_refineries_now);
+    d["ertrag_m8"] = int(b.stat_earned_at8);
+    d["wellen_m12"] = int(b.stat_waves_at12);
+    d["t_raffinerie2"] = int(b.stat_t_refinery2);
+    d["kasse_mittel"] = int(b.stat_tempo_cash_samples > 0 ? b.stat_tempo_cash_sum / b.stat_tempo_cash_samples : 0);
+    d["gebaeudeschaden"] = int(std::min<int64_t>(b.stat_bldg_damage / 100, INT32_MAX));
+    d["gebaeude_zerstoert"] = int(b.stat_bldg_kills);
+
+    d["erobert"] = int(b.stat_eng_captured);
+    d["pioniere_verbraucht"] = int(b.stat_eng_spent);
     return d;
 }
 
@@ -1910,6 +1966,16 @@ Array RaSim::harvester_info(int owner) const {
         d["ziel_x"] = int(h.target.x);
         d["ziel_y"] = int(h.target.y);
         d["faehrt"] = int(world_.mobile(i).moving ? 1 : 0);
+
+
+        int reachable = -1;
+        if (h.target.x >= 0 && h.target.y >= 0) {
+            std::vector<uint8_t> reach;
+            world_.bot_land_reach(world_.mobile(i).cell, reach);
+            const int64_t idx = int64_t(h.target.y) * world_.map().width() + h.target.x;
+            reachable = (idx >= 0 && size_t(idx) < reach.size() && reach[size_t(idx)] != 0) ? 1 : 0;
+        }
+        d["erreichbar"] = reachable;
         out.push_back(d);
     }
     return out;

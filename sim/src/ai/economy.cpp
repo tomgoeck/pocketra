@@ -64,6 +64,63 @@ static int32_t defense_role_of(const std::vector<Weapon>& weapons, const UnitTyp
 }
 
 
+int32_t World::bot_best_tank(int32_t owner) const {
+    const BotParams& p = players_[size_t(owner)].bot.p;
+    int32_t best = -1, best_share = -1;
+    for (size_t t = 0; t < types_.size(); ++t) {
+        const UnitType& ut = types_[t];
+        if (ut.queue_kind != QUEUE_VEHICLE || ut.cost <= 0 || ut.harvester || ut.transforms_into >= 0) continue;
+        const int32_t share = t < p.unit_share.size() ? p.unit_share[t] : ut.ai_unit_share;
+        if (share < 0 || bot_role_of_type(t) != ROLE_TANK) continue;
+        if (item_hidden(owner, int32_t(t))) continue;
+        if (best < 0 || share > best_share || (share == best_share && ut.cost > types_[size_t(best)].cost)) {
+            best = int32_t(t);
+            best_share = share;
+        }
+    }
+    return best;
+}
+
+
+int32_t World::bot_tank_prereq(int32_t owner, const std::vector<int32_t>& buildable_list,
+                               const std::vector<int32_t>& count) const {
+    const int32_t tank = bot_best_tank(owner);
+    if (tank < 0 || prerequisites_met(owner, tank)) return -1;
+    return bot_prereq_building(owner, tank, buildable_list, count, 1);
+}
+
+
+int32_t World::bot_tank_value(int32_t owner) const {
+    int64_t sum = 0;
+    for (const Actor& a : actors_) {
+        if (!a.alive || a.owner != owner) continue;
+        const UnitType& t = types_[a.type];
+        if (t.building || t.husk || t.harvester || t.weapon < 0 || t.queue_kind != QUEUE_VEHICLE) continue;
+        sum += t.cost;
+    }
+    return int32_t(std::min<int64_t>(sum, INT32_MAX));
+}
+
+
+bool World::bot_eco_hold(int32_t owner) const {
+    const BotState& b = players_[size_t(owner)].bot;
+    const BotParams& p = b.p;
+    if (p.eco_first <= 0 || int32_t(tick_) >= p.eco_first_until) return false;
+    if (bot_attacked_recently(owner)) return false;
+    if (bot_land_isolated(owner)) return false;
+    return bot_tank_value(owner) < p.army_min_value;
+}
+
+
+int32_t World::bot_harvester_floor(int32_t owner, int32_t refineries) const {
+    const BotParams& p = players_[size_t(owner)].bot.p;
+    if (p.harvesters_floor <= 1 || bot_land_isolated(owner)) return std::max(1, refineries);
+    int32_t want = refineries * std::max(1, p.harvesters_floor);
+    if (p.harvesters_floor_max > 0) want = std::min(want, std::max(p.harvesters_floor_max, refineries));
+    return std::max(want, std::max(1, refineries));
+}
+
+
 int32_t World::bot_harvester_target(int32_t owner) const {
     const BotState& b = players_[size_t(owner)].bot;
     const BotParams& p = b.p;
@@ -82,7 +139,8 @@ int32_t World::bot_harvester_target(int32_t owner) const {
     const int64_t cap = int64_t(refineries) * std::max(1, p.harvesters_per_refinery) + fix;
 
 
-    const int64_t floor_want = std::min(cap, int64_t(refineries) + std::max(0, p.harvesters_extra) + fix);
+    const int64_t floor_want = std::min(cap, std::max(int64_t(refineries) + std::max(0, p.harvesters_extra),
+                                                     int64_t(bot_harvester_floor(owner, refineries))) + fix);
 
     if (b.resource_map.empty()) return int32_t(floor_want);
 
@@ -485,14 +543,18 @@ int32_t World::bot_defense_request(int32_t owner, const std::vector<int32_t>& bu
     if (bot_opening_hold_defense(owner)) return -1;
 
 
-    const bool below_base = towers * per_buildings < buildings &&
+    const bool eco_hold = bot_eco_hold(owner);
+
+
+    const bool below_base = !eco_hold && towers * per_buildings < buildings &&
                             !(towers >= 1 && bot_air_first_hold_towers(owner));
 
     const int32_t want_aa = bot_defense_aa_target(owner);
 
 
     const int64_t budget_cmd = int64_t(bot_defense_budget(owner)) * std::max(0, players_[size_t(owner)].bot.cmd_mods.defense) / 100;
-    const int32_t ground_want = std::max(int32_t(std::min<int64_t>(budget_cmd, INT32_MAX)), bot_defense_army_floor(owner));
+    const int32_t ground_want = std::max(int32_t(std::min<int64_t>(budget_cmd, INT32_MAX)),
+                                         eco_hold ? 0 : bot_defense_army_floor(owner));
     const bool below_budget = bot_defense_firepower(owner, false) < ground_want;
     const bool below_aa = have[DEF_ANTI_AIR] < want_aa;
     if (!below_base && !below_budget && !below_aa) return -1;
@@ -538,6 +600,9 @@ void World::bot_log_attack(int32_t owner, size_t victim, size_t attacker) {
     const int32_t add = bot_firepower_of(attacker) >> BOT_ATTACK_LOG_SHIFT;
     if (add <= 0) return;
     b.attack_sum = int32_t(std::min<int64_t>(int64_t(b.attack_sum) + add, INT32_MAX));
+
+
+    if (b.p.counterattack_peak != 0) b.attack_peak = std::max(b.attack_peak, b.attack_sum);
     if (b.tm_cols <= 0 || b.tm_side <= 0) return;
     if (b.attack_heat.size() != size_t(b.tm_cols) * size_t(b.tm_rows))
         b.attack_heat.assign(size_t(b.tm_cols) * size_t(b.tm_rows), 0);
@@ -556,6 +621,9 @@ void World::bot_attack_decay(int32_t owner) {
     if (--b.attack_decay_ticks > 0) return;
     b.attack_decay_ticks = BOT_ATTACK_DECAY_INTERVAL;
     b.attack_sum = int32_t(int64_t(b.attack_sum) * BOT_ATTACK_DECAY_NUM / BOT_ATTACK_DECAY_DEN);
+
+
+    if (b.p.counterattack_peak != 0 && b.attack_peak > 0 && b.attack_sum * 8 < b.attack_peak) b.attack_peak = 0;
     for (int32_t& v : b.attack_heat) v = int32_t(int64_t(v) * BOT_ATTACK_DECAY_NUM / BOT_ATTACK_DECAY_DEN);
 }
 

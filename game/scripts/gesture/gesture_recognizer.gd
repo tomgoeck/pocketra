@@ -9,6 +9,9 @@ signal long_press(pos: Vector2)
 signal long_press_moved(pos: Vector2)
 signal long_press_ended(pos: Vector2)
 signal long_press_cancelled()
+
+
+signal mouse_hold(pos: Vector2)
 signal drag_started(pos: Vector2)
 signal drag_updated(pos: Vector2)
 signal drag_ended(pos: Vector2)
@@ -32,6 +35,9 @@ var input_blocked := false
 
 
 var mouse_long_press := true
+
+var hold_consumed := false
+var _held := false
 var _fingers := {}
 var _press_emulated := false
 var _press_pos := Vector2.ZERO
@@ -64,10 +70,15 @@ func _unhandled_input(e: InputEvent) -> void:
 
 
 func _process(_delta: float) -> void:
-	if state == S.PRESS and (mouse_long_press or not _press_emulated) \
-			and Time.get_ticks_msec() - _press_time >= long_press_ms:
+	if state != S.PRESS or Time.get_ticks_msec() - _press_time < long_press_ms:
+		return
+	if mouse_long_press or not _press_emulated:
 		state = S.LONG
 		long_press.emit(_press_pos)
+	elif not _held:
+		_held = true
+		hold_consumed = false
+		mouse_hold.emit(_press_pos)
 
 
 func _down(idx: int, pos: Vector2) -> void:
@@ -77,6 +88,8 @@ func _down(idx: int, pos: Vector2) -> void:
 			state = S.PRESS
 			_press_pos = pos
 			_press_time = Time.get_ticks_msec()
+			_held = false
+			hold_consumed = false
 		2:
 			if state == S.ONE_DRAG:
 				drag_cancelled.emit()
@@ -118,7 +131,11 @@ func _up(idx: int, pos: Vector2) -> void:
 	match state:
 		S.PRESS:
 			var now := Time.get_ticks_msec()
-			if now - _last_tap_time < double_tap_ms and pos.distance_to(_last_tap_pos) < Dp.px(double_tap_dp):
+			if _held and hold_consumed:
+
+
+				_last_tap_time = -100000
+			elif now - _last_tap_time < double_tap_ms and pos.distance_to(_last_tap_pos) < Dp.px(double_tap_dp):
 				_last_tap_time = -100000
 				double_tap.emit(pos)
 			else:

@@ -262,9 +262,25 @@ def balance_rules(path: Path = BALANCE_FILE) -> dict[str, bool]:
     return _BALANCE_RULES
 
 
-def apply_actor_balance(act: dict, path: Path = BALANCE_FILE) -> bool:
+def apply_actor_balance(act: dict, path: Path = BALANCE_FILE, campaign: bool = False) -> bool:
 
     rules = balance_rules(path)
+
+
+    sab = rules.get("engineer_sabotage_threshold")
+    if (not campaign and isinstance(sab, int) and sab > 0 and act.get("captures")
+            and "building" in [c.lower() for c in act.get("capture_types") or []]):
+        act["sabotage_threshold"] = sab
+        removal = rules.get("engineer_sabotage_hp_removal")
+        if isinstance(removal, int) and removal > 0:
+            act["sabotage_hp_removal"] = removal
+
+
+    cdel = rules.get("engineer_capture_delay")
+    if (not campaign and isinstance(cdel, int) and cdel >= 0 and act.get("captures")
+            and "building" in [c.lower() for c in act.get("capture_types") or []]):
+        act["capture_delay_openra"] = int(act.get("capture_delay", 0) or 0)
+        act["capture_delay"] = cdel
 
 
     seed = rules.get("seed_interval")
@@ -1114,6 +1130,10 @@ def extract_actor(name: str, r: Node, seqs: dict, fluent: dict) -> dict:
         out["captures"] = True
         out["capture_types"] = csv(g("Captures", "CaptureTypes", "") or "")
         out["capture_delay"] = int(g("Captures", "CaptureDelay", "0") or 0)
+
+
+        out["sabotage_threshold"] = int(g("Captures", "SabotageThreshold", "0") or 0)
+        out["sabotage_hp_removal"] = int(g("Captures", "SabotageHPRemoval", "50") or 50)
     if has("Capturable"):
         out["capturable"] = True
         out["capturable_types"] = csv(g("Capturable", "Types", "") or "")
@@ -1381,6 +1401,15 @@ def main() -> int:
                 act["display_name"] = inherited
         act["supported"] = base.get("supported", supported(act, wdict)[0])
         actors_campaign[name] = act
+
+
+    for name, act in actors.items():
+        if int(act.get("sabotage_threshold", 0) or 0) > 0 and name not in actors_campaign:
+            camp = copy.deepcopy(act)
+            camp["sabotage_threshold"] = 0
+            if "capture_delay_openra" in camp:
+                camp["capture_delay"] = camp.pop("capture_delay_openra")
+            actors_campaign[name] = camp
 
 
     effects: dict[str, dict] = {}

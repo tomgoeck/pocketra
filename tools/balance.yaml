@@ -12,3 +12,6 @@ rules:
 	buildable_area_all: true
 	aircraft_hp_percent: 150
 	seed_interval: 120
+	engineer_sabotage_threshold: 34
+	engineer_sabotage_hp_removal: 33
+	engineer_capture_delay: 0

@@ -468,6 +468,21 @@ template <class V> void visit_fields(V& v, BotParams& p) {
     v(p.cmd_class_lv); v(p.cmd_special_lv); v(p.cmd_tower_lv); v(p.cmd_siege_range_cells);
     v(p.cmd_storage_full_permille); v(p.cmd_dmg_class_lv); v(p.cmd_sector_min_damage);
     v(p.cmd_special_min_ticks); v(p.cmd_counter_enabled);
+
+
+    v(p.sparring); v(p.sparring_harvesters); v(p.sparring_first_wave_tick);
+    v(p.sparring_first_wave_units); v(p.sparring_first_wave_late); v(p.sparring_wave_interval);
+    v(p.sparring_towers); v(p.sparring_infantry);
+
+
+    v(p.opening_depot); v(p.harvesters_floor); v(p.harvesters_floor_max);
+    v(p.eco_first); v(p.eco_first_until); v(p.opening_infantry); v(p.army_min_value);
+    v(p.tank_percent); v(p.attack_min_value); v(p.opening_rich_cash);
+    v(p.wave_grow_percent); v(p.counterattack_peak); v(p.eco_surplus_cash);
+
+
+    v(p.eng_plan); v(p.eng_single_max); v(p.eng_pack_max); v(p.eng_pack_min_value);
+    v(p.eng_pack_cash); v(p.eng_pack_apc);
 }
 
 template <class V> void visit_fields(V& v, BotMapInfo& m) {
@@ -645,6 +660,17 @@ template <class V> void visit_fields(V& v, BotState& b) {
     v(b.stat_landing_contacts);
 
     v(b.cmd_track); v(b.cmd_ext_words);
+
+    v(b.stat_army_at); v(b.stat_harv_at); v(b.stat_earned_at8); v(b.stat_waves_at12);
+    v(b.stat_t_refinery2); v(b.stat_harv_now); v(b.stat_refineries_now);
+    v(b.stat_bldg_damage); v(b.stat_bldg_kills);
+    v(b.stat_tempo_cash_sum); v(b.stat_tempo_cash_samples);
+    v(b.sp_wave_units); v(b.sp_wave_next); v(b.sp_alarm); v(b.sp_alarm_tick); v(b.sp_ticks);
+    v(b.wave_fails);
+
+    v(b.eng_ops); v(b.eng_want); v(b.eng_ready);
+    v(b.eng_apc); v(b.eng_apc_target); v(b.eng_apc_phase); v(b.eng_apc_since);
+    v(b.stat_eng_captured); v(b.stat_eng_spent);
 }
 
 template <class V> void visit_fields(V& v, PendingPlace& p) {

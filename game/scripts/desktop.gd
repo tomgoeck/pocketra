@@ -454,6 +454,7 @@ const KEYS := [
 
 
 	{"id": "", "keys": [], "show": "keys.lmb", "label": "keys.left_click"},
+	{"id": "", "keys": [], "show": "keys.lmb_hold", "label": "keys.left_hold"},
 	{"id": "", "keys": [], "show": "keys.lmb_drag", "label": "keys.left_drag"},
 	{"id": "", "keys": [], "show": "keys.shift_lmb", "label": "keys.left_click_add"},
 	{"id": "", "keys": [], "show": "keys.ctrl_lmb", "label": "keys.left_click_force"},

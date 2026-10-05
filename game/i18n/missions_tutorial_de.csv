@@ -17,7 +17,7 @@ tutorial-ui-cmd-sell,"Verkaufe NUR den Bunker: Verkauf antippen, dann den Bunker
 tutorial-ui-cmd-repair,"Der Bunker ist beschädigt. Tippe Reparatur an, dann den Bunker, um ihn automatisch heilen zu lassen."
 tutorial-ui-cmd-clear,"Tippe Leer an, um die ganze Auswahl aufzuheben."
 tutorial-ui-cmd-add,"Tippe einen Schützen an, dann Mehr+ (Auswahl erweitern), und tippe weitere Schützen an — die Auswahl soll wachsen."
-tutorial-ui-cmd-clear2,"Tippe ins Leere oder erneut Leer an, um die Auswahl wieder aufzuheben."
+tutorial-ui-cmd-clear2,"Tippe erneut Leer an, um die Auswahl wieder aufzuheben."
 tutorial-ui-cmd-all,"Tippe Alle an — das wählt alle Kampfeinheiten, Sammler bleiben außen vor."
 tutorial-ui-cmd-base,"Tippe Basis an, um mit der Kamera zu deinem Bauhof zu springen."
 tutorial-ui-cmd-event,"Alarm springt zum letzten Ereignis, das deine Aufmerksamkeit brauchte."
@@ -30,10 +30,10 @@ tutorial-obj-dome,Baue eine Radarkuppel — sie schaltet das Radar auf der Minim
 tutorial-ui-lowpower,"Die Stromversorgung reicht nicht mehr aus — oben steht Strom jetzt rot, Gebäude dunkeln ab, und das Radar fällt aus."
 tutorial-obj-apwr,Baue ein Fortschrittliches Kraftwerk — es gleicht die Stromversorgung wieder aus.
 tutorial-ui-minimap,"Die Minimap unten links zeigt jetzt dein Baugelände. Tippen springt die Kamera dorthin, ein Angriff pingt darauf."
-tutorial-ui-radial-unit,"Langes Drücken auf eine Einheit öffnet ihr Radialmenü: Angriff, Zwangsfeuer, Bewachen, Zerstreuen, Stopp, Sammeln."
-tutorial-ui-radial-building,"Langes Drücken auf ein Gebäude öffnet sein Radialmenü: Reparieren, Primär, Verkaufen, Sammelpunkt."
+tutorial-ui-radial-unit,"Langes Drücken auf eine Einheit wählt sie aus. Noch einmal lange drücken öffnet ihre Befehle: Angriffszug, Zwangsfeuer, Bewachen, Zerstreuen, Stopp."
+tutorial-ui-radial-building,"Langes Drücken auf ein Gebäude wählt es aus. Noch einmal lange drücken zeigt Reparieren, Primär und Verkaufen."
 tutorial-ui-infocard,Langes Drücken auf eine gegnerische Einheit oder ein Gebäude zeigt die Infokarte.
-tutorial-ui-selection-gestures,Doppeltippen wählt alle Einheiten desselben Typs auf dem Bildschirm; ein gezogener Rahmen wählt einen Bereich.
+tutorial-ui-selection-gestures,"Sind Einheiten gewählt, ist jeder Tipp ein Befehl, auch auf eigene Einheiten. Auswählen geht mit langem Drücken oder einem gezogenen Rahmen; Doppeltippen ohne Auswahl wählt alle Einheiten desselben Typs auf dem Bildschirm."
 tutorial-ui-attackmove,"Ein Tipp auf freien Boden ist reine Bewegung; für eine Angriffsbewegung (verteidigt sich unterwegs) wähle im Radialmenü einer Einheit „Angriffsbewegung“."
 tutorial-obj-defend,Ein kleiner Gegnertrupp greift an! Wähle deine Einheiten und verteidige deine Basis.
 tutorial-obj-attack,"Lange in der Nähe der Gegnerbasis drücken und „Angriff“ wählen, um sie zu zerstören."

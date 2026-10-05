@@ -99,6 +99,9 @@ def test_balance_overrides_applied() -> None:
     actors = json.loads((ASSETS / "rules.json").read_text())["actors"]
     for name in ("mine", "gmine"):
         check(actors[name]["seeds_resource"].get("interval") == 120, f"{name}: Säintervall 120 statt 75")
+    full = json.loads((ASSETS / "rules.json").read_text())
+    check(actors["e6"].get("capture_delay") == 0, "e6: geht sofort hinein (engineer_capture_delay 0)")
+    check(full.get("actors_campaign", {}).get("e6", {}).get("capture_delay") == 200, "e6 Kampagne: Wartezeit 200 bleibt")
 
     lone = json.loads((ASSETS / "maps" / "fort-lonestar.json").read_text())["rules_override"]["weapons"]
     check(dmg(lone["scud"]) == [37500], "fort-lonestar SCUD 50000 → 37500 (DamagePercent auch im Delta)")

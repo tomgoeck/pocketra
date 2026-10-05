@@ -151,6 +151,16 @@ const AI_LEVELS := {
 
 
 		"air_first_radar": 0, "air_first_aircraft": 2,
+
+
+		"opening_depot": 1, "harvesters_floor": 1, "harvesters_floor_max": 0,
+		"eco_first": 0, "eco_first_until": 12000, "opening_infantry": 4, "army_min_value": 0,
+		"tank_percent": 0, "attack_min_value": 0, "opening_rich_cash": 0, "wave_grow_percent": 0,
+		"counterattack_peak": 0, "eco_surplus_cash": 1500,
+
+
+		"eng_plan": 1, "eng_single_max": 1, "eng_pack_max": 0, "eng_pack_min_value": 1500,
+		"eng_pack_cash": 1000, "eng_pack_apc": 0,
 	},
 	"normal": {
 		"reaction_min_ticks": 50, "reaction_max_ticks": 100,
@@ -188,6 +198,16 @@ const AI_LEVELS := {
 
 
 		"air_first_radar": 1, "air_first_aircraft": 2,
+
+
+		"opening_depot": 1, "harvesters_floor": 2, "harvesters_floor_max": 4,
+		"eco_first": 1, "eco_first_until": 12000, "opening_infantry": 4, "army_min_value": 3000,
+		"tank_percent": 70, "attack_min_value": 3000, "opening_rich_cash": 0, "wave_grow_percent": 0,
+		"counterattack_peak": 0, "eco_surplus_cash": 1000,
+
+
+		"eng_plan": 2, "eng_single_max": 2, "eng_pack_max": 0, "eng_pack_min_value": 1500,
+		"eng_pack_cash": 1000, "eng_pack_apc": 0,
 	},
 	"hard": {
 		"reaction_min_ticks": 25, "reaction_max_ticks": 60,
@@ -218,7 +238,7 @@ const AI_LEVELS := {
 
 
 		"naval_unit_limit": 6, "naval_escort_per_bombard": 2,
-		"continuous_production": 1, "wave_value": 3500,
+		"continuous_production": 1, "wave_value": 4000,
 
 
 		"opening_plan": 1, "opening_refineries": 3, "opening_factory_after": 2,
@@ -234,6 +254,16 @@ const AI_LEVELS := {
 
 
 		"air_first_radar": 1, "air_first_aircraft": 2,
+
+
+		"opening_depot": 1, "harvesters_floor": 2, "harvesters_floor_max": 5,
+		"eco_first": 1, "eco_first_until": 18000, "opening_infantry": 4, "army_min_value": 6000,
+		"tank_percent": 100, "attack_min_value": 4000, "opening_rich_cash": 3000, "wave_grow_percent": 50,
+		"counterattack_peak": 0, "eco_surplus_cash": 1500,
+
+
+		"eng_plan": 3, "eng_single_max": 2, "eng_pack_max": 4, "eng_pack_min_value": 1500,
+		"eng_pack_cash": 1000, "eng_pack_apc": 1,
 	},
 }
 
@@ -250,6 +280,15 @@ static var next_ai_strategy := "normal"
 
 
 static var next_ai_unit_share := {}
+
+
+static var next_ai_param := {}
+
+
+static var next_sparring := false
+
+
+static var bench_turbo := 0
 
 
 static var next_player_spawn := -1
@@ -278,6 +317,7 @@ const NOTIFY_SOUNDS := ["abldgin1", "progres1", "conscmp1", "unitrdy1", "nofunds
 						""]
 
 const ENTER_NONE := 0
+const ENTER_CAPTURE := 1
 const ENTER_DEMOLISH := 3
 
 const ENTER_LABELS := {1: "toast.capturing", 2: "toast.repairing_building", 3: "toast.demolishing",
@@ -547,6 +587,16 @@ func _apply_cmdline_args() -> void:
 			var pair := kv.split("=")
 			if pair.size() == 2 and pair[1].is_valid_int():
 				next_ai_unit_share[pair[0].strip_edges()] = int(pair[1])
+	next_sparring = args.has("--sparring")
+	var apk := args.find("--ai-param")
+	next_ai_param = {}
+	if apk >= 0 and apk + 1 < args.size():
+		for kv in str(args[apk + 1]).split(","):
+			var pair := kv.split("=")
+			if pair.size() == 2 and pair[1].is_valid_int():
+				next_ai_param[pair[0].strip_edges()] = int(pair[1])
+	var tbk := args.find("--turbo")
+	bench_turbo = int(args[tbk + 1]) if tbk >= 0 and tbk + 1 < args.size() else 0
 	var asl := args.find("--ai-strategies")
 	if asl >= 0 and asl + 1 < args.size():
 		next_ai_slots = []
@@ -663,6 +713,11 @@ func _ready() -> void:
 
 
 	move_child(_overlay, _fog.get_index())
+
+	order_marker = OrderMarker.new()
+	order_marker.world = self
+	add_child(order_marker)
+	move_child(order_marker, _fog.get_index())
 
 
 	_nuke_layer = Node2D.new()
@@ -1131,7 +1186,7 @@ func _start_sim() -> void:
 
 					"creates_shroud_range", "jammer_range", "provides_radar", "gps_dot",
 					"wall", "captures", "capturable", "storage", "door_len", "build_limit",
-					"capture_types", "capturable_types", "capture_delay", "instantly_repairs", "instantly_repairable",
+					"capture_types", "capturable_types", "capture_delay", "sabotage_threshold", "sabotage_hp_removal", "instantly_repairs", "instantly_repairable",
 					"repairs_bridges",
 					"demolition_delay", "demolishable", "infiltrates", "infiltrates_ally", "infil_transform",
 					"capture_health", "disguise", "ignores_disguise",
@@ -1876,6 +1931,33 @@ func _bot_params(difficulty: String, strategy: String = "") -> Dictionary:
 
 	if strategy == "naval":
 		p["naval_unit_limit"] = int(p.get("naval_unit_limit", 4)) * 2
+
+
+	if strategy == "rush":
+		p["attack_min_value"] = int(p.get("attack_min_value", 0)) * 6 / 10
+		p["wave_value"] = int(p.get("wave_value", 0)) * 6 / 10
+		p["army_min_value"] = int(p.get("army_min_value", 0)) / 2
+	elif strategy == "turtle":
+		p["attack_min_value"] = int(p.get("attack_min_value", 0)) * 3 / 2
+	for k in next_ai_param:
+		p[k] = int(next_ai_param[k])
+	return p
+
+
+func _sparring_params() -> Dictionary:
+	var keep := next_ai_param
+	next_ai_param = {}
+	var p := _bot_params("hard", "normal")
+	next_ai_param = keep
+	p["sparring"] = 1
+	p["cmd_enabled"] = 0
+	p["sparring_harvesters"] = 4
+	p["sparring_first_wave_tick"] = 7500
+	p["sparring_first_wave_units"] = 6
+	p["sparring_first_wave_late"] = 9750
+	p["sparring_wave_interval"] = 3750
+	p["sparring_towers"] = 2
+	p["sparring_infantry"] = 6
 	return p
 
 
@@ -1977,10 +2059,13 @@ func _place_players() -> void:
 	sim.set_faction(0, my_faction)
 	sim.give_credits(0, next_credits)
 	sim.reveal(0, player_spawn.x, player_spawn.y, 5)
+	if next_sparring:
+		sim.enable_bot(0, _sparring_params())
 
 
 	player_roster = []
-	_roster_add(0, -1, "", my_faction, next_player_team, "human", "")
+	_roster_add(0, -1, "", my_faction, next_player_team, "human", "sparring" if next_sparring else "",
+			-1, "sparring" if next_sparring else "")
 	var used_players: Array = [0]
 	var ai_max: int = mini(spawns.size(), AI_PLAYER_INDICES.size())
 	var ai_count: int = clampi(next_ai_players, 0, ai_max)
@@ -2416,24 +2501,6 @@ func select_only(u: Unit) -> void:
 		u.selected = true
 		selection.append(u)
 	_voice("select")
-
-
-func select_exclusive(u: Unit) -> void:
-	clear_selection()
-	if u == null or not selectable(u):
-		return
-	u.selected = true
-	selection.append(u)
-	_voice("select")
-
-
-func select_append(u: Unit) -> bool:
-	if u == null or not selectable(u) or u.selected:
-		return false
-	u.selected = true
-	selection.append(u)
-	_voice("select")
-	return true
 
 
 func select_all_units() -> int:
@@ -2971,13 +3038,18 @@ func order_enter(target: Unit) -> String:
 	if ids.is_empty():
 		return ""
 	issue(NetOrders.make(NetOrders.OP_ENTER, target.id, 0, 0, 0, ids))
-	show_enter_effect(unit_rect(target).get_center())
+	flash_enter(target)
 
 
 	_set_goals(target.pos, 4 if kind == ENTER_DEMOLISH else 0)
 
 
 	_voice("demolish" if kind == ENTER_DEMOLISH else "action")
+
+
+	if kind == ENTER_CAPTURE and sim.has_method("enter_would_sabotage") \
+			and sim.enter_would_sabotage(ids[0], target.id):
+		return "toast.sabotaging"
 	return ENTER_LABELS.get(kind, "")
 
 
@@ -3004,6 +3076,15 @@ func enter_kind(target: Unit) -> int:
 	return ENTER_NONE
 
 
+func enter_sabotages(target: Unit) -> bool:
+	if sim == null or target == null or not sim.has_method("enter_would_sabotage"):
+		return false
+	for u in selection:
+		if u.alive and sim.enter_kind_for(u.id, target.id) == ENTER_CAPTURE:
+			return sim.enter_would_sabotage(u.id, target.id)
+	return false
+
+
 func has_disguiser() -> bool:
 	for u in selection:
 		if u.alive and types[u.type].get("disguise", false):
@@ -3028,10 +3109,6 @@ func board_ids(target: Unit) -> PackedInt32Array:
 	return ids
 
 
-func can_board(target: Unit) -> bool:
-	return not board_ids(target).is_empty()
-
-
 func order_enter_transport(target: Unit) -> bool:
 	var ids := board_ids(target)
 	if ids.is_empty():
@@ -3039,6 +3116,7 @@ func order_enter_transport(target: Unit) -> bool:
 	issue(NetOrders.make(NetOrders.OP_ENTER_TRANSPORT, target.id, 0, 0, 0, ids))
 	_set_goals(target.pos, 0)
 	_voice("move")
+	flash_enter(target)
 	return true
 
 
@@ -3058,6 +3136,12 @@ func selection_unload_blocked() -> bool:
 	return true
 
 
+func unit_can_unload(u: Unit) -> bool:
+	if u == null or not u.alive or u.player != local_player or u.passengers <= 0 or sim == null:
+		return false
+	return not sim.has_method("can_unload") or sim.can_unload(u.id)
+
+
 func loaded_ids(ready_only: bool = true) -> PackedInt32Array:
 	var ids := PackedInt32Array()
 	if sim == null or not sim.has_method("order_unload"):
@@ -3073,13 +3157,36 @@ func loaded_ids(ready_only: bool = true) -> PackedInt32Array:
 func unload_ids(ids: PackedInt32Array) -> bool:
 	if sim == null or ids.is_empty() or not sim.has_method("order_unload"):
 		return false
+
+
+	var unloading: Array = []
+	for id in ids:
+		var u := unit_by_id(id)
+		if u != null and u.alive and u.player == local_player and u.passengers > 0 \
+				and (not sim.has_method("can_unload") or sim.can_unload(id)):
+			unloading.append(u)
 	issue(NetOrders.make(NetOrders.OP_UNLOAD, 0, 0, 0, 0, ids))
 	_voice("move")
+	for u in unloading:
+		flash_unload(u)
 	return true
 
 
 func unload_selected() -> bool:
 	return unload_ids(loaded_ids())
+
+
+var order_marker: OrderMarker
+
+
+func flash_enter(unit: Unit) -> void:
+	if order_marker != null:
+		order_marker.flash(unit, OrderMarker.ENTER)
+
+
+func flash_unload(unit: Unit) -> void:
+	if order_marker != null:
+		order_marker.flash(unit, OrderMarker.UNLOAD)
 
 
 func order_attack(target: Unit, force: bool = false) -> bool:
@@ -3511,35 +3618,6 @@ func set_primary_selected() -> bool:
 	return issue(NetOrders.make_one(NetOrders.OP_SET_PRIMARY, b.id))
 
 
-const ENTER_FX_SECONDS := 0.5
-var _enter_fx: Array = []
-
-
-func show_enter_effect(center: Vector2) -> void:
-	_enter_fx.append([center, Time.get_ticks_msec() / 1000.0])
-	while _enter_fx.size() > 8:
-		_enter_fx.pop_front()
-
-
-func _draw_enter_fx() -> void:
-	var now := Time.get_ticks_msec() / 1000.0
-	for i in range(_enter_fx.size() - 1, -1, -1):
-		var age: float = now - _enter_fx[i][1]
-		if age > ENTER_FX_SECONDS:
-			_enter_fx.remove_at(i)
-			continue
-		var c: Vector2 = _enter_fx[i][0]
-		var t := age / ENTER_FX_SECONDS
-		var dist: float = lerpf(CELL * 1.4, CELL * 0.35, t)
-		var col := Color(0.25, 0.95, 0.30, 1.0 - t * 0.6)
-		var s := CELL * 0.34
-		for dir in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
-			var tip: Vector2 = c + dir * dist
-			var back: Vector2 = tip + dir * s
-			var side := Vector2(-dir.y, dir.x) * s * 0.55
-			_overlay.draw_colored_polygon(PackedVector2Array([tip, back + side, back - side]), col)
-
-
 func _draw_deploy_hint() -> void:
 	if selection.is_empty() or sim == null:
 		return
@@ -3611,10 +3689,6 @@ func deliver_ids(refinery: Unit) -> PackedInt32Array:
 	return ids
 
 
-func can_deliver_to(refinery: Unit) -> bool:
-	return not deliver_ids(refinery).is_empty()
-
-
 func order_deliver(refinery: Unit) -> bool:
 	var ids := deliver_ids(refinery)
 	if ids.is_empty():
@@ -3626,7 +3700,7 @@ func order_deliver(refinery: Unit) -> bool:
 		var t: Dictionary = types[refinery.type]
 		var cell := _cell_of(refinery.pos) + Vector2i(int(t.get("dock_dx", 0)), int(t.get("dock_dy", 0)))
 		issue(NetOrders.make(NetOrders.OP_MOVE, cell.x, cell.y, 0, 0, ids))
-	show_enter_effect(unit_rect(refinery).get_center())
+	flash_enter(refinery)
 	_voice("action")
 	return true
 
@@ -3641,10 +3715,6 @@ func land_ids(pad: Unit) -> PackedInt32Array:
 	return ids
 
 
-func can_land_at(pad: Unit) -> bool:
-	return not land_ids(pad).is_empty()
-
-
 func order_land_at(pad: Unit) -> bool:
 	var ids := land_ids(pad)
 	if ids.is_empty():
@@ -3653,10 +3723,6 @@ func order_land_at(pad: Unit) -> bool:
 	_set_goals(pad.pos, 0)
 	_voice("move")
 	return true
-
-
-func can_repair_at(depot: Unit) -> bool:
-	return not repair_ids(depot).is_empty()
 
 
 func repair_ids(depot: Unit) -> PackedInt32Array:
@@ -3680,7 +3746,7 @@ func order_repair(depot: Unit) -> bool:
 	if ids.is_empty():
 		return false
 	issue(NetOrders.make(NetOrders.OP_REPAIR, depot.id, 0, 0, 0, ids))
-	show_enter_effect(unit_rect(depot).get_center())
+	flash_enter(depot)
 	_voice("action")
 	return true
 
@@ -3826,6 +3892,9 @@ func _process(delta: float) -> void:
 
 
 		var max_steps := GameSpeed.max_catchup()
+		if bench_turbo > 0 and net_session == null:
+			max_steps = bench_turbo
+			_sim_accum = _tick_len * float(bench_turbo) + 0.0001
 
 
 		if net_session != null:
@@ -4278,7 +4347,6 @@ func _draw_overlay() -> void:
 	_draw_building_decorations(w)
 	_draw_detection_circles(w)
 	_draw_c4_markers(w)
-	_draw_enter_fx()
 	_draw_deploy_hint()
 	_draw_deploy_badge()
 	_draw_float_texts()

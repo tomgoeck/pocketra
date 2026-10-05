@@ -485,6 +485,9 @@ int32_t World::bot_vorhaben_lage(int32_t owner, int32_t vh, const BotStrategyFac
     case VH_INFANTRY_FLOOD:
 
         if (f.own_infantry < 6 || !schedule_ok) return 0;
+
+
+        if (b.personality != BOT_P_RUSH && bot_eco_hold(owner)) return 0;
         return std::min(800, f.own_infantry * 50 + std::max(0, 6 - f.enemy_defenses) * 40);
     case VH_AIR_STRIKE: {
 
@@ -494,6 +497,11 @@ int32_t World::bot_vorhaben_lage(int32_t owner, int32_t vh, const BotStrategyFac
     }
     case VH_ENGINEER:
 
+
+        if (p.eng_plan > 0) {
+            if (f.own_engineers <= 0 || b.eng_ready <= 0) return 0;
+            return std::min(700, 300 + f.own_engineers * 100);
+        }
         if (f.own_engineers <= 0 || f.enemy_buildings <= 0) return 0;
         return std::min(700, 300 + f.own_engineers * 100);
     case VH_COMMANDO:
@@ -603,6 +611,7 @@ void World::bot_vorhaben_start(int32_t owner, int32_t vh) {
 
 
     if (vh == VH_COUNTERATTACK || vh == VH_EXPANSION_GUARD) {
+        if (vh == VH_COUNTERATTACK && b.p.counterattack_peak != 0) b.attack_peak = 0;
         const size_t want = vh == VH_EXPANSION_GUARD ? size_t(2) : b.idle_base_units.size();
         std::vector<int32_t> take, rest;
         for (int32_t id : b.idle_base_units) {
@@ -659,6 +668,8 @@ void World::bot_vorhaben_end(int32_t owner, int32_t vh, bool success) {
     b.vh_cooldown[vh] = row.cooldown;
     b.vh_success[vh] = std::clamp(b.vh_success[vh] + (success ? VH_SUCCESS_UP : -VH_SUCCESS_DOWN),
                                   VH_SUCCESS_MIN, VH_SUCCESS_MAX);
+
+    if (success && row.heavy && b.wave_fails > 0) --b.wave_fails;
     for (int32_t r = 0; r < ROLE_COUNT; ++r) b.vh_orders[r] = std::max(0, b.vh_orders[r] - row.orders[r]);
     if (b.vh_pending == vh) b.vh_pending = -1;
 

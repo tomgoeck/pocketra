@@ -694,6 +694,10 @@ func _build_type(name: String, a: Dictionary) -> Dictionary:
 		"capturable_types": _mask(a.get("capturable_types", []), CAPTURE_TYPES),
 		"capture_delay": int(a.get("capture_delay", 200)),
 
+
+		"sabotage_threshold": int(a.get("sabotage_threshold", 0)),
+		"sabotage_hp_removal": int(a.get("sabotage_hp_removal", 50)),
+
 		"instantly_repairs": a.get("instantly_repairs", false),
 		"instantly_repairable": a.get("instantly_repairable", false),
 		"repairs_bridges": a.get("repairs_bridges", false),

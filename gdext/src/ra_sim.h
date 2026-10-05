@@ -80,6 +80,7 @@ public:
     void order_enter(const PackedInt32Array& ids, int target_id);
     int enter_kind_for(int id, int target_id) const;
     int enter_progress(int id) const;
+    bool enter_would_sabotage(int id, int target_id) const;
     bool order_disguise(int id, int target_id);
     bool set_disguise(int id, int type, int owner);
     void order_demolish(const PackedInt32Array& ids, int target_id);

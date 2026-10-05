@@ -331,7 +331,7 @@ struct Candidate {
 }
 
 
-bool World::closest_harvestable(size_t i, CPos& out, bool ignore_shroud) {
+bool World::closest_harvestable(size_t i, CPos& out, bool ignore_shroud, const std::vector<uint8_t>* reach) {
     const Mobile& m = mobiles_[i];
     Harvest& h = harvests_[i];
     const UnitType& t = types_[actors_[i].type];
@@ -341,6 +341,7 @@ bool World::closest_harvestable(size_t i, CPos& out, bool ignore_shroud) {
     auto claimable = [&](CPos c) {
         if (!can_harvest_cell(c)) return false;
         if (claim_taken(map_.index(c), self)) return false;
+        if (reach != nullptr && !(*reach)[size_t(map_.index(c))]) return false;
         return ignore_shroud || resource_known(owner, c);
     };
 
@@ -656,12 +657,17 @@ void World::step_harvester(size_t i) {
             break;
         }
         CPos target;
-        bool found = closest_harvestable(i, target);
+
+        std::vector<uint8_t> reach;
+        const bool only_reachable = h.fails > 0 || h.has_avoid;
+        if (only_reachable) bot_land_reach(m.cell, reach);
+        const std::vector<uint8_t>* rp = only_reachable && reach.size() == size_t(map_.cells()) ? &reach : nullptr;
+        bool found = closest_harvestable(i, target, false, rp);
 
 
         if (!found && h.has_avoid) {
             h.has_avoid = false;
-            found = closest_harvestable(i, target);
+            found = closest_harvestable(i, target, false, rp);
         }
         if (!found) {
             if (h.bales > 0) {
@@ -679,7 +685,7 @@ void World::step_harvester(size_t i) {
             }
 
 
-            if (++h.blind >= BLIND_TRIES && closest_harvestable(i, target, true)) {
+            if (++h.blind >= BLIND_TRIES && closest_harvestable(i, target, true, rp)) {
                 h.blind = 0;
                 found = true;
             } else {

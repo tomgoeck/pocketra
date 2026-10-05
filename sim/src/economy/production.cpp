@@ -1065,10 +1065,39 @@ bool World::set_disguise(int32_t id, int32_t type, int32_t owner) {
 }
 
 
+bool World::capture_sabotages(size_t i, size_t t) const {
+    if (i >= actors_.size() || t >= actors_.size()) return false;
+    const UnitType& s = types_[actors_[i].type];
+    if (s.sabotage_threshold <= 0) return false;
+    const int32_t owner = actors_[t].owner;
+    if (owner >= 0 && owner < MAX_PLAYERS && players_[owner].non_combatant) return false;
+    const int64_t max_hp = types_[actors_[t].type].hp;
+    return int64_t(100) * actors_[t].hp > int64_t(s.sabotage_threshold) * max_hp;
+}
+
+
 void World::enter_effect(size_t i, size_t t) {
     Actor& a = actors_[i];
     switch (a.enter_kind) {
     case ENTER_CAPTURE: {
+
+
+        if (capture_sabotages(i, t)) {
+            const int32_t eng_id = a.id;
+            const int32_t eng_owner = a.owner;
+            const int64_t max_hp = types_[actors_[t].type].hp;
+            int64_t dmg = max_hp * types_[a.type].sabotage_hp_removal / 100;
+
+
+            dmg = dmg * rank_bonus(t).damage / 100;
+            const int32_t hc_vic = handicap(actors_[t].owner);
+            if (hc_vic != 0) dmg = dmg * 100 / (100 - hc_vic);
+
+            if (dmg > 0) inflict_damage(t, dmg, eng_id, eng_owner, DAMAGE_DEFAULT);
+
+            dispose(i);
+            break;
+        }
 
         const int32_t old_owner = actors_[t].owner;
         const bool structure = types_[actors_[t].type].building;
