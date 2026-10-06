@@ -81,6 +81,10 @@ public:
     int enter_kind_for(int id, int target_id) const;
     int enter_progress(int id) const;
     bool enter_would_sabotage(int id, int target_id) const;
+    int enter_progress_target(int id) const;
+    int enter_order_target(int id) const;
+    int capture_duration(int id, int target_id) const;
+    void set_capture_reference(int type, int ref_type);
     bool order_disguise(int id, int target_id);
     bool set_disguise(int id, int type, int owner);
     void order_demolish(const PackedInt32Array& ids, int target_id);

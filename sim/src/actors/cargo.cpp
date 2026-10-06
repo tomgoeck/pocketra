@@ -42,7 +42,7 @@ bool World::can_load(int32_t transport_id, int32_t passenger_id) const {
 }
 
 
-bool World::can_land_at(size_t i, CPos c) const {
+bool World::landable_ground(size_t i, CPos c) const {
     if (!map_.in_bounds(c)) return false;
     const UnitType& t = types_[actors_[i].type];
     if (t.landable_terrain != 0 && (t.landable_terrain & (1u << uint32_t(map_.terrain(c)))) == 0) return false;
@@ -51,15 +51,83 @@ bool World::can_land_at(size_t i, CPos c) const {
 }
 
 
+bool World::landing_cell_taken(size_t i, CPos c) const {
+    for (size_t j = 0; j < actors_.size(); ++j) {
+        if (j == i || !types_[actors_[j].type].aircraft || !in_world(j)) continue;
+        const Air& o = airs_[j];
+        if (o.state == Air::FALLING) continue;
+        if ((o.state == Air::LANDED || o.state == Air::LANDING) && to_cell(actors_[j].pos) == c) return true;
+        if ((o.land_at_goal == LAND_TOUCHDOWN || o.land_at_goal == LAND_TURN) && to_cell(o.goal) == c) return true;
+    }
+    return false;
+}
+
+bool World::can_land_at(size_t i, CPos c) const {
+    return landable_ground(i, c) && !landing_cell_taken(i, c);
+}
+
+
+CPos World::find_landing_cell(size_t i, CPos target, int32_t range) const {
+    if (can_land_at(i, target)) return target;
+
+    std::vector<CPos> taken;
+    for (size_t j = 0; j < actors_.size(); ++j) {
+        if (j == i || !types_[actors_[j].type].aircraft || !in_world(j)) continue;
+        const Air& o = airs_[j];
+        if (o.state == Air::FALLING) continue;
+        if (o.state == Air::LANDED || o.state == Air::LANDING) taken.push_back(to_cell(actors_[j].pos));
+        if (o.land_at_goal == LAND_TOUCHDOWN || o.land_at_goal == LAND_TURN) taken.push_back(to_cell(o.goal));
+    }
+    CPos best{-1, -1};
+    int32_t best_d = INT32_MAX;
+    for (int32_t dy = -range; dy <= range; ++dy) {
+        for (int32_t dx = -range; dx <= range; ++dx) {
+            const int32_t d = dx * dx + dy * dy;
+            if (d == 0 || d > range * range || d >= best_d) continue;
+            const CPos c{target.x + dx, target.y + dy};
+            if (!landable_ground(i, c)) continue;
+            if (std::find(taken.begin(), taken.end(), c) != taken.end()) continue;
+            best = c;
+            best_d = d;
+        }
+    }
+    return best;
+}
+
+
+CPos World::pickup_cell(size_t ti) const {
+    const Actor& tr = actors_[ti];
+    const UnitType& tt = types_[tr.type];
+    if (tt.aircraft) {
+        const Air& air = airs_[ti];
+        if (air.land_at_goal == LAND_TOUCHDOWN || air.land_at_goal == LAND_TURN) return to_cell(air.goal);
+        return to_cell(tr.pos);
+    }
+    return tt.building ? tr.origin : mobiles_[ti].cell;
+}
+
+
 bool World::can_unload(int32_t transport_id) const {
     const int ti = index_of(transport_id);
     if (ti < 0 || !actors_[ti].alive) return false;
     if (cargo_[size_t(ti)].empty()) return false;
     const UnitType& tt = types_[actors_[ti].type];
-    const CPos at = tt.building ? actors_[ti].origin
+    CPos at = tt.building ? actors_[ti].origin
         : (tt.aircraft ? to_cell(actors_[ti].pos) : mobiles_[size_t(ti)].cell);
     if (!map_.in_bounds(at)) return false;
-    if (tt.aircraft && !can_land_at(size_t(ti), at)) return false;
+    if (tt.aircraft) {
+        if (airs_[size_t(ti)].alt > 0) {
+
+
+            at = find_landing_cell(size_t(ti), at);
+            if (at.x < 0) return false;
+        } else if (tt.landable_terrain != 0 &&
+                   (tt.landable_terrain & (1u << uint32_t(map_.terrain(at)))) == 0) {
+
+
+            return false;
+        }
+    }
     for (const int32_t pid : cargo_[size_t(ti)]) {
         const int p = index_of(pid);
         if (p < 0 || !actors_[p].alive) continue;
@@ -165,7 +233,52 @@ void World::order_enter_transport(const int32_t* ids, size_t n, int32_t transpor
         combats_[i].guard = -1;
         combats_[i].attack_cell = CPos{-1, -1};
         order_queue_[size_t(i)].clear();
+
+
+        if (can_load(transport_id, actors_[i].id) &&
+            cell_dist_sq(mobiles_[i].cell, transport_cell(size_t(ti))) > 2)
+            approach_transport(size_t(i), size_t(ti), false);
     }
+}
+
+
+CPos World::transport_cell(size_t ti) const {
+    const Actor& tr = actors_[ti];
+    const UnitType& tt = types_[tr.type];
+    return tt.aircraft ? to_cell(tr.pos) : (tt.building ? tr.origin : mobiles_[ti].cell);
+}
+
+
+bool World::board_approach_cell(size_t i, size_t ti, CPos& out) const {
+    const UnitType& tt = types_[actors_[ti].type];
+    const CPos wc = pickup_cell(ti);
+    const CPos avoid = (tt.aircraft || tt.building) ? CPos{-1, -1} : wc;
+    return approach_cell(i, wc, 1, 1, false, avoid, actors_[ti].id, out);
+}
+
+
+bool World::transport_in_motion(size_t ti) const {
+    const UnitType& tt = types_[actors_[ti].type];
+    if (tt.building) return false;
+    if (tt.aircraft) {
+        const Air& air = airs_[ti];
+        if (air.state == Air::TAKING_OFF) return true;
+        return air.has_goal && air.land_at_goal != LAND_TOUCHDOWN && air.land_at_goal != LAND_TURN;
+    }
+    return mobiles_[ti].moving || mobiles_[ti].in_transit;
+}
+
+
+void World::approach_transport(size_t i, size_t ti, bool may_end) {
+    Mobile& m = mobiles_[i];
+    CPos c{-1, -1};
+    if (board_approach_cell(i, ti, c)) {
+        if (m.moving || m.in_transit || c != m.cell) set_move(i, c, 0);
+        else m.arrived = false;
+        return;
+    }
+    if (may_end && !transport_in_motion(ti)) actors_[i].enter_target = -1;
+    stop(i, false);
 }
 
 
@@ -180,14 +293,25 @@ void World::cancel_unload(size_t i) {
 void World::lock_for_pickup(size_t ti) {
     Actor& t = actors_[ti];
     if (t.load_lock) return;
+    const UnitType& tt = types_[t.type];
+    if (tt.aircraft && airs_[ti].alt > 0) {
+        const Air& air = airs_[ti];
+        const bool landing = air.state == Air::LANDING || air.land_at_goal != LAND_NONE;
+        if (!landing) {
+            const CPos here = to_cell(t.pos);
+            const CPos lc = find_landing_cell(ti, here);
+            if (lc.x < 0) return;
+            stop(ti, false);
+            order_queue_[ti].clear();
+            air_move(ti, lc == here ? t.pos : cell_center(lc), true);
+        }
+        t.load_takeoff = !lands_when_idle(tt);
+    } else {
+        stop(ti, false);
+        order_queue_[ti].clear();
+    }
     t.load_lock = true;
     t.after_load_ticks = -1;
-    stop(ti, false);
-    order_queue_[ti].clear();
-    if (types_[t.type].aircraft && airs_[ti].alt > 0) {
-        t.load_takeoff = true;
-        air_move(ti, t.pos, true);
-    }
 }
 
 
@@ -214,8 +338,10 @@ void World::order_unload(const int32_t* ids, size_t n) {
         if (types_[actors_[i].type].aircraft && airs_[size_t(i)].alt > 0) {
 
 
-            actors_[i].unload_takeoff = true;
-            air_move(size_t(i), actors_[i].pos, true);
+            actors_[i].unload_takeoff = !lands_when_idle(types_[actors_[i].type]);
+            const CPos here = to_cell(actors_[i].pos);
+            const CPos lc = find_landing_cell(size_t(i), here);
+            air_move(size_t(i), (lc.x < 0 || lc == here) ? actors_[i].pos : cell_center(lc), true);
         }
     }
 }
@@ -231,8 +357,10 @@ void World::step_cargo() {
             continue;
         }
         const Actor& tr = actors_[size_t(ti)];
-        const CPos tc = types_[tr.type].aircraft ? to_cell(tr.pos)
-            : (types_[tr.type].building ? tr.origin : mobiles_[size_t(ti)].cell);
+        const CPos tc = transport_cell(size_t(ti));
+
+
+        const CPos wc = pickup_cell(size_t(ti));
 
         if (cell_dist_sq(mobiles_[i].cell, tc) <= 2) {
 
@@ -247,9 +375,14 @@ void World::step_cargo() {
         }
 
 
-        if (!mobiles_[i].moving && !mobiles_[i].in_transit) {
-            const CPos adj = find_adjacent_cell(tc, actors_[i].type);
-            if (adj.x >= 0 && mobiles_[i].goal != adj) set_move(i, adj, 0);
+        const Mobile& m = mobiles_[i];
+        if (m.moving) {
+            if (cell_dist_sq(m.goal, wc) > 2) approach_transport(i, size_t(ti), true);
+        } else if (!m.in_transit) {
+
+            if (wc != tc && cell_dist_sq(m.cell, wc) <= 2) continue;
+            if (m.arrived || (tick_ + uint32_t(a.id)) % ENTER_RETRY_TICKS == 0)
+                approach_transport(i, size_t(ti), true);
         }
     }
 

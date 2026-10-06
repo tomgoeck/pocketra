@@ -150,7 +150,7 @@ static func pack_enabled() -> bool:
 	if k >= 0 and k + 1 < args.size():
 		return args[k + 1] == "on"
 	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS) == OK:
+	if UserSettings.read(cfg) == OK:
 
 
 		if cfg.has_section_key("update", "pack"):
@@ -160,23 +160,23 @@ static func pack_enabled() -> bool:
 
 static func set_pack_enabled(on: bool) -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("update", "pack", on)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 
 
 static func check_enabled() -> bool:
 	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS) == OK:
+	if UserSettings.read(cfg) == OK:
 		return bool(cfg.get_value("update", "check_on_start", true))
 	return true
 
 
 static func set_check_enabled(on: bool) -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("update", "check_on_start", on)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 
 
 static func dev_run() -> bool:
@@ -192,7 +192,7 @@ static func url() -> String:
 	if k >= 0 and k + 1 < args.size():
 		return args[k + 1]
 	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS) == OK:
+	if UserSettings.read(cfg) == OK:
 		var u := str(cfg.get_value("update", "url", ""))
 		if u != "":
 			return u

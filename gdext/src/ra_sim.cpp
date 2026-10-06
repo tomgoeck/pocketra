@@ -130,6 +130,10 @@ void RaSim::_bind_methods() {
     ClassDB::bind_method(D_METHOD("enter_kind_for", "id", "target_id"), &RaSim::enter_kind_for);
     ClassDB::bind_method(D_METHOD("enter_progress", "id"), &RaSim::enter_progress);
     ClassDB::bind_method(D_METHOD("enter_would_sabotage", "id", "target_id"), &RaSim::enter_would_sabotage);
+    ClassDB::bind_method(D_METHOD("enter_progress_target", "id"), &RaSim::enter_progress_target);
+    ClassDB::bind_method(D_METHOD("enter_order_target", "id"), &RaSim::enter_order_target);
+    ClassDB::bind_method(D_METHOD("capture_duration", "id", "target_id"), &RaSim::capture_duration);
+    ClassDB::bind_method(D_METHOD("set_capture_reference", "type", "ref_type"), &RaSim::set_capture_reference);
     ClassDB::bind_method(D_METHOD("order_disguise", "id", "target_id"), &RaSim::order_disguise);
     ClassDB::bind_method(D_METHOD("set_disguise", "id", "type", "owner"), &RaSim::set_disguise);
     ClassDB::bind_method(D_METHOD("order_demolish", "ids", "target_id"), &RaSim::order_demolish);
@@ -329,6 +333,11 @@ int RaSim::enter_kind_for(int id, int target_id) const {
 int RaSim::enter_progress(int id) const { return world_.enter_progress(id); }
 
 bool RaSim::enter_would_sabotage(int id, int target_id) const { return world_.enter_would_sabotage(id, target_id); }
+
+int RaSim::enter_progress_target(int id) const { return world_.enter_progress_target(id); }
+int RaSim::enter_order_target(int id) const { return world_.enter_order_target(id); }
+int RaSim::capture_duration(int id, int target_id) const { return world_.capture_duration_id(id, target_id); }
+void RaSim::set_capture_reference(int type, int ref_type) { world_.set_capture_reference(type, ref_type); }
 bool RaSim::order_disguise(int id, int target_id) { return world_.order_disguise(id, target_id); }
 bool RaSim::set_disguise(int id, int type, int owner) { return world_.set_disguise(id, type, owner); }
 void RaSim::order_demolish(const PackedInt32Array& ids, int target_id) { world_.order_enter(ids.ptr(), ids.size(), target_id, ra::ENTER_DEMOLISH); }
@@ -797,6 +806,10 @@ int RaSim::define_type(const Dictionary& def) {
 
     t.sabotage_threshold = int(def.get("sabotage_threshold", 0));
     t.sabotage_hp_removal = int(def.get("sabotage_hp_removal", 50));
+
+
+    t.capture_time_max = int(def.get("capture_time_max", 0));
+    t.capture_time_min = int(def.get("capture_time_min", 0));
     t.capturable = bool(def.get("capturable", false));
     t.capturable_types = uint32_t(int64_t(def.get("capturable_types", 0)));
 

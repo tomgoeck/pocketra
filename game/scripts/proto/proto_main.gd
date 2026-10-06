@@ -1363,8 +1363,7 @@ func _target_items(hit: ProtoWorld.Unit) -> Array:
 			and hit.player != ProtoWorld.PLAYER_CREEPS)
 	var ek := world.enter_kind(hit)
 	if ENTER_ACTIONS.has(ek):
-
-		items.append("sabotage" if world.enter_sabotages(hit) else ENTER_ACTIONS[ek])
+		items.append(ENTER_ACTIONS[ek])
 
 
 	if friendly and not world.types[hit.type].get("building", false) and world.sim != null \
@@ -1536,7 +1535,7 @@ func _on_action_bar(action: String) -> void:
 			if world.order_attack(target):
 				_toast(tr("toast.attacking") % [_type_label(target.type), world.selection.size()])
 				_last_gesture = "Angriff (%d)" % world.selection.size()
-		"capture", "sabotage", "fix", "infiltrate", "bridge":
+		"capture", "fix", "infiltrate", "bridge":
 
 
 			var what := world.order_enter(target)
@@ -6063,8 +6062,9 @@ var _cap_targets: Array = []
 var _cap_engineers: Array = []
 var _cap_fail := 0
 var _cap_before := {}
-var _cap_sabotage = null
-var _cap_sabotage_eng = null
+var _cap_probe = null
+var _cap_probe_eng = null
+var _cap_timing := {}
 
 
 func _cap_visible(kind: int) -> Array:
@@ -6106,6 +6106,22 @@ func _cap_report(titel: String) -> Dictionary:
 	return snap
 
 
+func _cap_track(tick: int) -> void:
+	var laufend: Dictionary = world.capture_progress_by_target()
+	for t in _cap_targets:
+		if not _cap_timing.has(t.id):
+			continue
+		var m: Dictionary = _cap_timing[t.id]
+		var eng = m["eng"]
+		if int(m["start"]) < 0 and eng != null and eng.alive and world.sim.enter_progress(eng.id) >= 0:
+			m["start"] = tick
+		if int(m["start"]) >= 0 and int(m["ende"]) < 0:
+			if laufend.has(t.id) and int(laufend[t.id]) > 0 and world.capture_bar_rect(t).size.x > 0.0:
+				m["bar"] = true
+			if t.player == 0:
+				m["ende"] = tick
+
+
 func _run_test_capture() -> void:
 	var sim = world.sim
 	var tick: int = sim.tick()
@@ -6134,6 +6150,9 @@ func _run_test_capture() -> void:
 			var b = world.call("_add_building", e[0], 1, _test_origin + (e[1] as Vector2i))
 			if b != null:
 				_cap_targets.append(b)
+		print("T --test-capture: Karte %s, Seed %d, KI-Plaetze %d, Ursprung %s" % [
+				ProtoWorld.next_map if ProtoWorld.next_map != "" else ProtoWorld.DEFAULT_MAP, world._seed,
+				ProtoWorld.next_ai_players, _test_origin])
 		print("T --test-capture: Spieler 0 = %s, Spieler 1 = %s; Ziele: %s" % [
 				sim.faction(0) if sim.has_method("faction") else "soviet", "allies",
 				", ".join(PackedStringArray(_cap_targets.map(func(u): return u.type)))])
@@ -6143,38 +6162,50 @@ func _run_test_capture() -> void:
 		_cap_before = _cap_report("VOR der Eroberung (Sowjet mit eigener Basis)")
 
 
-		_cap_sabotage = _cap_targets[0] if not _cap_targets.is_empty() else null
-		if _cap_sabotage != null:
-			var seng := world.spawn_unit("e6", 0, Vector2i(_cap_sabotage.pos / ProtoWorld.CELL) + Vector2i(0, 3))
+		_cap_probe = _cap_targets[0] if not _cap_targets.is_empty() else null
+		if _cap_probe != null:
+			var seng := world.spawn_unit("e6", 0, Vector2i(_cap_probe.pos / ProtoWorld.CELL) + Vector2i(0, 3))
 			if seng != null:
-				_cap_sabotage_eng = seng
+				_cap_probe_eng = seng
 				world.select_only(seng)
-				_on_tap(world.world_to_screen(_cap_sabotage.pos))
-				var soll: String = tr("toast.sabotaging") % _type_label(_cap_sabotage.type)
+				var vorschau: int = world.enter_capture_ticks(_cap_probe)
+				_on_tap(world.world_to_screen(_cap_probe.pos))
+				var soll: String = tr("toast.capturing") % _type_label(_cap_probe.type)
 				var ist: String = _toasts.back()[0] if not _toasts.is_empty() else ""
 				if ist != soll:
 					_cap_fail += 1
 				print("T --test-capture: Hinweis beim heilen Ziel „%s\" %s" % [ist, "OK" if ist == soll else "FEHLER (erwartet „%s\")" % soll])
+				_cap_timing[_cap_probe.id] = {"eng": seng, "soll": sim.capture_duration(seng.id, _cap_probe.id),
+						"start": -1, "ende": -1, "bar": false, "erwartet": 75}
+				if vorschau != 75:
+					_cap_fail += 1
+				print("T --test-capture: Dauer heile %s laut Sim %d Ticks (erwartet 75) %s" % [
+						_cap_probe.type, vorschau, "OK" if vorschau == 75 else "FEHLER"])
 		_test_step = 5
 		_test_tick = tick
 	elif _test_step == 5:
-		if _cap_sabotage_eng != null and _cap_sabotage_eng.alive and tick < _test_tick + 1500:
+		_cap_track(tick)
+		if _cap_probe != null and _cap_probe.player != 0 and tick < _test_tick + 1500:
 			return
-		if _cap_sabotage != null:
+		if _cap_probe != null:
 
-			var ok_sab: bool = _cap_sabotage.alive and _cap_sabotage.player == 1 \
-					and absf(_cap_sabotage.hp - 0.67) < 0.011 \
-					and (_cap_sabotage_eng == null or not _cap_sabotage_eng.alive)
-			if not ok_sab:
+			var ok_probe: bool = _cap_probe.alive and _cap_probe.player == 0 \
+					and _cap_probe.hp > 0.999 \
+					and (_cap_probe_eng == null or not _cap_probe_eng.alive)
+			if not ok_probe:
 				_cap_fail += 1
-			print("T --test-capture: Sabotage an der heilen %s: Besitzer %d, Leben %.3f, Pionier verbraucht=%s %s" % [
-					_cap_sabotage.type, _cap_sabotage.player, _cap_sabotage.hp,
-					_cap_sabotage_eng == null or not _cap_sabotage_eng.alive, "OK" if ok_sab else "FEHLER"])
+			print("T --test-capture: ein Pionier an der heilen %s: Besitzer %d, Leben %.3f, Pionier verbraucht=%s %s" % [
+					_cap_probe.type, _cap_probe.player, _cap_probe.hp,
+					_cap_probe_eng == null or not _cap_probe_eng.alive, "OK" if ok_probe else "FEHLER"])
+
+		var zustand := {"weap": [50, 150], "fact": [100, 300], "atek": [20, 50]}
 
 		for t in _cap_targets:
-			sim.set_health(t.id, int(world.types[t.type]["hp"]) * 20 / 100)
-
-		for t in _cap_targets:
+			if t.player == 0:
+				continue
+			var z: Array = zustand.get(t.type, [100, 0])
+			if int(z[0]) < 100:
+				sim.set_health(t.id, int(world.types[t.type]["hp"]) * int(z[0]) / 100)
 			var cell := Vector2i(t.pos / ProtoWorld.CELL) + Vector2i(0, 3)
 			var eng := world.spawn_unit("e6", 0, cell)
 			if eng == null:
@@ -6183,16 +6214,53 @@ func _run_test_capture() -> void:
 				return
 			_cap_engineers.append(eng)
 			world.select_only(eng)
+			_cap_timing[t.id] = {"eng": eng, "soll": sim.capture_duration(eng.id, t.id),
+					"start": -1, "ende": -1, "bar": false, "erwartet": int(z[1])}
 			_on_tap(world.world_to_screen(t.pos))
 		_test_step = 2
 		_test_tick = tick
 	elif _test_step == 2:
+		_cap_track(tick)
+
+
+		if tick >= _test_tick + 60 and sim.has_method("enter_order_target"):
+			for t in _cap_targets:
+				var mu: Dictionary = _cap_timing.get(t.id, {})
+				if mu.is_empty() or mu.has("unerreichbar") or t.player == 0 or int(mu["start"]) >= 0:
+					continue
+				var eu = mu["eng"]
+				if eu != null and eu.alive and sim.enter_order_target(eu.id) < 0 and not eu.moving:
+					mu["unerreichbar"] = true
+					print("T --test-capture: %-4s unerreichbar (keine Randzelle mit Weg): Befehl beendet, Pionier steht untaetig auf %s, Gebaeude unberuehrt (Besitzer %d, Leben %.3f) OK" % [
+							t.type, Vector2i(eu.pos / ProtoWorld.CELL), t.player, t.hp])
+					sim.set_owner(t.id, 0)
 		var offen := 0
 		for t in _cap_targets:
 			if t.alive and t.player != 0:
 				offen += 1
 		if offen > 0 and tick < _test_tick + 1500:
 			return
+
+		for t in _cap_targets:
+			var m: Dictionary = _cap_timing.get(t.id, {})
+			if m.is_empty() or m.has("unerreichbar"):
+				continue
+			var dauer: int = int(m["ende"]) - int(m["start"])
+			var ok_zeit: bool = int(m["start"]) >= 0 and int(m["ende"]) >= 0 and int(m["soll"]) == int(m["erwartet"]) \
+					and dauer >= int(m["soll"]) - 4 and dauer <= int(m["soll"]) + 6 and bool(m["bar"])
+			if not ok_zeit:
+				_cap_fail += 1
+			print("T --test-capture: %-4s Dauer laut Sim %3d (erwartet %3d), gemessen %3d Ticks, Balken am Gebaeude=%s %s" % [
+					t.type, int(m["soll"]), int(m["erwartet"]), dauer, m["bar"], "OK" if ok_zeit else "FEHLER"])
+			if not ok_zeit:
+
+				var e = m["eng"]
+				print("T --test-capture:      Diagnose %s: Seed %d, Ursprung %s, Ziel lebt=%s Besitzer %d Zelle %s; Pionier lebt=%s Zelle %s enter_kind=%d Fortschritt=%d" % [
+						t.type, world._seed, _test_origin, t.alive, t.player,
+						Vector2i(t.pos / ProtoWorld.CELL), e != null and e.alive,
+						Vector2i(e.pos / ProtoWorld.CELL) if e != null else Vector2i(-1, -1),
+						sim.enter_kind_for(e.id, t.id) if e != null and e.alive else -1,
+						sim.enter_progress(e.id) if e != null and e.alive else -1])
 		var uebernommen: Array = []
 		for t in _cap_targets:
 			if t.alive and t.player == 0:
@@ -8557,7 +8625,8 @@ func _run_test_air() -> void:
 		_test_tick = tick
 	elif _test_step == 6 and tick >= _test_tick + 150:
 
-		print("T: Chinook nach dem Beladen Höhe ", world.sim.air_altitude(_tran_heli.id), " (erwartet > 0)")
+		var h_load: int = world.sim.air_altitude(_tran_heli.id)
+		print("T: Chinook nach dem Beladen Höhe ", h_load, " (erwartet 0) ", "OK" if h_load == 0 else "FEHLER")
 		world.select_only(_tran_heli)
 
 
@@ -8573,6 +8642,9 @@ func _run_test_air() -> void:
 		world.select_only(_tran_heli)
 
 
+		var h_move: int = world.sim.air_altitude(_tran_heli.id)
+		print("T: Chinook nach dem Bewegungsbefehl Höhe ", h_move, " (erwartet 0, gelandet) ",
+			"OK" if h_move == 0 else "FEHLER", ", Entladen möglich: ", world.sim.can_unload(_tran_heli.id))
 		if not world.sim.can_unload(_tran_heli.id) and _tran_tries < 6:
 			_tran_tries += 1
 			var here := Vector2i(_tran_heli.pos / ProtoWorld.CELL)
@@ -8594,7 +8666,8 @@ func _run_test_air() -> void:
 		print("T: Chinook abgesetzt ", tran_out, " von ", _tran_troop.size(),
 			", an Bord ", (world.sim.cargo_weight(_tran_heli.id) if _tran_heli != null else 0),
 			", Höhe nach dem Entladen ", (world.sim.air_altitude(_tran_heli.id) if _tran_heli != null else 0),
-			" (erwartet > 0 — UnloadCargo.takeOffAfterUnload)")
+			" (erwartet 0, bleibt gelandet) ",
+			"OK" if tran_out == _tran_troop.size() and _tran_heli != null and world.sim.air_altitude(_tran_heli.id) == 0 else "FEHLER")
 		print("T: air fertig")
 		_test_step = 9
 		if _screenshot_path != "":
@@ -9256,6 +9329,7 @@ func _run_test_cargo() -> void:
 func _cargo_tap_cases() -> void:
 	var fails := 0
 	fails += await _cargo_tap_cycle("MTW", _cargo_apc, _cargo_troop)
+
 
 	var heli = null
 	var heli_troop: Array = []
@@ -15270,7 +15344,7 @@ func _roster_name(e: Dictionary) -> String:
 
 
 		var cfg := ConfigFile.new()
-		if cfg.load("user://settings.cfg") == OK:
+		if UserSettings.read(cfg) == OK:
 			n = str(cfg.get_value("multiplayer", "name", ""))
 	return n if n != "" else tr("lobby.you")
 
@@ -16542,8 +16616,8 @@ func _run_test_hover_enter() -> void:
 	await fall.call("5 Sammler ueber eigener Raffinerie", [harv], proc.pos, OrderMarker.ENTER, proc)
 	await fall.call("6 Infanterist ueber eigener Raffinerie", [e1], proc.pos, -1, null)
 	await fall.call("7 Pionier ueber Gegnergebaeude", [e6], foe.pos, OrderMarker.ENTER, foe)
-	print("T: --test-hover-enter 7 Pionier: enter_kind=%d, nur Sabotage=%s (dieselbe Marke)" % [
-			world.enter_kind(foe), world.enter_sabotages(foe)])
+	print("T: --test-hover-enter 7 Pionier: enter_kind=%d, Eroberung dauert %d Ticks" % [
+			world.enter_kind(foe), world.enter_capture_ticks(foe)])
 	if world.enter_kind(foe) == 0:
 		fehler += 1
 	await fall.call("8 beschaedigter Panzer ueber Reparaturdepot", [wund], fix.pos, OrderMarker.ENTER, fix)

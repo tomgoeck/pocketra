@@ -121,28 +121,28 @@ var _speaking := {}
 
 static func enabled() -> bool:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	return bool(cfg.get_value("multiplayer", "voice", true))
 
 
 static func set_enabled(on: bool) -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("multiplayer", "voice", on)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 
 
 static func intro_seen() -> bool:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	return bool(cfg.get_value("multiplayer", "voice_intro", false))
 
 
 static func set_intro_seen(on: bool) -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("multiplayer", "voice_intro", on)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 
 
 static func bytes_per_second() -> int:

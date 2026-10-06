@@ -83,15 +83,15 @@ static func supported() -> bool:
 
 static func enabled() -> bool:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	return bool(cfg.get_value(SECTION, "enabled", true))
 
 
 static func set_enabled(on: bool) -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value(SECTION, "enabled", on)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 
 
 static func event_enabled(what: String) -> bool:
@@ -100,7 +100,7 @@ static func event_enabled(what: String) -> bool:
 	if not EVENTS.has(what):
 		return false
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	return bool(cfg.get_value(SECTION, what, true))
 
 
@@ -108,9 +108,9 @@ static func set_event_enabled(what: String, on: bool) -> void:
 	if not EVENTS.has(what):
 		return
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value(SECTION, what, on)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 
 
 static func any_event() -> bool:

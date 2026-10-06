@@ -199,7 +199,8 @@ private:
     uint32_t generation_ = 1;
 };
 
-void build_flow_field(const Map& map, CPos goal, FlowField& out, int32_t mc = MC_LAND);
+
+void build_flow_field(const Map& map, CPos goal, FlowField& out, int32_t mc = MC_LAND, int avoid = -1);
 
 
 enum Resource { RES_NONE = 0, RES_ORE = 1, RES_GEMS = 2 };
@@ -1279,6 +1280,11 @@ struct UnitType {
 
     int32_t sabotage_threshold = 0;
     int32_t sabotage_hp_removal = 50;
+
+
+    int32_t capture_time_max = 0;
+    int32_t capture_time_min = 0;
+    int32_t capture_time_ref = -1;
     bool capturable = false;
     uint32_t capturable_types = 0;
 
@@ -1887,6 +1893,12 @@ struct Harvest {
 constexpr WAngle AIRCRAFT_INITIAL_FACING = 0;
 
 
+constexpr int32_t AIRCRAFT_LAND_RANGE = 5;
+
+
+constexpr uint32_t ENTER_RETRY_TICKS = 25;
+
+
 enum LandPhase : int32_t {
     LAND_NONE = 0,
     LAND_TOUCHDOWN = 1,
@@ -2170,6 +2182,32 @@ public:
     bool capture_sabotages(size_t i, size_t t) const;
 
 
+    bool enter_approach_cell(size_t i, size_t t, CPos& out) const;
+
+
+    bool approach_cell(size_t i, CPos origin, int32_t w, int32_t h, bool hollow, CPos avoid,
+                       int32_t boarding, CPos& out) const;
+
+
+    bool board_approach_cell(size_t i, size_t ti, CPos& out) const;
+
+    bool transport_in_motion(size_t ti) const;
+
+    void approach_transport(size_t i, size_t ti, bool may_end);
+    int32_t capture_duration(size_t i, size_t t) const;
+    int32_t capture_duration_type(int32_t eng_type, size_t t) const;
+    int32_t capture_duration_id(int32_t id, int32_t target_id) const {
+        const int i = index_of(id), t = index_of(target_id);
+        if (i < 0 || t < 0) return 0;
+        return capture_duration(size_t(i), size_t(t));
+    }
+
+    void set_capture_reference(int32_t type, int32_t ref_type) {
+        if (type < 0 || size_t(type) >= types_.size()) return;
+        types_[size_t(type)].capture_time_ref = ref_type >= 0 && size_t(ref_type) < types_.size() ? ref_type : -1;
+    }
+
+
     CPos enter_origin(size_t t) const;
     void step_enter();
 
@@ -2180,6 +2218,16 @@ public:
     void step_demolitions();
 
     int32_t enter_progress(int32_t id) const;
+
+
+    int32_t enter_order_target(int32_t id) const {
+        const int i = index_of(id);
+        return i >= 0 && actors_[size_t(i)].alive ? actors_[size_t(i)].capture_target : -1;
+    }
+    int32_t enter_progress_target(int32_t id) const {
+        if (enter_progress(id) < 0) return -1;
+        return actors_[size_t(index_of(id))].capture_target;
+    }
 
 
     bool enter_would_sabotage(int32_t id, int32_t target_id) const {
@@ -2333,6 +2381,10 @@ public:
 
     bool can_land_at(size_t i, CPos c) const;
 
+
+    bool landable_ground(size_t i, CPos c) const;
+    bool landing_cell_taken(size_t i, CPos c) const;
+
     void cancel_unload(size_t i);
 
     void lock_for_pickup(size_t ti);
@@ -2356,8 +2408,25 @@ public:
 
 
     const std::vector<int32_t>& pads_of(const UnitType& t) const {
+        static const std::vector<int32_t> none;
+        if (lands_when_idle(t)) return none;
         return t.land_actors.empty() ? t.rearm_actors : t.land_actors;
     }
+
+
+    bool lands_when_idle(const UnitType& t) const {
+        return t.aircraft && t.can_hover && t.idle_behavior == 1;
+    }
+
+
+    CPos find_landing_cell(size_t i, CPos target, int32_t range = AIRCRAFT_LAND_RANGE) const;
+
+
+    CPos pickup_cell(size_t ti) const;
+    CPos transport_cell(size_t ti) const;
+
+
+    int find_air_exit(int32_t owner, int32_t type, int prefer) const;
 
     bool pad_reserved(int32_t pad_id, int except = -1) const;
 
@@ -2612,6 +2681,8 @@ public:
 
     int32_t bot_eng_need(int32_t eng_type, size_t target, bool& destroys) const;
     bool bot_eng_worth(size_t target) const;
+
+    bool bot_eng_guarded(int32_t owner, size_t target) const;
     bool bot_water_building_ok(int32_t owner, int32_t type) const;
     void bot_naval_squads(int32_t owner);
     void bot_update_naval_squad(int32_t owner, BotSquad& s);

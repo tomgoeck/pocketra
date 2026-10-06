@@ -16,7 +16,7 @@ func _detect() -> String:
 	if k >= 0 and k + 1 < args.size() and (args[k + 1] == "de" or args[k + 1] == "en"):
 		return args[k + 1]
 	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS) == OK and cfg.has_section_key("general", "language"):
+	if UserSettings.read(cfg) == OK and cfg.has_section_key("general", "language"):
 		var v := str(cfg.get_value("general", "language", ""))
 		if v == "de" or v == "en":
 			return v
@@ -36,6 +36,6 @@ func set_language(new_code: String) -> void:
 		return
 	TranslationServer.set_locale(new_code)
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("general", "language", new_code)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)

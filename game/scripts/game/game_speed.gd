@@ -28,7 +28,7 @@ static func index() -> int:
 			return _index
 		var cfg := ConfigFile.new()
 		_index = DEFAULT_INDEX
-		if cfg.load(SETTINGS) == OK:
+		if UserSettings.read(cfg) == OK:
 			_index = clampi(int(cfg.get_value("general", "game_speed", DEFAULT_INDEX)), 0, TIMESTEPS.size() - 1)
 	return _index
 
@@ -36,9 +36,9 @@ static func index() -> int:
 static func set_index(i: int) -> void:
 	_index = clampi(i, 0, TIMESTEPS.size() - 1)
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("general", "game_speed", _index)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 
 
 static func tick_seconds() -> float:

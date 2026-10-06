@@ -22,6 +22,13 @@ int32_t World::air_altitude(int32_t id) const {
 void World::air_move(size_t i, WVec goal, bool land) {
     Air& air = airs_[i];
     const UnitType& t = types_[actors_[i].type];
+    if (t.can_hover && air.state == Air::LANDING) {
+
+        if (land && goal == actors_[i].pos) return;
+
+
+        air.state = Air::TAKING_OFF;
+    }
     air.goal = goal;
     air.has_goal = true;
     air.land_at_goal = land ? LAND_TOUCHDOWN : LAND_NONE;
@@ -64,6 +71,22 @@ int World::find_free_pad(int32_t owner, int32_t type, int prefer) const {
     for (size_t k = 0; k < actors_.size(); ++k)
         if (usable(k)) return static_cast<int>(k);
     return -1;
+}
+
+
+int World::find_air_exit(int32_t owner, int32_t type, int prefer) const {
+    if (type < 0 || type >= int32_t(types_.size())) return prefer;
+    const std::vector<int32_t>& exits = types_[size_t(type)].land_actors;
+    if (exits.empty()) return prefer;
+    auto usable = [&](size_t k) {
+        const Actor& b = actors_[k];
+        if (!b.alive || b.owner != owner || b.make_ticks > 0 || b.sell_ticks >= 0) return false;
+        return std::find(exits.begin(), exits.end(), b.type) != exits.end();
+    };
+    if (prefer >= 0 && size_t(prefer) < actors_.size() && usable(size_t(prefer))) return prefer;
+    for (size_t k = 0; k < actors_.size(); ++k)
+        if (usable(k)) return static_cast<int>(k);
+    return prefer;
 }
 
 
@@ -599,6 +622,15 @@ void World::step_aircraft(size_t i) {
 
     if (air.has_goal || air.returning || combats_[i].target >= 0 || combats_[i].attack_move) {
         air.idle_ticks = 0;
+    } else if (lands_when_idle(t)) {
+
+
+        if (air.state == Air::CRUISING && air.land_at_goal == LAND_NONE && paradrop_lz_[i].x < 0 &&
+            air.idle_ticks++ % 25 == 0) {
+            const CPos here = to_cell(a.pos);
+            const CPos lc = find_landing_cell(i, here);
+            if (lc.x >= 0) air_move(i, lc == here ? a.pos : cell_center(lc), true);
+        }
     } else if (air.state == Air::CRUISING && air.land_at_goal == LAND_NONE && find_rearm_base(i) >= 0) {
         const int32_t lap = FULL_TURN / std::max(1, t.turn_rate);
         if (++air.idle_ticks >= IDLE_LAPS_BEFORE_RETURN * lap) air_return_to_base(i);
@@ -624,7 +656,21 @@ void World::step_aircraft(size_t i) {
                 a.pos = air.goal;
                 air.has_goal = false;
 
-                if (air.land_at_goal != LAND_NONE) air.land_at_goal = LAND_TURN;
+                if (air.land_at_goal != LAND_NONE) {
+                    air.land_at_goal = LAND_TURN;
+
+
+                    if (lands_when_idle(t) && !can_land_at(i, to_cell(air.goal))) {
+                        const CPos lc = find_landing_cell(i, to_cell(air.goal));
+                        if (lc.x >= 0) {
+                            air.goal = cell_center(lc);
+                            air.has_goal = true;
+                            air.land_at_goal = LAND_TOUCHDOWN;
+                        } else {
+                            air.land_at_goal = LAND_NONE;
+                        }
+                    }
+                }
             } else {
                 const WVec d = air.goal - a.pos;
                 a.pos.x += static_cast<WDist>(int64_t(d.x) * speed / dist);

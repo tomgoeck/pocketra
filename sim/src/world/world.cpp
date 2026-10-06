@@ -874,6 +874,10 @@ int32_t World::spawn(int32_t type, int32_t owner, CPos cell, WAngle facing, int3
                 actors_[idx].facing = types_[actors_[size_t(b)].type].exit_facing;
                 prev_pos_[size_t(idx)] = actors_[idx].pos;
                 prev_facing_[size_t(idx)] = actors_[idx].facing;
+            } else if (lands_when_idle(types_[type]) && can_land_at(size_t(idx), c)) {
+
+
+                ai.state = Air::LANDED;
             }
         }
     } else if (map_.in_bounds(c)) {
@@ -977,6 +981,21 @@ void World::set_move(size_t i, CPos goal, int32_t near_enough) {
         mobiles_[i].goal = goal;
         mobiles_[i].moving = true;
         mobiles_[i].arrived = false;
+
+
+        const UnitType& at = types_[actors_[i].type];
+        if (lands_when_idle(at)) {
+            const CPos lc = find_landing_cell(i, goal);
+            const WVec g = cell_center(lc.x >= 0 ? lc : goal);
+
+            if (airs_[i].state == Air::LANDED && actors_[i].pos == g) {
+                mobiles_[i].moving = false;
+                mobiles_[i].arrived = true;
+                return;
+            }
+            air_move(i, g, true);
+            return;
+        }
         air_move(i, cell_center(goal), false);
         return;
     }

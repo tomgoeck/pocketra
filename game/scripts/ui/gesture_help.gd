@@ -147,13 +147,13 @@ static func panel(title: String = "", close_text: String = "", on_close: Callabl
 
 static func seen() -> bool:
 	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS) != OK:
+	if UserSettings.read(cfg) != OK:
 		return false
 	return bool(cfg.get_value("ui", "gestures_seen", false))
 
 
 static func mark_seen() -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("ui", "gestures_seen", true)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)

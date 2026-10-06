@@ -95,7 +95,7 @@ static func configured_url() -> String:
 		if k >= 0 and k + 1 < args.size() and not args[k + 1].begins_with("--"):
 			return args[k + 1]
 	var cfg := ConfigFile.new()
-	if cfg.load("user://settings.cfg") == OK:
+	if UserSettings.read(cfg) == OK:
 		var u := str(cfg.get_value("multiplayer", "url", ""))
 		if u != "":
 			return u
@@ -108,7 +108,7 @@ static func configured_name() -> String:
 	if k >= 0 and k + 1 < args.size():
 		return args[k + 1]
 	var cfg := ConfigFile.new()
-	if cfg.load("user://settings.cfg") == OK:
+	if UserSettings.read(cfg) == OK:
 		var n := str(cfg.get_value("multiplayer", "name", ""))
 		if n != "":
 			return n
@@ -124,9 +124,9 @@ static func device_name() -> String:
 
 static func save_name(n: String) -> void:
 	var cfg := ConfigFile.new()
-	cfg.load("user://settings.cfg")
+	UserSettings.read(cfg)
 	cfg.set_value("multiplayer", "name", n.substr(0, 24))
-	cfg.save("user://settings.cfg")
+	UserSettings.write(cfg)
 
 
 func start(target_url: String = "", name_for_room: String = "") -> void:

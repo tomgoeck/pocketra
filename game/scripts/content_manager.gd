@@ -36,16 +36,16 @@ const SETTINGS := "user://settings.cfg"
 
 static func disclaimer_accepted() -> bool:
 	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS) != OK:
+	if UserSettings.read(cfg) != OK:
 		return false
 	return bool(cfg.get_value("content", "disclaimer_accepted", false))
 
 
 static func set_disclaimer_accepted(on: bool) -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("content", "disclaimer_accepted", on)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 
 
 static func ensure_dir(path: String) -> void:

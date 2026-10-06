@@ -514,6 +514,16 @@ static var _args_applied := false
 func _apply_cmdline_args() -> void:
 	var args := OS.get_cmdline_user_args()
 
+
+	if args.has("--test-capture"):
+		for d in [["--map", "a-path-beyond"], ["--seed", "1"], ["--ai", "0"],
+				["--starting-units", "none"], ["--faction", "soviet"]]:
+			if not args.has(d[0]):
+				args.append(d[0])
+				args.append(d[1])
+		if not args.has("--reveal"):
+			args.append("--reveal")
+
 	_diag = args.has("--diag")
 	eva_logging = args.has("--test-eva")
 	_reveal_all = args.has("--reveal")
@@ -1186,7 +1196,7 @@ func _start_sim() -> void:
 
 					"creates_shroud_range", "jammer_range", "provides_radar", "gps_dot",
 					"wall", "captures", "capturable", "storage", "door_len", "build_limit",
-					"capture_types", "capturable_types", "capture_delay", "sabotage_threshold", "sabotage_hp_removal", "instantly_repairs", "instantly_repairable",
+					"capture_types", "capturable_types", "capture_delay", "sabotage_threshold", "sabotage_hp_removal", "capture_time_max", "capture_time_min", "instantly_repairs", "instantly_repairable",
 					"repairs_bridges",
 					"demolition_delay", "demolishable", "infiltrates", "infiltrates_ally", "infil_transform",
 					"capture_health", "disguise", "ignores_disguise",
@@ -1387,6 +1397,13 @@ func _start_sim() -> void:
 			var cn: String = str(ct.get("capture_into", ""))
 			if cn != "" and type_ids.has(name) and type_ids.has(cn):
 				sim.set_capture_actor(type_ids[name], type_ids[cn], int(ct.get("capture_health", 0)))
+
+
+	if sim.has_method("set_capture_reference"):
+		for name in types:
+			var rn: String = str(types[name].get("capture_time_ref", ""))
+			if rn != "" and type_ids.has(name) and type_ids.has(rn):
+				sim.set_capture_reference(type_ids[name], type_ids[rn])
 
 
 	if sim.has_method("set_land_actors"):
@@ -3047,9 +3064,6 @@ func order_enter(target: Unit) -> String:
 	_voice("demolish" if kind == ENTER_DEMOLISH else "action")
 
 
-	if kind == ENTER_CAPTURE and sim.has_method("enter_would_sabotage") \
-			and sim.enter_would_sabotage(ids[0], target.id):
-		return "toast.sabotaging"
 	return ENTER_LABELS.get(kind, "")
 
 
@@ -3076,13 +3090,13 @@ func enter_kind(target: Unit) -> int:
 	return ENTER_NONE
 
 
-func enter_sabotages(target: Unit) -> bool:
-	if sim == null or target == null or not sim.has_method("enter_would_sabotage"):
-		return false
+func enter_capture_ticks(target: Unit) -> int:
+	if sim == null or target == null or not sim.has_method("capture_duration"):
+		return 0
 	for u in selection:
 		if u.alive and sim.enter_kind_for(u.id, target.id) == ENTER_CAPTURE:
-			return sim.enter_would_sabotage(u.id, target.id)
-	return false
+			return sim.capture_duration(u.id, target.id)
+	return 0
 
 
 func has_disguiser() -> bool:
@@ -4331,19 +4345,7 @@ func _draw_overlay() -> void:
 				if p < filled:
 					_overlay.draw_rect(pr.grow(-0.5), Color(1.0, 0.85, 0.2), true)
 	_draw_ranks()
-
-
-	if sim != null and sim.has_method("enter_progress"):
-		for u in units:
-			if not u.alive or not actor_shown(u):
-				continue
-			var prog: int = sim.enter_progress(u.id)
-			if prog < 0:
-				continue
-			var pr := unit_rect(u)
-			var pb := Rect2(pr.position.x, pr.position.y - 7.0, pr.size.x, 2.0)
-			_overlay.draw_rect(pb, Color(0, 0, 0, 0.7), true)
-			_overlay.draw_rect(Rect2(pb.position, Vector2(pb.size.x * prog / 1000.0, pb.size.y)), Color(1.0, 0.65, 0.0), true)
+	_draw_capture_progress()
 	_draw_building_decorations(w)
 	_draw_detection_circles(w)
 	_draw_c4_markers(w)
@@ -4356,6 +4358,54 @@ func _draw_overlay() -> void:
 		_overlay.draw_rect(r, Color.WHITE, false, w)
 	_draw_pending_place()
 	_draw_placement()
+
+
+func _draw_capture_progress() -> void:
+	if sim == null or not sim.has_method("enter_progress"):
+		return
+	var has_target: bool = sim.has_method("enter_progress_target")
+	var at_target := {}
+	for u in units:
+		if not u.alive or not actor_shown(u):
+			continue
+		var prog: int = sim.enter_progress(u.id)
+		if prog < 0:
+			continue
+		var pr := unit_rect(u)
+		var pb := Rect2(pr.position.x, pr.position.y - 7.0, pr.size.x, 2.0)
+		_overlay.draw_rect(pb, Color(0, 0, 0, 0.7), true)
+		_overlay.draw_rect(Rect2(pb.position, Vector2(pb.size.x * prog / 1000.0, pb.size.y)), CAPTURE_BAR_COLOR, true)
+		if has_target:
+			var tid: int = sim.enter_progress_target(u.id)
+			if tid >= 0:
+				at_target[tid] = maxi(int(at_target.get(tid, 0)), prog)
+	for tid in at_target:
+		var b: Unit = unit_by_id(tid)
+		if b == null or not b.alive or not actor_shown(b):
+			continue
+		var bar := capture_bar_rect(b)
+		_overlay.draw_rect(bar.grow(1.0), Color(0, 0, 0, 0.7), true)
+		_overlay.draw_rect(Rect2(bar.position, Vector2(bar.size.x * int(at_target[tid]) / 1000.0, bar.size.y)), CAPTURE_BAR_COLOR, true)
+
+
+const CAPTURE_BAR_COLOR := Color(1.0, 0.65, 0.0)
+
+
+func capture_bar_rect(b: Unit) -> Rect2:
+	var r := unit_rect(b)
+	return Rect2(r.position.x, r.position.y - 9.0, r.size.x, 3.0)
+
+
+func capture_progress_by_target() -> Dictionary:
+	var out := {}
+	if sim == null or not sim.has_method("enter_progress_target"):
+		return out
+	for u in units:
+		if u.alive:
+			var tid: int = sim.enter_progress_target(u.id)
+			if tid >= 0:
+				out[tid] = maxi(int(out.get(tid, 0)), int(sim.enter_progress(u.id)))
+	return out
 
 
 var _flag_frames: Array[ImageTexture] = []

@@ -4,7 +4,7 @@
 
 namespace ra {
 
-const char* version() { return "0.15.0"; }
+const char* version() { return "0.16.0"; }
 
 int32_t isqrt(int64_t v) {
     if (v <= 0) return 0;

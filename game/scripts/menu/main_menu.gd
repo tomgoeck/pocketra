@@ -528,7 +528,7 @@ func _process(_delta: float) -> void:
 
 func _load_settings() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS) == OK:
+	if UserSettings.read(cfg) == OK:
 		_ai_players = int(cfg.get_value("skirmish", "ai_players", 1))
 		_credits = int(cfg.get_value("skirmish", "credits", 5000))
 		_faction = str(cfg.get_value("skirmish", "faction", "allies"))
@@ -568,7 +568,7 @@ func _load_settings() -> void:
 
 func _save_settings() -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("skirmish", "ai_players", _ai_players)
 	cfg.set_value("skirmish", "credits", _credits)
 	cfg.set_value("skirmish", "faction", _faction)
@@ -584,7 +584,7 @@ func _save_settings() -> void:
 	cfg.set_value("skirmish", "player_team", _player_team)
 	cfg.set_value("skirmish", "spawn", _spawn_choice)
 	cfg.set_value("skirmish", "ai_slots", _ai_slots)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 
 
 func _button(text: String, cb: Callable, w: float = 200.0, h: float = 40.0) -> Button:

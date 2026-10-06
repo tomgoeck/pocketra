@@ -15,7 +15,7 @@ bool Map::can_step(CPos from, int dir, int32_t mc) const {
 constexpr int32_t LANE_BIAS_COST = 10;
 
 
-void build_flow_field(const Map& map, CPos goal, FlowField& out, int32_t mc) {
+void build_flow_field(const Map& map, CPos goal, FlowField& out, int32_t mc, int avoid) {
     const int n = map.cells();
     out.goal = goal;
     out.move_class = mc;
@@ -38,6 +38,7 @@ void build_flow_field(const Map& map, CPos goal, FlowField& out, int32_t mc) {
             const CPos nb{c.x + DIR_DX[dir], c.y + DIR_DY[dir]};
             const int back = (dir + 4) % NUM_DIRS;
             if (!map.passable(nb, mc) || !map.can_step(nb, back, mc)) continue;
+            if (avoid >= 0 && map.index(nb) == avoid) continue;
             const int base = (DIR_DX[dir] != 0 && DIR_DY[dir] != 0) ? DIAGONAL_COST : STRAIGHT_COST;
 
             const int bx = DIR_DX[back], by = DIR_DY[back];

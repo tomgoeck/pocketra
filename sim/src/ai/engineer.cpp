@@ -16,7 +16,11 @@ constexpr uint32_t ENG_APC_TRIP_TICKS = 3000;
 constexpr int32_t ENG_APC_UNLOAD_CELLS = 3;
 constexpr int32_t ENG_NEED_MAX = 16;
 
-enum EngClass { ENG_NEUTRAL = 0, ENG_WEAK = 1, ENG_KILL = 2, ENG_PACK = 3 };
+constexpr int32_t ENG_QUICK_TICKS = 100;
+constexpr int32_t ENG_QUICK_MIN_VALUE = 300;
+constexpr int32_t ENG_GUARD_CELLS = 8;
+
+enum EngClass { ENG_NEUTRAL = 0, ENG_WEAK = 1, ENG_QUICK = 2, ENG_KILL = 3, ENG_PACK = 4 };
 
 
 int32_t cells_to_rect(CPos c, CPos origin, int32_t w, int32_t h) {
@@ -57,6 +61,25 @@ bool World::bot_eng_worth(size_t target) const {
     const UnitType& t = types_[actors_[target].type];
     if (!t.building || t.husk || t.wall) return false;
     return t.base_provider || t.refinery || (t.produces & (1u << QUEUE_VEHICLE)) != 0;
+}
+
+
+bool World::bot_eng_guarded(int32_t owner, size_t target) const {
+    if (target >= actors_.size()) return false;
+    const Actor& tg = actors_[target];
+    const UnitType& tt = types_[tg.type];
+    for (size_t k = 0; k < actors_.size(); ++k) {
+        const Actor& d = actors_[k];
+        if (!d.alive || k == target || d.owner == owner || allied(owner, d.owner)) continue;
+        if (d.inside || d.transport >= 0) continue;
+        const UnitType& dt = types_[d.type];
+        if (dt.husk || dt.weapon < 0 || size_t(dt.weapon) >= weapons_.size()) continue;
+        if ((weapons_[size_t(dt.weapon)].valid_targets & (TT_INFANTRY | TT_GROUND_ACTOR)) == 0) continue;
+        if (dt.building ? !bot_knows(owner, k) : !bot_sees(owner, k)) continue;
+        const CPos c = dt.building ? CPos{d.origin.x + dt.foot_w / 2, d.origin.y + dt.foot_h / 2} : mobiles_[k].cell;
+        if (cells_to_rect(c, tg.origin, tt.foot_w, tt.foot_h) <= ENG_GUARD_CELLS) return true;
+    }
+    return false;
 }
 
 void World::bot_eng_note(int32_t owner, int32_t eng_id, int32_t target_id) {
@@ -239,7 +262,7 @@ void World::bot_engineers(int32_t owner) {
     auto in_reach = [&](CPos c) { return map_.in_bounds(c) && reach[size_t(map_.index(c))] != 0; };
 
 
-    struct Tgt { size_t idx; int32_t id; int32_t cls; int32_t need; int64_t value; };
+    struct Tgt { size_t idx; int32_t id; int32_t cls; int32_t need; int64_t value; int64_t score; };
     std::vector<Tgt> singles, packs;
     for (size_t k = 0; k < actors_.size(); ++k) {
         const Actor& e = actors_[k];
@@ -265,22 +288,37 @@ void World::bot_engineers(int32_t owner) {
         const int64_t value = bt.sell_value >= 0 ? bt.sell_value : bt.cost;
         const bool worth = bot_eng_worth(k) || value >= p.eng_pack_min_value;
         int32_t cls;
-        if (need == 1 && !destroys) cls = neutral ? ENG_NEUTRAL : ENG_WEAK;
+        int64_t score = value;
+        if (et.sabotage_threshold <= 0) {
+
+
+            const int32_t dur = std::max(1, capture_duration_type(eng_type, k));
+            score = value * 100 / dur;
+            const bool damaged = int64_t(e.hp) * 2 <= int64_t(bt.hp);
+            const bool gun = bt.weapon >= 0;
+            const bool guarded = !neutral && !gun && bot_eng_guarded(owner, k);
+            if (neutral) cls = ENG_NEUTRAL;
+            else if (damaged && !gun && !guarded) cls = ENG_WEAK;
+            else if (!gun && !guarded && dur <= ENG_QUICK_TICKS && value >= ENG_QUICK_MIN_VALUE) cls = ENG_QUICK;
+            else cls = ENG_PACK;
+        } else if (need == 1 && !destroys) cls = neutral ? ENG_NEUTRAL : ENG_WEAK;
         else if (need == 1) cls = ENG_KILL;
         else if (!destroys) cls = ENG_PACK;
         else continue;
         if (cls == ENG_WEAK && p.eng_plan < 2) continue;
+        if (cls == ENG_QUICK && p.eng_plan < 3) continue;
         if ((cls == ENG_KILL || cls == ENG_PACK) && (p.eng_plan < 3 || !worth)) continue;
 
         int32_t pending = 0;
         for (size_t o = 0; o + 1 < b.eng_ops.size(); o += 2) if (b.eng_ops[o + 1] == e.id) ++pending;
         if (pending >= need) continue;
-        (cls == ENG_PACK ? packs : singles).push_back({k, e.id, cls, need - pending, value});
+        (cls == ENG_PACK ? packs : singles).push_back({k, e.id, cls, need - pending, value, score});
     }
 
 
     auto by_value = [](const Tgt& x, const Tgt& y) {
         if (x.cls != y.cls) return x.cls < y.cls;
+        if (x.score != y.score) return x.score > y.score;
         if (x.value != y.value) return x.value > y.value;
         return x.id < y.id;
     };
@@ -304,11 +342,17 @@ void World::bot_engineers(int32_t owner) {
     };
 
 
+    const bool eng_eco_ok = !bot_eco_hold(owner) && bot_tank_value(owner) >= p.army_min_value &&
+                            int64_t(credits(owner)) >= int64_t(std::max(0, et.cost)) + p.eng_pack_cash;
     int32_t open_singles = 0;
     for (const Tgt& t : singles) {
         b.eng_ready = std::max(b.eng_ready, 1);
         const int32_t id = take_nearest(actors_[t.idx]);
-        if (id < 0) { ++open_singles; continue; }
+        if (id < 0) {
+            if (t.cls != ENG_QUICK) ++open_singles;
+            else if (eng_eco_ok && open_singles == 0) open_singles = 1;
+            continue;
+        }
         order_enter(&id, 1, t.id, ENTER_CAPTURE);
         bot_eng_note(owner, id, t.id);
     }

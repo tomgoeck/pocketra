@@ -35,16 +35,16 @@ static func set_fullscreen(on: bool) -> void:
 		return
 	set_fullscreen_now(on)
 	var cfg := ConfigFile.new()
-	cfg.load("user://settings.cfg")
+	UserSettings.read(cfg)
 	cfg.set_value("display", "fullscreen", on)
-	cfg.save("user://settings.cfg")
+	UserSettings.write(cfg)
 
 
 static func apply_saved_fullscreen() -> void:
 	if not is_desktop():
 		return
 	var cfg := ConfigFile.new()
-	cfg.load("user://settings.cfg")
+	UserSettings.read(cfg)
 	if bool(cfg.get_value("display", "fullscreen", true)):
 		DisplayServer.window_set_mode(fullscreen_mode())
 	else:

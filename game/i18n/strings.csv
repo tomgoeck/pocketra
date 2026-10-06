@@ -52,7 +52,6 @@ toast.rally_set,Sammelpunkt gesetzt,Rally point set
 toast.no_rally_point,Dieses Gebäude hat keinen Sammelpunkt,This building has no rally point
 toast.rally_ground_only,Sammelpunkt nur auf freien Boden,Rally point on clear ground only
 toast.capturing,Erobern: %s,Capturing: %s
-toast.sabotaging,"Sabotieren: %s. Erobern geht erst ab einem Drittel Leben","Sabotaging: %s. Capture only works at one third health or less"
 toast.repairing_building,Reparieren: %s,Repairing: %s
 toast.demolishing,Sprengen: %s,Demolishing: %s
 toast.demolish_impossible,Hier kann keine Sprengladung gelegt werden,Cannot plant explosives here
@@ -210,7 +209,6 @@ radial.action.move,Bewegen,Move
 radial.action.clear,Leeren,Clear
 radial.action.cancel,Abbrechen,Cancel
 radial.action.capture,Erobern,Capture
-radial.action.sabotage,Sabotieren,Sabotage
 radial.action.fix,Instand setzen,Fix up
 radial.action.infiltrate,Infiltrieren,Infiltrate
 radial.action.bridge,Brücke reparieren,Repair bridge

@@ -9275,6 +9275,273 @@ static void test_cargo_helicopter() {
 }
 
 
+static void test_chinook_landing() {
+    World w;
+    const int size = 48;
+    std::vector<uint8_t> cost(size_t(size) * size, 1);
+    std::vector<uint8_t> terrain(size_t(size) * size, uint8_t(TER_CLEAR));
+
+    for (int y = 30; y <= 34; ++y)
+        for (int x = 30; x <= 34; ++x) terrain[size_t(y * size + x)] = uint8_t(TER_WATER);
+    w.set_map(size, size, cost.data());
+    w.set_terrain(size, size, terrain.data());
+
+    Weapon hellfire;
+    hellfire.range = 5 * CELL; hellfire.reload = 40; hellfire.damage = 3000; hellfire.spread = 128;
+    hellfire.speed = 0; hellfire.valid_targets = TT_GROUND_ACTOR;
+    const int w_hell = w.define_weapon(hellfire);
+
+    UnitType fact;
+    fact.building = true; fact.foot_w = 3; fact.foot_h = 3; fact.footprint = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    fact.hp = 150000; fact.produces = 1u << QUEUE_BUILDING; fact.base_provider = true;
+    fact.provides = {"fact"};
+    UnitType hpad;
+    hpad.building = true; hpad.foot_w = 2; hpad.foot_h = 2; hpad.footprint = {1, 1, 1, 1};
+    hpad.build_block = hpad.footprint; hpad.hp = 80000; hpad.produces = 1u << QUEUE_AIRCRAFT;
+    hpad.target_types = TT_GROUND_ACTOR | TT_STRUCTURE; hpad.provides = {"hpad"};
+    hpad.reservable = true;
+    hpad.exit_dx = 0; hpad.exit_dy = 0; hpad.rally_dx = 0; hpad.rally_dy = 2;
+    hpad.exit_ox = 0; hpad.exit_oy = -256; hpad.exit_facing = 896;
+    UnitType mine;
+    mine.building = true; mine.foot_w = 1; mine.foot_h = 1; mine.footprint = {1};
+    mine.build_block = mine.footprint; mine.hp = 100000;
+    UnitType tran;
+    tran.aircraft = true; tran.can_hover = true; tran.vtol = true;
+    tran.speed = 128; tran.turn_rate = 20; tran.cruise_altitude = 1280; tran.altitude_velocity = 58;
+    tran.hp = 14000; tran.hit_radius = 426;
+    tran.idle_behavior = 1;
+
+    tran.landable_terrain = (1u << TER_CLEAR) | (1u << TER_ROUGH) | (1u << TER_ROAD) | (1u << TER_ORE) |
+                            (1u << TER_BEACH) | (1u << TER_GEMS);
+    tran.cargo_max_weight = 8; tran.cargo_types = TT_INFANTRY;
+    tran.before_unload_delay = 8; tran.between_unload_delay = 0;
+    tran.after_unload_delay = 40; tran.after_load_delay = 8;
+    tran.cost = 100; tran.queue_kind = QUEUE_AIRCRAFT; tran.prerequisites = {"hpad"};
+    tran.target_types = TT_GROUND_ACTOR; tran.target_types_airborne = TT_AIRBORNE;
+    UnitType heli;
+    heli.aircraft = true; heli.can_hover = true; heli.vtol = true; heli.speed = 149; heli.turn_rate = 16;
+    heli.cruise_altitude = 1280; heli.altitude_velocity = 43; heli.hp = 12000; heli.weapon = w_hell;
+    heli.ammo_max = 8; heli.ammo_reload = 20; heli.air_attack_type = 1; heli.facing_tolerance = 80;
+    heli.hit_radius = 426; heli.cost = 100; heli.queue_kind = QUEUE_AIRCRAFT;
+    heli.prerequisites = {"hpad"}; heli.landable_terrain = tran.landable_terrain;
+    heli.target_types = TT_GROUND_ACTOR | TT_VEHICLE; heli.target_types_airborne = TT_AIRBORNE;
+    UnitType e1;
+    e1.speed = 56; e1.turn_rate = 1024; e1.infantry = true; e1.hp = 5000; e1.hit_radius = 128;
+    e1.passenger_weight = 1; e1.passenger_type = TT_INFANTRY;
+    e1.target_types = TT_GROUND_ACTOR | TT_INFANTRY;
+    const int t_fact = w.define_type(fact), t_hpad = w.define_type(hpad), t_mine = w.define_type(mine);
+
+    tran.land_actors = {t_hpad};
+    heli.rearm_actors = {t_hpad}; heli.land_actors = {t_hpad};
+    const int t_tran = w.define_type(tran), t_heli = w.define_type(heli), t_e1 = w.define_type(e1);
+
+    auto water = [&](CPos c) { return c.x >= 30 && c.x <= 34 && c.y >= 30 && c.y <= 34; };
+    auto landed = [&](int32_t id) {
+        const int i = w.index_of(id);
+        return i >= 0 && w.air(size_t(i)).state == Air::LANDED && w.air(size_t(i)).alt == 0;
+    };
+    auto cell_of = [&](int32_t id) { return to_cell(w.actor(size_t(w.index_of(id))).pos); };
+    auto run_until_landed = [&](int32_t id, int max_ticks) {
+
+        for (int t = 0; t < 5; ++t) w.step();
+        for (int t = 0; t < max_ticks && !landed(id); ++t) w.step();
+        return landed(id);
+    };
+
+
+    const int32_t ch = w.spawn(t_tran, 0, {20, 20}, 0, 100, true);
+    CHECK(w.air(size_t(w.index_of(ch))).alt == 1280);
+    for (int t = 0; t < 200 && !landed(ch); ++t) w.step();
+    CHECK(landed(ch));
+    CHECK(cell_of(ch) == (CPos{20, 20}));
+    for (int t = 0; t < 400; ++t) w.step();
+    CHECK(landed(ch));
+    std::printf("Chinook: ohne Auftrag gelandet auf %d,%d und geblieben\n", cell_of(ch).x, cell_of(ch).y);
+
+
+    w.order_move(&ch, 1, {32, 32});
+    CHECK(run_until_landed(ch, 1200));
+    const CPos lb = cell_of(ch);
+    CHECK(!water(lb));
+    CHECK(cell_dist_sq(lb, CPos{32, 32}) <= AIRCRAFT_LAND_RANGE * AIRCRAFT_LAND_RANGE);
+    CHECK(w.can_land_at(size_t(w.index_of(ch)), lb));
+    for (int t = 0; t < 300; ++t) w.step();
+    CHECK(landed(ch) && cell_of(ch) == lb);
+    std::printf("Chinook: Ziel 32,32 (Wasser) -> gelandet auf %d,%d\n", lb.x, lb.y);
+
+
+    const int32_t ore = w.spawn_building(t_mine, -1, {10, 30});
+    CHECK(ore >= 0);
+    w.order_move(&ch, 1, {10, 30});
+    bool on_mine = false;
+    for (int t = 0; t < 5; ++t) w.step();
+    for (int t = 0; t < 1500 && !landed(ch); ++t) {
+        w.step();
+        const int i = w.index_of(ch);
+        if (w.air(size_t(i)).alt < 1280 && w.air(size_t(i)).state == Air::LANDING && cell_of(ch) == (CPos{10, 30}))
+            on_mine = true;
+    }
+    CHECK(landed(ch));
+    CHECK(!on_mine);
+    const CPos lc = cell_of(ch);
+    CHECK(lc != (CPos{10, 30}));
+    CHECK(cell_dist_sq(lc, CPos{10, 30}) <= 2);
+    std::printf("Chinook: Ziel 10,30 (Erzmine) -> gelandet auf %d,%d\n", lc.x, lc.y);
+
+
+    std::vector<int32_t> troop;
+    for (int i = 0; i < 3; ++i) troop.push_back(w.spawn(t_e1, 0, {14 + i, 26}));
+    w.order_enter_transport(troop.data(), troop.size(), ch);
+    bool left_ground = false;
+    for (int t = 0; t < 800 && w.cargo_weight(ch) < 3; ++t) {
+        w.step();
+        if (!landed(ch)) left_ground = true;
+    }
+    CHECK(w.cargo_weight(ch) == 3);
+    for (int t = 0; t < 200; ++t) { w.step(); if (!landed(ch)) left_ground = true; }
+    CHECK(!left_ground);
+    CHECK(!w.actor(size_t(w.index_of(ch))).load_lock);
+    std::printf("Chinook: %d/3 in die gelandete Maschine gestiegen, sie blieb am Boden\n", w.cargo_weight(ch));
+
+
+    w.order_move(&ch, 1, {25, 10});
+    CHECK(run_until_landed(ch, 1200));
+    CHECK(cell_of(ch) == (CPos{25, 10}));
+    CHECK(w.can_unload(ch));
+    w.order_unload(&ch, 1);
+    for (int t = 0; t < 400; ++t) {
+        w.step();
+        if (w.cargo_weight(ch) == 0 && !w.actor(size_t(w.index_of(ch))).unloading) break;
+    }
+    CHECK(w.cargo_weight(ch) == 0);
+    for (int t = 0; t < 200; ++t) w.step();
+    CHECK(landed(ch) && cell_of(ch) == (CPos{25, 10}));
+    int near = 0;
+    for (const int32_t id : troop) {
+        const int i = w.index_of(id);
+        if (i >= 0 && w.actor(size_t(i)).transport < 0 && cell_dist_sq(w.mobile(size_t(i)).cell, CPos{25, 10}) <= 2) ++near;
+    }
+    CHECK(near == 3);
+    std::printf("Chinook: bei 25,10 gelandet, %d/3 abgesetzt, bleibt am Boden\n", near);
+
+
+    w.order_move(&ch, 1, {40, 12});
+    for (int t = 0; t < 40; ++t) w.step();
+    CHECK(w.air(size_t(w.index_of(ch))).alt > 0);
+    w.order_enter_transport(troop.data(), troop.size(), ch);
+    for (int t = 0; t < 3000 && w.cargo_weight(ch) < 3; ++t) w.step();
+    CHECK(w.cargo_weight(ch) == 3);
+    CHECK(landed(ch));
+    CHECK(cell_of(ch) == (CPos{40, 12}));
+    std::printf("Chinook: Einsteigebefehl im Flug -> %d/3 an Bord bei %d,%d\n",
+                w.cargo_weight(ch), cell_of(ch).x, cell_of(ch).y);
+
+
+    const int32_t ch2 = w.spawn(t_tran, 0, {10, 30}, 0, 100, true);
+    std::vector<int32_t> troop2;
+    for (int i = 0; i < 2; ++i) {
+        troop2.push_back(w.spawn(t_e1, 0, {2 + i, 2}));
+        CHECK(w.load_passenger(ch2, troop2.back()));
+    }
+    CHECK(!w.can_land_at(size_t(w.index_of(ch2)), CPos{10, 30}));
+    CHECK(w.can_unload(ch2));
+    w.order_unload(&ch2, 1);
+    for (int t = 0; t < 600; ++t) {
+        w.step();
+        if (w.cargo_weight(ch2) == 0 && !w.actor(size_t(w.index_of(ch2))).unloading) break;
+    }
+    CHECK(w.cargo_weight(ch2) == 0);
+    CHECK(landed(ch2));
+    CHECK(cell_of(ch2) != (CPos{10, 30}));
+    std::printf("Chinook: über der Erzmine entladen -> aufgesetzt auf %d,%d, an Bord %d\n",
+                cell_of(ch2).x, cell_of(ch2).y, w.cargo_weight(ch2));
+
+    const int32_t ch3 = w.spawn(t_tran, 0, {10, 30}, 0, 100, true);
+    const int32_t pax = w.spawn(t_e1, 0, {10, 32});
+    w.order_enter_transport(&pax, 1, ch3);
+    for (int t = 0; t < 800 && w.cargo_weight(ch3) < 1; ++t) w.step();
+    CHECK(w.cargo_weight(ch3) == 1);
+    CHECK(landed(ch3));
+    CHECK(cell_of(ch3) != (CPos{10, 30}));
+    CHECK(cell_of(ch3) != cell_of(ch2));
+    CHECK(w.can_unload(ch3));
+    std::printf("Chinook: über der Erzmine beladen -> aufgesetzt auf %d,%d, darf dort entladen\n",
+                cell_of(ch3).x, cell_of(ch3).y);
+
+
+    w.spawn_building(t_fact, 0, {4, 40});
+    const int32_t pad = w.spawn_building(t_hpad, 0, {12, 40});
+    w.give_credits(0, 5000);
+    CHECK(w.free_landing_pads(0, t_heli) == 1);
+    std::vector<int32_t> built;
+    for (int n = 0; n < 3; ++n) {
+        const size_t before = w.actor_count();
+        CHECK(w.queue_build(0, t_tran));
+        for (int t = 0; t < 600 && w.actor_count() == before; ++t) w.step();
+        CHECK(w.actor_count() == before + 1);
+        built.push_back(w.actor(before).id);
+
+        CHECK(w.air(size_t(w.index_of(built.back()))).base < 0);
+        CHECK(run_until_landed(built.back(), 600));
+    }
+    const int pi = w.index_of(pad);
+    for (size_t k = 0; k < built.size(); ++k) {
+        const CPos c = cell_of(built[k]);
+        const CPos o = w.actor(size_t(pi)).origin;
+        CHECK(w.air(size_t(w.index_of(built[k]))).base < 0);
+        CHECK(!(c.x >= o.x && c.x < o.x + 2 && c.y >= o.y && c.y < o.y + 2));
+        for (size_t j = 0; j < k; ++j) CHECK(c != cell_of(built[j]));
+    }
+    CHECK(w.free_landing_pads(0, t_heli) == 1);
+    CHECK(w.free_landing_pads(0, t_tran) > 0);
+    std::vector<int32_t> list;
+    w.buildable(0, QUEUE_AIRCRAFT, list);
+    CHECK(std::find(list.begin(), list.end(), int32_t(t_tran)) != list.end());
+    CHECK(std::find(list.begin(), list.end(), int32_t(t_heli)) != list.end());
+    std::printf("Chinook: drei an einem Helipad gebaut, geparkt auf %d,%d / %d,%d / %d,%d, Platz frei\n",
+                cell_of(built[0]).x, cell_of(built[0]).y, cell_of(built[1]).x, cell_of(built[1]).y,
+                cell_of(built[2]).x, cell_of(built[2]).y);
+
+
+    const size_t before_h = w.actor_count();
+    CHECK(w.queue_build(0, t_heli));
+    for (int t = 0; t < 600 && w.actor_count() == before_h; ++t) w.step();
+    CHECK(w.actor_count() == before_h + 1);
+    const int32_t h = w.actor(before_h).id;
+    for (int t = 0; t < 60; ++t) w.step();
+    CHECK(landed(h));
+    CHECK(w.air(size_t(w.index_of(h))).base == pad);
+    CHECK(w.free_landing_pads(0, t_heli) == 0);
+    w.buildable(0, QUEUE_AIRCRAFT, list);
+    CHECK(std::find(list.begin(), list.end(), int32_t(t_heli)) == list.end());
+    CHECK(std::find(list.begin(), list.end(), int32_t(t_tran)) != list.end());
+
+    w.order_move(&h, 1, {30, 42});
+    bool hovered = false, landed_away = false;
+    for (int t = 0; t < 2500; ++t) {
+        w.step();
+        const int i = w.index_of(h);
+        const bool at_pad = length(w.actor(size_t(i)).pos - w.actor(size_t(pi)).pos) < 2 * CELL;
+        if (!at_pad && w.air(size_t(i)).alt == 1280 && !w.air(size_t(i)).has_goal) hovered = true;
+        if (!at_pad && w.air(size_t(i)).alt == 0) landed_away = true;
+        if (hovered && landed(h)) break;
+    }
+    CHECK(hovered);
+    CHECK(!landed_away);
+    CHECK(landed(h));
+    CHECK(w.actor(size_t(w.index_of(h))).pos.x == w.actor(size_t(pi)).pos.x + hpad.exit_ox);
+    CHECK(w.actor(size_t(w.index_of(h))).pos.y == w.actor(size_t(pi)).pos.y + hpad.exit_oy);
+
+    const size_t before4 = w.actor_count();
+    CHECK(w.queue_build(0, t_tran));
+    for (int t = 0; t < 600 && w.actor_count() == before4; ++t) w.step();
+    CHECK(w.actor_count() == before4 + 1);
+    CHECK(run_until_landed(w.actor(before4).id, 600));
+    CHECK(w.air(size_t(w.index_of(h))).base == pad && landed(h));
+    std::printf("Chinook: Kampfhubschrauber auf Platz %d, kehrt nach dem Leerlauf zurück; vierter Chinook trotz belegtem Platz gebaut\n", pad);
+}
+
+
 static void test_paradrop_own_cell() {
     World w;
     std::vector<uint8_t> cost(64 * 64, 0);
@@ -13626,6 +13893,638 @@ __attribute__((noinline)) static void test_bot_engineer_plan() {
                 "(50 %%: 2, 30 %%: Abriss); Paket im Transporter erobert, Spielstand gleich; leicht nur neutral\n");
 }
 
+
+__attribute__((noinline)) static void test_engineer_capture_time() {
+    struct Setup {
+        World w;
+        int fact = -1, barr = -1, proc = -1, mslo = -1, oil = -1, eng = -1, camp = -1, gun = -1;
+    };
+    const auto make = [](Setup& s) {
+        std::vector<uint8_t> cost(48 * 48, 1);
+        s.w.set_map(48, 48, cost.data());
+        s.w.set_conquest_victory(false);
+        UnitType fact; fact.building = true; fact.foot_w = 2; fact.foot_h = 2; fact.footprint = {1, 1, 1, 1};
+        fact.sprite_h = 2; fact.hp = 150000; fact.cost = 2000; fact.capturable = true; fact.target_types = TT_STRUCTURE;
+        UnitType barr = fact; barr.hp = 60000; barr.cost = 500;
+        UnitType proc = fact; proc.hp = 90000; proc.cost = 1400;
+        UnitType mslo = fact; mslo.hp = 100000; mslo.cost = 2500;
+        UnitType oil = fact; oil.hp = 80000; oil.cost = 0;
+        UnitType eng; eng.speed = 54; eng.turn_rate = 1024; eng.infantry = true; eng.hp = 2500;
+        eng.captures = true; eng.capture_types = CAP_BUILDING; eng.capture_delay = 200; eng.locomotor = LOCO_FOOT;
+        eng.capture_time_max = 300; eng.capture_time_min = 50;
+        UnitType camp = eng; camp.capture_time_max = 0; camp.capture_time_min = 0;
+        s.fact = s.w.define_type(fact);
+        s.barr = s.w.define_type(barr);
+        s.proc = s.w.define_type(proc);
+        s.mslo = s.w.define_type(mslo);
+        s.oil = s.w.define_type(oil);
+        s.eng = s.w.define_type(eng);
+        s.camp = s.w.define_type(camp);
+        s.w.set_capture_reference(s.eng, s.fact);
+        s.w.set_enemy(0, 1, true);
+        s.w.set_enemy(1, 0, true);
+    };
+    const auto gone = [](World& w, int32_t id) {
+        const int i = w.index_of(id);
+        return i < 0 || !w.actor(size_t(i)).alive;
+    };
+    const auto owner_of = [](World& w, int32_t id) { return w.actor(size_t(w.index_of(id))).owner; };
+    const auto hp_of = [](World& w, int32_t id) { return w.actor(size_t(w.index_of(id))).hp; };
+
+    const auto capture = [&](World& w, int type, int32_t target, CPos from) {
+        const int32_t e = w.spawn(type, 0, from);
+        w.order_capture(&e, 1, target);
+
+
+        const bool timed = w.type(type).capture_time_max > 0;
+        if (timed) CHECK(w.enter_progress(e) < 0);
+        int t = 0;
+        for (; t < 1500 && w.enter_progress(e) < (timed ? 0 : 1) && !gone(w, e); ++t) w.step();
+        CHECK(!gone(w, e));
+        CHECK(w.enter_progress_target(e) == target);
+        int waited = timed ? 0 : 1;
+        for (; waited < 1500 && owner_of(w, target) != 0; ++waited) w.step();
+        CHECK(gone(w, e));
+        return waited;
+    };
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        CHECK(w.build_time(s.fact) == 1200 && w.build_time(s.barr) == 300 && w.build_time(s.proc) == 840);
+        const int32_t e = w.spawn(s.eng, 0, {4, 4});
+        const int32_t c = w.spawn(s.camp, 0, {4, 6});
+        const int32_t fact = w.spawn_building(s.fact, 1, {20, 10});
+        const int32_t barr = w.spawn_building(s.barr, 1, {26, 10});
+        const int32_t proc = w.spawn_building(s.proc, 1, {32, 10});
+        const int32_t mslo = w.spawn_building(s.mslo, 1, {20, 20});
+        const int32_t oil = w.spawn_building(s.oil, 1, {26, 20});
+        CHECK(w.capture_duration_id(e, fact) == 300);
+        CHECK(w.capture_duration_id(e, proc) == 210);
+        CHECK(w.capture_duration_id(e, barr) == 75);
+        CHECK(w.capture_duration_id(e, mslo) == 300);
+        CHECK(w.capture_duration_id(e, oil) == 50);
+        w.set_health(fact, 75000); w.set_health(proc, 45000); w.set_health(barr, 30000);
+        CHECK(w.capture_duration_id(e, fact) == 150);
+        CHECK(w.capture_duration_id(e, proc) == 105);
+        CHECK(w.capture_duration_id(e, barr) == 50);
+        w.set_health(fact, 30000); w.set_health(proc, 18000);
+        CHECK(w.capture_duration_id(e, fact) == 60);
+        CHECK(w.capture_duration_id(e, proc) == 50);
+        w.set_health(fact, 1);
+        CHECK(w.capture_duration_id(e, fact) == 50);
+        CHECK(w.capture_duration_id(c, fact) == 200);
+        CHECK(!w.enter_would_sabotage(e, mslo));
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t fact = w.spawn_building(s.fact, 1, {24, 10});
+        const int32_t barr = w.spawn_building(s.barr, 1, {24, 30});
+        std::vector<int32_t> notes;
+        const int tf = capture(w, s.eng, fact, {16, 10});
+        const int tb = capture(w, s.eng, barr, {16, 30});
+        CHECK(tf >= 300 && tf <= 302);
+        CHECK(tb >= 75 && tb <= 77);
+        CHECK(tf > tb);
+        CHECK(hp_of(w, fact) == 150000 && hp_of(w, barr) == 60000);
+        w.drain_notifications(0, notes);
+        CHECK(std::find(notes.begin(), notes.end(), int32_t(NOTIFY_BUILDING_CAPTURED)) != notes.end());
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t half = w.spawn_building(s.fact, 1, {24, 10});
+        const int32_t low = w.spawn_building(s.fact, 1, {24, 30});
+        w.set_health(half, 75000);
+        w.set_health(low, 30000);
+        const int th = capture(w, s.eng, half, {16, 10});
+        const int tl = capture(w, s.eng, low, {16, 30});
+        CHECK(th >= 150 && th <= 152);
+        CHECK(tl >= 60 && tl <= 62);
+        CHECK(hp_of(w, half) == 75000 && hp_of(w, low) == 30000);
+
+        const int32_t late = w.spawn_building(s.fact, 1, {36, 10});
+        const int32_t e = w.spawn(s.eng, 0, {33, 14});
+        w.order_capture(&e, 1, late);
+        for (int t = 0; t < 1500 && w.enter_progress(e) < 0; ++t) w.step();
+        for (int t = 0; t < 149; ++t) w.step();
+        CHECK(w.enter_progress(e) >= 490 && w.enter_progress(e) <= 510);
+        w.set_health(late, 15000);
+        int rest = 0;
+        for (; rest < 600 && owner_of(w, late) != 0; ++rest) w.step();
+        CHECK(rest >= 150 && rest <= 153);
+    }
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t fact = w.spawn_building(s.fact, 1, {24, 10});
+        const int32_t e = w.spawn(s.eng, 0, {16, 10});
+        w.order_capture(&e, 1, fact);
+        for (int t = 0; t < 1500 && w.enter_progress(e) < 0; ++t) w.step();
+        for (int t = 0; t < 200; ++t) w.step();
+        CHECK(owner_of(w, fact) == 1);
+        CHECK(w.enter_progress(e) > 600);
+        w.set_health(e, 0);
+        for (int t = 0; t < 400; ++t) w.step();
+        CHECK(owner_of(w, fact) == 1);
+        CHECK(hp_of(w, fact) == 150000);
+        const int32_t e2 = w.spawn(s.eng, 0, {16, 10});
+        w.order_capture(&e2, 1, fact);
+        for (int t = 0; t < 1500 && w.enter_progress(e2) < 0; ++t) w.step();
+        for (int t = 0; t < 200; ++t) w.step();
+        const CPos away{10, 10};
+        w.order_move(&e2, 1, away, 0);
+        for (int t = 0; t < 200; ++t) w.step();
+        CHECK(!gone(w, e2));
+        CHECK(w.enter_progress(e2) < 0);
+        CHECK(owner_of(w, fact) == 1 && hp_of(w, fact) == 150000);
+        w.set_health(fact, 75000);
+        w.order_capture(&e2, 1, fact);
+        for (int t = 0; t < 1500 && w.enter_progress(e2) < 0; ++t) w.step();
+        int waited = 0;
+        for (; waited < 600 && owner_of(w, fact) != 0; ++waited) w.step();
+        CHECK(waited >= 150 && waited <= 152);
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        w.set_non_combatant(2, true);
+        w.set_neutral_player(2);
+        const int32_t oil = w.spawn_building(s.oil, 2, {24, 10});
+        const int32_t nfact = w.spawn_building(s.fact, 2, {24, 30});
+        const int to = capture(w, s.eng, oil, {16, 10});
+        const int tn = capture(w, s.eng, nfact, {16, 30});
+        CHECK(to >= 50 && to <= 52);
+        CHECK(tn >= 300 && tn <= 302);
+        CHECK(hp_of(w, oil) == 80000);
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t fact = w.spawn_building(s.fact, 1, {24, 10});
+        const int32_t barr = w.spawn_building(s.barr, 1, {24, 30});
+        w.set_health(barr, 6000);
+        const int tf = capture(w, s.camp, fact, {16, 10});
+        const int tb = capture(w, s.camp, barr, {16, 30});
+        CHECK(tf >= 199 && tf <= 202);
+        CHECK(tb == tf);
+    }
+
+    {
+        auto ap = std::make_unique<Setup>(); Setup& a = *ap; make(a);
+        const int32_t fact = a.w.spawn_building(a.fact, 1, {24, 10});
+        const int32_t e = a.w.spawn(a.eng, 0, {16, 10});
+        a.w.order_capture(&e, 1, fact);
+        for (int t = 0; t < 1500 && a.w.enter_progress(e) < 0; ++t) a.w.step();
+        for (int t = 0; t < 100; ++t) a.w.step();
+        std::vector<uint8_t> blob;
+        CHECK(a.w.save(blob));
+        auto bp = std::make_unique<Setup>(); Setup& b = *bp; make(b);
+        CHECK(b.w.load(blob));
+        CHECK(b.w.enter_progress(e) == a.w.enter_progress(e));
+        for (int t = 0; t < 190; ++t) { a.w.step(); b.w.step(); }
+        CHECK(owner_of(b.w, fact) == 1);
+        for (int t = 0; t < 30; ++t) { a.w.step(); b.w.step(); }
+        CHECK(owner_of(b.w, fact) == 0);
+        CHECK(state_hash(a.w) == state_hash(b.w));
+    }
+    std::printf("Pionier-Eroberungsdauer: Bauhof 300/150/60, Raffinerie 210/105/50, Kaserne 75/50/50, "
+                "Silo gedeckelt 300, ohne Bauzeit 50; Abbruch ohne Schaden; neutral; Kampagne 200; Spielstand gleich\n");
+}
+
+
+__attribute__((noinline)) static void test_bot_engineer_timed() {
+    struct Setup {
+        World w;
+        int base = -1, barr = -1, fact = -1, gun = -1, eng = -1, apc = -1;
+    };
+    const auto make = [](Setup& s) {
+        std::vector<uint8_t> cost(64 * 64, 1);
+        s.w.set_map(64, 64, cost.data());
+        s.w.set_conquest_victory(false);
+        Weapon wp; wp.range = 5 * 1024; wp.reload = 50; wp.valid_targets = TT_GROUND_ACTOR | TT_INFANTRY;
+        const int wgun = s.w.define_weapon(wp);
+        UnitType base; base.building = true; base.foot_w = 2; base.foot_h = 2; base.footprint = {1, 1, 1, 1};
+        base.sprite_h = 2; base.hp = 40000; base.cost = 300; base.target_types = TT_GROUND_ACTOR | TT_STRUCTURE;
+        UnitType barr = base; barr.capturable = true; barr.hp = 60000; barr.cost = 500;
+        UnitType fact = barr; fact.hp = 150000; fact.cost = 2000; fact.base_provider = true;
+        UnitType gun = base; gun.capturable = true; gun.cost = 600; gun.weapon = wgun;
+        UnitType eng; eng.speed = 54; eng.turn_rate = 1024; eng.infantry = true; eng.hp = 2500;
+        eng.captures = true; eng.capture_types = CAP_BUILDING; eng.capture_delay = 200; eng.locomotor = LOCO_FOOT;
+        eng.capture_time_max = 300; eng.capture_time_min = 50; eng.cost = 500; eng.hit_radius = 128;
+        eng.passenger_weight = 1; eng.passenger_type = TT_INFANTRY; eng.target_types = TT_GROUND_ACTOR | TT_INFANTRY;
+        UnitType apc; apc.speed = 128; apc.turn_rate = 20; apc.hp = 35000; apc.hit_radius = 426; apc.cost = 800;
+        apc.cargo_max_weight = 5; apc.cargo_types = TT_INFANTRY; apc.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+        s.base = s.w.define_type(base);
+        s.barr = s.w.define_type(barr);
+        s.fact = s.w.define_type(fact);
+        s.gun = s.w.define_type(gun);
+        s.eng = s.w.define_type(eng);
+        s.apc = s.w.define_type(apc);
+        s.w.set_capture_reference(s.eng, s.fact);
+        s.w.set_enemy(0, 1, true);
+        s.w.set_enemy(1, 0, true);
+        s.w.set_non_combatant(2, true);
+        s.w.set_neutral_player(2);
+        s.w.spawn_building(s.base, 0, {8, 8});
+    };
+    const auto bot = [](World& w, int plan) {
+        BotParams p;
+        w.bot_apply_personality(p, BOT_P_NORMAL);
+        p.eng_plan = plan;
+        p.army_min_value = 0;
+        w.enable_bot(0, p);
+    };
+    const auto alive = [](World& w, int32_t id) {
+        const int i = w.index_of(id);
+        return i >= 0 && w.actor(size_t(i)).alive;
+    };
+    const auto owner_of = [](World& w, int32_t id) { return w.actor(size_t(w.index_of(id))).owner; };
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t neutral = w.spawn_building(s.barr, 2, {30, 8});
+        const int32_t weak = w.spawn_building(s.barr, 1, {30, 20});
+        w.set_health(weak, 12000);
+        const int32_t e1 = w.spawn(s.eng, 0, {12, 8});
+        const int32_t e2 = w.spawn(s.eng, 0, {12, 10});
+        bot(w, 1);
+        for (int t = 0; t < 3000 && owner_of(w, neutral) != 0; ++t) w.step();
+        CHECK(owner_of(w, neutral) == 0);
+        for (int t = 0; t < 1500; ++t) w.step();
+        CHECK(alive(w, e1) != alive(w, e2));
+        CHECK(owner_of(w, weak) == 1);
+        CHECK(w.bot_state(0).eng_want == 0);
+    }
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t weak = w.spawn_building(s.fact, 1, {30, 20});
+        w.set_health(weak, 60000);
+        const int32_t whole = w.spawn_building(s.barr, 1, {40, 30});
+        const int32_t e1 = w.spawn(s.eng, 0, {12, 8});
+        const int32_t e2 = w.spawn(s.eng, 0, {12, 10});
+        bot(w, 2);
+        for (int t = 0; t < 3000 && owner_of(w, weak) != 0; ++t) w.step();
+        CHECK(owner_of(w, weak) == 0);
+        CHECK(w.actor(size_t(w.index_of(weak))).hp == 60000);
+        for (int t = 0; t < 1500; ++t) w.step();
+        CHECK(alive(w, e1) != alive(w, e2));
+        CHECK(owner_of(w, whole) == 1);
+        CHECK(w.bot_state(0).stat_eng_captured == 1);
+        CHECK(w.bot_state(0).stat_eng_spent == 1);
+    }
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t open = w.spawn_building(s.barr, 1, {30, 8});
+        const int32_t guarded = w.spawn_building(s.barr, 1, {40, 40});
+        const int32_t gun = w.spawn_building(s.gun, 1, {44, 40});
+        CHECK(!w.bot_eng_guarded(0, size_t(w.index_of(open))));
+        CHECK(w.bot_eng_guarded(0, size_t(w.index_of(guarded))));
+        const int32_t e1 = w.spawn(s.eng, 0, {12, 8});
+        const int32_t e2 = w.spawn(s.eng, 0, {12, 10});
+        const int32_t e3 = w.spawn(s.eng, 0, {12, 12});
+        bot(w, 3);
+        for (int t = 0; t < 3000 && owner_of(w, open) != 0; ++t) w.step();
+        CHECK(owner_of(w, open) == 0);
+        for (int t = 0; t < 1500; ++t) w.step();
+        CHECK(int(alive(w, e1)) + int(alive(w, e2)) + int(alive(w, e3)) == 2);
+        CHECK(owner_of(w, guarded) == 1 && owner_of(w, gun) == 1);
+        CHECK(w.bot_state(0).eng_ops.empty());
+        CHECK(w.bot_state(0).eng_want == 0);
+    }
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t fact = w.spawn_building(s.fact, 1, {44, 30});
+        const int32_t e1 = w.spawn(s.eng, 0, {12, 8});
+        const int32_t e2 = w.spawn(s.eng, 0, {12, 10});
+        bot(w, 3);
+        for (int t = 0; t < 1500; ++t) w.step();
+        CHECK(alive(w, e1) && alive(w, e2));
+        CHECK(owner_of(w, fact) == 1);
+        CHECK(w.bot_state(0).eng_ops.empty());
+        CHECK(w.bot_state(0).eng_ready == 2);
+        const int32_t apc = w.spawn(s.apc, 0, {14, 12});
+        bool rode = false;
+        for (int t = 0; t < 8000 && owner_of(w, fact) != 0; ++t) {
+            w.step();
+            for (int32_t id : {e1, e2}) {
+                const int i = w.index_of(id);
+                if (i >= 0 && w.actor(size_t(i)).alive && w.actor(size_t(i)).transport == apc) rode = true;
+            }
+        }
+        CHECK(rode);
+        CHECK(owner_of(w, fact) == 0);
+        CHECK(w.actor(size_t(w.index_of(fact))).hp == 150000);
+        for (int t = 0; t < 400; ++t) w.step();
+        CHECK(alive(w, e1) != alive(w, e2));
+        CHECK(w.bot_state(0).stat_eng_captured == 1);
+        CHECK(w.bot_state(0).stat_eng_spent == 1);
+        CHECK(w.bot_state(0).eng_apc == -1);
+        CHECK(alive(w, apc));
+    }
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s);
+        World& w = s.w;
+        const int32_t barr = w.spawn_building(s.barr, 1, {20, 8});
+        w.set_health(barr, 12000);
+        const int32_t fact = w.spawn_building(s.fact, 1, {44, 30});
+        w.set_health(fact, 30000);
+        w.spawn(s.eng, 0, {12, 8});
+        bot(w, 3);
+        for (int t = 0; t < 3000 && owner_of(w, fact) != 0; ++t) w.step();
+        CHECK(owner_of(w, fact) == 0);
+        CHECK(owner_of(w, barr) == 1);
+    }
+    std::printf("KI-Pioniere (Dauerregel): leicht neutral; mittel beschaedigte; schwer schnelle ohne Geschuetz, "
+                "Bauhof nur im Transporter mit einem Pionier; Wert je Wartetick\n");
+}
+
+
+__attribute__((noinline)) static void test_enter_reachable_cell() {
+    struct Setup {
+        World w;
+        int tb = -1, te = -1;
+    };
+
+    const auto make = [](Setup& s, const std::vector<CPos>& blocked) {
+        std::vector<uint8_t> cost(48 * 48, 1);
+        for (CPos c : blocked) cost[size_t(c.y * 48 + c.x)] = 0;
+        s.w.set_map(48, 48, cost.data());
+        s.w.set_conquest_victory(false);
+        UnitType b; b.building = true; b.foot_w = 2; b.foot_h = 2; b.footprint = {1, 1, 1, 1};
+        b.sprite_h = 2; b.hp = 40000; b.cost = 300; b.capturable = true; b.target_types = TT_STRUCTURE;
+        UnitType eng; eng.speed = 54; eng.turn_rate = 1024; eng.infantry = true; eng.hp = 2500;
+        eng.captures = true; eng.capture_types = CAP_BUILDING; eng.capture_delay = 5; eng.locomotor = LOCO_FOOT;
+        s.tb = s.w.define_type(b);
+        s.te = s.w.define_type(eng);
+        s.w.set_enemy(0, 1, true);
+        s.w.set_enemy(1, 0, true);
+    };
+    const auto owner_of = [](World& w, int32_t id) { return w.actor(size_t(w.index_of(id))).owner; };
+
+
+    {
+        const std::vector<CPos> cliff = {{22, 9}, {22, 10}, {22, 11}, {22, 12}, {23, 9}, {23, 12}, {24, 9}, {24, 12}};
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s, cliff);
+        World& w = s.w;
+        const int32_t b = w.spawn_building(s.tb, 1, {24, 10});
+        const int32_t e = w.spawn(s.te, 0, {16, 10});
+        CPos cell{-1, -1};
+        CHECK(w.enter_approach_cell(size_t(w.index_of(e)), size_t(w.index_of(b)), cell));
+        CHECK(!(cell.x == 23));
+        CHECK(cell.x >= 25 && cell.x <= 26);
+        w.order_capture(&e, 1, b);
+        for (int t = 0; t < 1500 && owner_of(w, b) != 0; ++t) w.step();
+        CHECK(owner_of(w, b) == 0);
+    }
+
+
+    for (int variant = 0; variant < 2; ++variant) {
+        std::vector<CPos> cliff;
+        const int r = variant == 0 ? 1 : 2;
+        for (int y = 10 - r; y <= 11 + r; ++y)
+            for (int x = 24 - r; x <= 25 + r; ++x)
+                if (x == 24 - r || x == 25 + r || y == 10 - r || y == 11 + r) cliff.push_back({x, y});
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s, cliff);
+        World& w = s.w;
+        const int32_t b = w.spawn_building(s.tb, 1, {24, 10});
+        const int32_t e = w.spawn(s.te, 0, {16, 10});
+        const size_t ei = size_t(w.index_of(e));
+        CPos cell{-1, -1};
+        CHECK(!w.enter_approach_cell(ei, size_t(w.index_of(b)), cell));
+        CHECK(w.enter_kind_for(ei, size_t(w.index_of(b))) == ENTER_CAPTURE);
+        w.order_capture(&e, 1, b);
+        for (int t = 0; t < 200; ++t) w.step();
+        const Actor& a = w.actor(ei);
+        CHECK(a.alive && a.capture_target == -1 && a.enter_kind == ENTER_NONE);
+        CHECK(w.mobile(ei).cell.x == 16 && w.mobile(ei).cell.y == 10);
+        CHECK(!w.mobile(ei).moving);
+        CHECK(owner_of(w, b) == 1);
+
+        const CPos away{12, 14};
+        w.order_move(&e, 1, away, 0);
+        for (int t = 0; t < 400; ++t) w.step();
+        CHECK(w.mobile(ei).cell.x == 12 && w.mobile(ei).cell.y == 14);
+    }
+
+
+    {
+        auto sp = std::make_unique<Setup>(); Setup& s = *sp; make(s, {});
+        World& w = s.w;
+        UnitType tank; tank.speed = 80; tank.turn_rate = 20; tank.hp = 40000; tank.locomotor = LOCO_TRACKED;
+        const int tt = w.define_type(tank);
+        const int32_t b = w.spawn_building(s.tb, 1, {24, 10});
+        w.spawn(tt, 0, {23, 10});
+        const int32_t e = w.spawn(s.te, 0, {16, 10});
+        CPos cell{-1, -1};
+        CHECK(w.enter_approach_cell(size_t(w.index_of(e)), size_t(w.index_of(b)), cell));
+        CHECK(!(cell.x == 23 && cell.y == 10));
+        w.order_capture(&e, 1, b);
+        for (int t = 0; t < 1500 && owner_of(w, b) != 0; ++t) w.step();
+        CHECK(owner_of(w, b) == 0);
+    }
+    std::printf("Enter: Randzelle nach dem Weg (Tasche wird umgangen), eingeschlossenes Ziel beendet den Befehl, "
+                "belegte Randzelle weicht der freien\n");
+}
+
+
+__attribute__((noinline)) static void test_board_reachable_cell() {
+    const int size = 48;
+    struct Ids { int apc = -1, e1 = -1, tank = -1, lst = -1, tran = -1; };
+    const auto make = [&](World& w, const std::vector<CPos>& rock, int water_from_x) {
+        std::vector<uint8_t> terrain(size_t(size) * size, uint8_t(TER_CLEAR));
+        if (water_from_x > 0)
+            for (int y = 0; y < size; ++y)
+                for (int x = water_from_x - 1; x < size; ++x)
+                    terrain[size_t(y * size + x)] = uint8_t(x == water_from_x - 1 ? TER_BEACH : TER_WATER);
+        for (CPos c : rock) terrain[size_t(c.y * size + c.x)] = uint8_t(TER_ROCK);
+        w.set_terrain(size, size, terrain.data());
+        w.set_conquest_victory(false);
+        Ids id;
+        UnitType apc; apc.speed = 128; apc.turn_rate = 20; apc.hp = 35000; apc.locomotor = LOCO_TRACKED;
+        apc.cargo_max_weight = 5; apc.cargo_types = TT_INFANTRY; apc.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+        UnitType e1; e1.speed = 56; e1.turn_rate = 1024; e1.infantry = true; e1.hp = 5000; e1.locomotor = LOCO_FOOT;
+        e1.passenger_weight = 1; e1.passenger_type = TT_INFANTRY; e1.target_types = TT_GROUND_ACTOR | TT_INFANTRY;
+        UnitType tank; tank.speed = 72; tank.turn_rate = 1024; tank.hp = 40000; tank.locomotor = LOCO_TRACKED;
+        tank.passenger_weight = 1; tank.passenger_type = TT_VEHICLE; tank.target_types = TT_GROUND_ACTOR | TT_VEHICLE;
+        UnitType lst; lst.speed = 115; lst.turn_rate = 28; lst.hp = 40000; lst.locomotor = LOCO_LCRAFT;
+        lst.cargo_max_weight = 5; lst.target_types = TT_WATER_ACTOR | TT_SHIP;
+        UnitType tran; tran.aircraft = true; tran.can_hover = true; tran.vtol = true;
+        tran.speed = 128; tran.turn_rate = 20; tran.cruise_altitude = 1280; tran.altitude_velocity = 58;
+        tran.hp = 14000; tran.idle_behavior = 1;
+        tran.landable_terrain = (1u << TER_CLEAR) | (1u << TER_ROUGH) | (1u << TER_ROAD) | (1u << TER_BEACH);
+        tran.cargo_max_weight = 8; tran.cargo_types = TT_INFANTRY; tran.after_load_delay = 8;
+        tran.target_types = TT_GROUND_ACTOR; tran.target_types_airborne = TT_AIRBORNE;
+        id.apc = w.define_type(apc); id.e1 = w.define_type(e1); id.tank = w.define_type(tank);
+        id.lst = w.define_type(lst); id.tran = w.define_type(tran);
+        return id;
+    };
+    const auto idx = [](World& w, int32_t id) { return size_t(w.index_of(id)); };
+
+    const auto pocket = [](int tx, int ty) {
+        return std::vector<CPos>{{tx - 2, ty - 2}, {tx - 1, ty - 2}, {tx, ty - 2}, {tx - 2, ty - 1},
+                                 {tx, ty - 1}, {tx - 2, ty}, {tx - 1, ty}};
+    };
+
+
+    {
+        auto wp = std::make_unique<World>(); World& w = *wp;
+        const Ids id = make(w, {}, 0);
+        for (int y = 0; y < size; ++y) w.set_map_terrain({20, y}, TER_WATER);
+        const int32_t lst = w.spawn(id.lst, 0, {20, 10});
+        const int32_t e = w.spawn(id.e1, 0, {30, 10});
+        CPos cell{-1, -1};
+        CHECK(w.board_approach_cell(idx(w, e), idx(w, lst), cell));
+        CHECK(cell.x == 21 && cell.y >= 9 && cell.y <= 11);
+        w.order_enter_transport(&e, 1, lst);
+        for (int t = 0; t < 600 && w.transport_of(e) != lst; ++t) w.step();
+        CHECK(w.transport_of(e) == lst);
+    }
+
+
+    {
+        auto wp = std::make_unique<World>(); World& w = *wp;
+        const Ids id = make(w, pocket(24, 10), 0);
+        const int32_t apc = w.spawn(id.apc, 0, {24, 10});
+        const int32_t e = w.spawn(id.e1, 0, {16, 10});
+        CPos cell{-1, -1};
+        CHECK(w.board_approach_cell(idx(w, e), idx(w, apc), cell));
+        CHECK(!(cell == (CPos{23, 9})));
+        w.order_enter_transport(&e, 1, apc);
+        for (int t = 0; t < 600 && w.transport_of(e) != apc; ++t) w.step();
+        CHECK(w.transport_of(e) == apc);
+        CHECK(w.cargo_weight(apc) == 1);
+    }
+
+    for (int variant = 0; variant < 2; ++variant) {
+        std::vector<CPos> rock;
+        const int r = variant + 1;
+        for (int y = 10 - r; y <= 10 + r; ++y)
+            for (int x = 24 - r; x <= 24 + r; ++x)
+                if (x == 24 - r || x == 24 + r || y == 10 - r || y == 10 + r) rock.push_back({x, y});
+        auto wp = std::make_unique<World>(); World& w = *wp;
+        const Ids id = make(w, rock, 0);
+        const int32_t apc = w.spawn(id.apc, 0, {24, 10});
+        const int32_t e = w.spawn(id.e1, 0, {16, 10});
+        const size_t ei = idx(w, e), ai = idx(w, apc);
+        w.order_enter_transport(&e, 1, apc);
+        for (int t = 0; t < 200; ++t) w.step();
+        CHECK(w.actor(ei).alive && w.actor(ei).enter_target == -1);
+        CHECK(w.mobile(ei).cell.x == 16 && w.mobile(ei).cell.y == 10);
+        CHECK(!w.mobile(ei).moving);
+        CHECK(!w.actor(ai).load_lock && w.actor(ai).after_load_ticks < 0);
+        CHECK(w.cargo_weight(apc) == 0);
+        w.order_move(&e, 1, {12, 14}, 0);
+        for (int t = 0; t < 400; ++t) w.step();
+        CHECK(w.mobile(ei).cell.x == 12 && w.mobile(ei).cell.y == 14);
+    }
+
+    {
+        std::vector<CPos> rock = pocket(14, 10);
+        auto wp = std::make_unique<World>(); World& w = *wp;
+        const Ids id = make(w, rock, 15);
+        const int32_t lst = w.spawn(id.lst, 0, {14, 10});
+        const int32_t t1 = w.spawn(id.tank, 0, {5, 12});
+        const int32_t t2 = w.spawn(id.tank, 0, {5, 16});
+        const int32_t e = w.spawn(id.e1, 0, {6, 20});
+        const int32_t all[3] = {t1, t2, e};
+        w.order_enter_transport(all, 3, lst);
+        w.step();
+        const CPos g1 = w.mobile(idx(w, t1)).goal, g2 = w.mobile(idx(w, t2)).goal;
+        CHECK(w.mobile(idx(w, t1)).moving && w.mobile(idx(w, t2)).moving);
+        CHECK(!(g1 == g2));
+        CHECK(!(g1 == (CPos{13, 9})) && !(g2 == (CPos{13, 9})));
+        CHECK(cell_dist_sq(g1, CPos{14, 10}) <= 2 && cell_dist_sq(g2, CPos{14, 10}) <= 2);
+        for (int t = 0; t < 900 && w.cargo_weight(lst) < 3; ++t) w.step();
+        CHECK(w.cargo_weight(lst) == 3);
+        for (int32_t p : all) CHECK(w.transport_of(p) == lst);
+        for (int t = 0; t < 30; ++t) w.step();
+        CHECK(!w.actor(idx(w, lst)).load_lock);
+    }
+
+    {
+        auto wp = std::make_unique<World>(); World& w = *wp;
+        const Ids id = make(w, {}, 15);
+        const int32_t lst = w.spawn(id.lst, 0, {40, 10});
+        const int32_t tk = w.spawn(id.tank, 0, {5, 12});
+        w.order_enter_transport(&tk, 1, lst);
+        w.order_move(&lst, 1, {14, 10});
+        for (int t = 0; t < 60; ++t) w.step();
+        CHECK(w.actor(idx(w, tk)).enter_target == lst);
+        for (int t = 0; t < 1200 && w.cargo_weight(lst) < 1; ++t) w.step();
+        CHECK(w.transport_of(tk) == lst);
+
+        const int32_t lst2 = w.spawn(id.lst, 0, {40, 30});
+        const int32_t e = w.spawn(id.e1, 0, {6, 30});
+        w.order_enter_transport(&e, 1, lst2);
+        for (int t = 0; t < 60; ++t) w.step();
+        CHECK(w.actor(idx(w, e)).enter_target == -1);
+        CHECK(!w.actor(idx(w, lst2)).load_lock);
+    }
+
+    {
+        auto wp = std::make_unique<World>(); World& w = *wp;
+        const Ids id = make(w, pocket(30, 20), 0);
+        UnitType hut; hut.building = true; hut.foot_w = 1; hut.foot_h = 2; hut.footprint = {1, 1};
+        hut.build_block = hut.footprint; hut.hp = 50000;
+        const int t_hut = w.define_type(hut);
+        w.spawn_building(t_hut, 0, {31, 20});
+        const int32_t ch = w.spawn(id.tran, 0, {10, 10}, 0, 100, true);
+        std::vector<int32_t> troop;
+        for (int i = 0; i < 3; ++i) troop.push_back(w.spawn(id.e1, 0, {36 + i, 26}));
+        w.order_move(&ch, 1, {30, 20});
+        for (int t = 0; t < 20; ++t) w.step();
+        CHECK(w.air(idx(w, ch)).alt > 0);
+        w.order_enter_transport(troop.data(), troop.size(), ch);
+        for (int t = 0; t < 2000 && w.cargo_weight(ch) < 3; ++t) w.step();
+        CHECK(w.cargo_weight(ch) == 3);
+        CHECK(to_cell(w.actor(idx(w, ch)).pos) == (CPos{30, 20}));
+        for (int t = 0; t < 60; ++t) w.step();
+        CHECK(!w.actor(idx(w, ch)).load_lock);
+    }
+    {
+
+        std::vector<CPos> rock;
+        for (int y = 18; y <= 22; ++y)
+            for (int x = 28; x <= 32; ++x)
+                if (x == 28 || x == 32 || y == 18 || y == 22) rock.push_back({x, y});
+        auto wp = std::make_unique<World>(); World& w = *wp;
+        const Ids id = make(w, rock, 0);
+        const int32_t ch = w.spawn(id.tran, 0, {10, 10}, 0, 100, true);
+        const int32_t e = w.spawn(id.e1, 0, {36, 26});
+        w.order_move(&ch, 1, {30, 20});
+        for (int t = 0; t < 20; ++t) w.step();
+        w.order_enter_transport(&e, 1, ch);
+        for (int t = 0; t < 1200; ++t) w.step();
+        const size_t ci = idx(w, ch), ei = idx(w, e);
+        CHECK(w.air(ci).state == Air::LANDED && to_cell(w.actor(ci).pos) == (CPos{30, 20}));
+        CHECK(w.actor(ei).enter_target == -1 && !w.mobile(ei).moving);
+        CHECK(!w.actor(ci).load_lock && w.cargo_weight(ch) == 0);
+    }
+    std::printf("Einsteigen: Tasche am Transporter umgangen, eingeschlossener Transporter beendet den Befehl, "
+                "zwei Panzer und ein Schütze ins Landungsboot, Boot auf See wird abgewartet, Chinook im Anflug\n");
+}
+
 int main() {
     test_math();
     test_flow_field();
@@ -13780,6 +14679,7 @@ int main() {
     test_no_backwards_movement();
     test_cargo();
     test_cargo_helicopter();
+    test_chinook_landing();
     test_aircraft();
     test_air_armaments();
     test_air_attack_run();
@@ -13836,6 +14736,10 @@ int main() {
     test_low_power_notification();
     test_engineer_sabotage();
     test_bot_engineer_plan();
+    test_engineer_capture_time();
+    test_bot_engineer_timed();
+    test_enter_reachable_cell();
+    test_board_reachable_cell();
     bench();
     if (failures == 0) std::printf("OK — alle Tests bestanden (sim v%s)\n", version());
     return failures == 0 ? 0 : 1;

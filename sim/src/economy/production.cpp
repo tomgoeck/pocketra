@@ -370,6 +370,10 @@ void World::step_production() {
             if (types_[item.type].aircraft && !pads_of(types_[item.type]).empty()) {
                 producer = find_free_pad(owner, item.type, producer);
                 if (producer < 0) continue;
+            } else if (types_[item.type].aircraft) {
+
+
+                producer = find_air_exit(owner, item.type, producer);
             }
 
             const Actor p = actors_[producer];
@@ -407,7 +411,8 @@ void World::step_production() {
                 }
 
 
-                if ((!air || p.rally_set) && p.rally != mobiles_[idx].cell) set_move(idx, p.rally, 0);
+                if ((!air || p.rally_set || lands_when_idle(it)) && p.rally != mobiles_[idx].cell)
+                    set_move(idx, p.rally, 0);
                 if (types_[item.type].harvester) harvests_[idx].automated = true;
             }
 
@@ -942,6 +947,74 @@ int32_t World::enter_kind_for(size_t i, size_t t) const {
 }
 
 
+bool World::enter_approach_cell(size_t i, size_t t, CPos& out) const {
+    const UnitType& bt = types_[actors_[t].type];
+
+
+    const int32_t bfw = bt.building ? bt.foot_w : 1;
+    const int32_t bfh = bt.building ? bt.foot_h : 1;
+
+
+    const bool hollow = bt.building && !bt.footprint.empty() &&
+        std::none_of(bt.footprint.begin(), bt.footprint.end(), [](uint8_t v) { return v != 0; });
+    return approach_cell(i, enter_origin(t), bfw, bfh, hollow, CPos{-1, -1}, -1, out);
+}
+
+
+bool World::approach_cell(size_t i, CPos borigin, int32_t bfw, int32_t bfh, bool hollow, CPos avoid,
+                          int32_t boarding, CPos& out) const {
+    const int32_t emc = actor_move_class(i);
+    const Mobile& m = mobiles_[i];
+    const CPos own = m.in_transit ? m.to_cell : m.cell;
+
+
+    const bool own_ok = map_.in_bounds(own) && map_.passable(own, emc);
+    FlowField f;
+    if (own_ok) build_flow_field(map_, own, f, emc, map_.in_bounds(avoid) && avoid != own ? map_.index(avoid) : -1);
+
+
+    std::vector<CPos> claimed;
+    if (boarding >= 0) {
+        for (size_t j = 0; j < actors_.size(); ++j) {
+            if (j == i || !actors_[j].alive || actors_[j].transport >= 0) continue;
+            if (actors_[j].enter_target != boarding || !mobiles_[j].moving) continue;
+            claimed.push_back(mobiles_[j].goal);
+        }
+    }
+    const int32_t room = shares_cell(actors_[i].type) ? CELL_SLOTS - 1 : 1;
+
+
+    bool found = false;
+    bool best_busy = false;
+    int64_t best_cost = 0, best_air = 0;
+    for (int pass = 0; pass < 2 && !found; ++pass) {
+        if (pass == 1 && !hollow) break;
+        for (int y = -1; y <= bfh; ++y) {
+            for (int x = -1; x <= bfw; ++x) {
+                const bool inner = x >= 0 && x < bfw && y >= 0 && y < bfh;
+                if (inner != (pass == 1)) continue;
+                const CPos c{borigin.x + x, borigin.y + y};
+                if (!map_.in_bounds(c) || !map_.passable(c, emc)) continue;
+                int64_t cost = 0;
+                if (own_ok) {
+                    const int32_t d = f.dist[size_t(map_.index(c))];
+                    if (d == INT32_MAX) continue;
+                    cost = d;
+                }
+                if (c == own) { out = c; return true; }
+                const bool busy = !cell_free(c, int32_t(i)) ||
+                    std::count(claimed.begin(), claimed.end(), c) >= room;
+                const int64_t air = length_sq(WVec{WDist(c.x * CELL + CELL / 2), WDist(c.y * CELL + CELL / 2)} - actors_[i].pos);
+                const bool better = !found || (busy != best_busy ? !busy
+                                    : (cost != best_cost ? cost < best_cost : air < best_air));
+                if (better) { found = true; best_busy = busy; best_cost = cost; best_air = air; out = c; }
+            }
+        }
+    }
+    return found;
+}
+
+
 void World::order_enter(const int32_t* ids, size_t n, int32_t target_id, int32_t kind) {
     const int t = index_of(target_id);
     if (t < 0 || !actors_[t].alive) return;
@@ -957,38 +1030,23 @@ void World::order_enter(const int32_t* ids, size_t n, int32_t target_id, int32_t
 
         a.capture_ticks = want == ENTER_CAPTURE ? std::max(1, types_[a.type].capture_delay) : 1;
         a.capture_total = a.capture_ticks;
+
+
+        if (want == ENTER_CAPTURE && types_[a.type].capture_time_max > 0) a.capture_ticks = a.capture_total = 0;
         combats_[i].target = -1;
         combats_[i].attack_move = false;
         combats_[i].guard = -1;
         if (types_[a.type].harvester) harvests_[i].automated = false;
 
-        const UnitType& bt = types_[actors_[t].type];
 
-
-        const int32_t bfw = bt.building ? bt.foot_w : 1;
-        const int32_t bfh = bt.building ? bt.foot_h : 1;
-        const CPos borigin = enter_origin(size_t(t));
         CPos best = mobiles_[i].cell;
-        int64_t best_d = INT64_MAX;
-        const int32_t emc = actor_move_class(size_t(i));
-
-
-        const bool hollow = bt.building && !bt.footprint.empty() &&
-            std::none_of(bt.footprint.begin(), bt.footprint.end(), [](uint8_t v) { return v != 0; });
-
-
-        for (int pass = 0; pass < 2 && best_d == INT64_MAX; ++pass) {
-            if (pass == 1 && !hollow) break;
-            for (int y = -1; y <= bfh; ++y) {
-                for (int x = -1; x <= bfw; ++x) {
-                    const bool inner = x >= 0 && x < bfw && y >= 0 && y < bfh;
-                    if (inner != (pass == 1)) continue;
-                    const CPos c{borigin.x + x, borigin.y + y};
-                    if (!map_.in_bounds(c) || !map_.passable(c, emc)) continue;
-                    const int64_t d = length_sq(WVec{WDist(c.x * CELL + CELL / 2), WDist(c.y * CELL + CELL / 2)} - actors_[i].pos);
-                    if (d < best_d) { best_d = d; best = c; }
-                }
-            }
+        if (!enter_approach_cell(size_t(i), size_t(t), best)) {
+            a.capture_target = -1;
+            a.enter_kind = ENTER_NONE;
+            a.enter_state = ENTER_APPROACH;
+            a.capture_ticks = a.capture_total = 0;
+            stop(size_t(i), false);
+            continue;
         }
         set_move(size_t(i), best, 0);
     }
@@ -1073,6 +1131,30 @@ bool World::capture_sabotages(size_t i, size_t t) const {
     if (owner >= 0 && owner < MAX_PLAYERS && players_[owner].non_combatant) return false;
     const int64_t max_hp = types_[actors_[t].type].hp;
     return int64_t(100) * actors_[t].hp > int64_t(s.sabotage_threshold) * max_hp;
+}
+
+
+int32_t World::capture_duration(size_t i, size_t t) const {
+    if (i >= actors_.size()) return 1;
+    return capture_duration_type(actors_[i].type, t);
+}
+
+int32_t World::capture_duration_type(int32_t eng_type, size_t t) const {
+    if (eng_type < 0 || size_t(eng_type) >= types_.size() || t >= actors_.size()) return 1;
+    const UnitType& s = types_[size_t(eng_type)];
+    if (s.capture_time_max <= 0) return std::max(1, s.capture_delay);
+    const UnitType& b = types_[actors_[t].type];
+    const int32_t floor_ticks = std::max(1, s.capture_time_min);
+    const int32_t raw = b.build_duration >= 0 ? b.build_duration : b.cost;
+    if (raw <= 0 || b.hp <= 0) return floor_ticks;
+    int64_t bt = build_time(actors_[t].type);
+    int64_t ref = s.capture_time_ref >= 0 ? build_time(s.capture_time_ref) : bt;
+    if (ref <= 0) ref = 1;
+    if (bt > ref) bt = ref;
+    int64_t permille = int64_t(actors_[t].hp) * 1000 / b.hp;
+    permille = std::max<int64_t>(0, std::min<int64_t>(1000, permille));
+    const int64_t d = int64_t(s.capture_time_max) * bt * permille / (ref * 1000);
+    return int32_t(std::max<int64_t>(floor_ticks, d));
 }
 
 
@@ -1323,12 +1405,23 @@ void World::step_enter() {
 
 
                 actors_[i].capture_ticks = actors_[i].capture_total;
-                if (!mobiles_[i].moving && !mobiles_[i].in_transit) {
+
+                if (actors_[i].enter_kind == ENTER_CAPTURE && types_[actors_[i].type].capture_time_max > 0)
+                    actors_[i].capture_ticks = actors_[i].capture_total = 0;
+
+
+                if (!mobiles_[i].moving && !mobiles_[i].in_transit &&
+                    (mobiles_[i].arrived || (tick_ + uint32_t(actors_[i].id)) % ENTER_RETRY_TICKS == 0)) {
                     const int32_t id = actors_[i].id;
                     order_enter(&id, 1, actors_[i].capture_target, actors_[i].enter_kind);
                 }
                 continue;
             }
+
+
+            if (actors_[i].capture_total <= 0 && actors_[i].enter_kind == ENTER_CAPTURE &&
+                types_[actors_[i].type].capture_time_max > 0)
+                actors_[i].capture_ticks = actors_[i].capture_total = capture_duration(i, size_t(t));
             if (--actors_[i].capture_ticks > 0) continue;
 
             actors_[i].enter_return = c;

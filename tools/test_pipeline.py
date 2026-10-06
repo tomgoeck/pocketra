@@ -100,8 +100,29 @@ def test_balance_overrides_applied() -> None:
     for name in ("mine", "gmine"):
         check(actors[name]["seeds_resource"].get("interval") == 120, f"{name}: Säintervall 120 statt 75")
     full = json.loads((ASSETS / "rules.json").read_text())
-    check(actors["e6"].get("capture_delay") == 0, "e6: geht sofort hinein (engineer_capture_delay 0)")
-    check(full.get("actors_campaign", {}).get("e6", {}).get("capture_delay") == 200, "e6 Kampagne: Wartezeit 200 bleibt")
+
+    e6 = actors["e6"]
+    check(e6.get("capture_time_max") == 300 and e6.get("capture_time_min") == 50,
+          "e6: Eroberungsdauer 300 bis 50 Ticks (engineer_capture_max_ticks/min_ticks)")
+    check(e6.get("capture_time_ref") == "fact" and actors.get("fact", {}).get("capturable"),
+          "e6: Referenzgebäude der Eroberungsdauer ist der Bauhof")
+    check(int(e6.get("sabotage_threshold", 0)) == 0, "e6: Sabotage abgeschaltet (engineer_sabotage_threshold 0)")
+    check(e6.get("capture_delay") == 200, "e6: OpenRAs CaptureDelay 200 bleibt als Grundwert stehen")
+
+
+    def btime(a: dict) -> int:
+        b = a.get("buildable") or {}
+        dur = int(b.get("duration", -1))
+        return (dur if dur >= 0 else int(a.get("cost") or 0)) * int(b.get("duration_modifier", 60)) // 100
+    ref = btime(actors["fact"])
+    check(ref == 1200, "Bauhof: Bauzeit 1200 Ticks (Referenz der Eroberungsdauer)")
+    check(btime(actors["barr"]) < btime(actors["proc"]) < ref, "Bauzeit Kaserne < Raffinerie < Bauhof")
+    longer = sorted(n for n, a in actors.items() if a.get("capturable") and a.get("building") and btime(a) > ref)
+    check(longer == ["mslo"], f"nur das Raketensilo baut länger als der Bauhof ({longer})")
+    camp = full.get("actors_campaign", {}).get("e6", {})
+    check(camp.get("capture_delay") == 200 and "capture_time_max" not in camp and "capture_time_ref" not in camp,
+          "e6 Kampagne: feste Wartezeit 200, keine Dauerformel")
+    check(int(camp.get("sabotage_threshold", 0)) == 0, "e6 Kampagne: keine Sabotage")
 
     lone = json.loads((ASSETS / "maps" / "fort-lonestar.json").read_text())["rules_override"]["weapons"]
     check(dmg(lone["scud"]) == [37500], "fort-lonestar SCUD 50000 → 37500 (DamagePercent auch im Delta)")

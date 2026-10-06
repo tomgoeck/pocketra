@@ -77,7 +77,7 @@ static func volume(key: String) -> float:
 	if _vol.has(key):
 		return float(_vol[key])
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	var v := clampf(float(cfg.get_value("audio", key + "_volume", DEFAULT_VOLUMES.get(key, 1.0))), 0.0, 1.0)
 	_vol[key] = v
 	return v
@@ -88,9 +88,9 @@ static func set_volume(key: String, value: float) -> void:
 		return
 	var v := clampf(value, 0.0, 1.0)
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("audio", key + "_volume", v)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 	_vol[key] = v
 	apply(key)
 
@@ -178,16 +178,16 @@ static var _mode_cache := -1
 static func headset_mode() -> int:
 	if _mode_cache < 0:
 		var cfg := ConfigFile.new()
-		cfg.load(SETTINGS)
+		UserSettings.read(cfg)
 		_mode_cache = clampi(int(cfg.get_value("audio", "headset_mode", Headset.AUTO)), 0, 2)
 	return _mode_cache
 
 
 static func set_headset_mode(m: int) -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("audio", "headset_mode", clampi(m, 0, 2))
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 	_mode_cache = clampi(m, 0, 2)
 	_headset_cache = -1
 	_retarget()

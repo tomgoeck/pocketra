@@ -57,7 +57,7 @@ func _ready() -> void:
 
 
 	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS) == OK:
+	if UserSettings.read(cfg) == OK:
 		enabled_default = bool(cfg.get_value("audio", "music", enabled_default))
 		source = str(cfg.get_value("audio", "music_source", SOURCE_ORIGINAL))
 	enabled = enabled_default
@@ -142,9 +142,9 @@ func set_source(new_source: String) -> void:
 		return
 	source = new_source
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("audio", "music_source", source)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 	rebuild()
 
 
@@ -298,9 +298,9 @@ func set_enabled(on: bool) -> void:
 	enabled = on
 	enabled_default = on
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS)
+	UserSettings.read(cfg)
 	cfg.set_value("audio", "music", on)
-	cfg.save(SETTINGS)
+	UserSettings.write(cfg)
 	if enabled:
 		_next()
 	else:

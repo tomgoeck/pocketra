@@ -259,6 +259,9 @@ def balance_rules(path: Path = BALANCE_FILE) -> dict[str, bool]:
                     raw = str(f.value).strip()
 
                     _BALANCE_RULES[f.key] = int(raw) if raw.lstrip("-").isdigit() else raw.lower() in ("true", "yes", "1")
+
+                    if f.key.endswith("_reference"):
+                        _BALANCE_RULES[f.key] = raw.lower()
     return _BALANCE_RULES
 
 
@@ -276,11 +279,13 @@ def apply_actor_balance(act: dict, path: Path = BALANCE_FILE, campaign: bool = F
             act["sabotage_hp_removal"] = removal
 
 
-    cdel = rules.get("engineer_capture_delay")
-    if (not campaign and isinstance(cdel, int) and cdel >= 0 and act.get("captures")
+    cmax = rules.get("engineer_capture_max_ticks")
+    if (not campaign and isinstance(cmax, int) and cmax > 0 and act.get("captures")
             and "building" in [c.lower() for c in act.get("capture_types") or []]):
-        act["capture_delay_openra"] = int(act.get("capture_delay", 0) or 0)
-        act["capture_delay"] = cdel
+        cmin = rules.get("engineer_capture_min_ticks")
+        act["capture_time_max"] = cmax
+        act["capture_time_min"] = cmin if isinstance(cmin, int) and cmin > 0 else 1
+        act["capture_time_ref"] = str(rules.get("engineer_capture_reference") or "").lower()
 
 
     seed = rules.get("seed_interval")
@@ -291,6 +296,13 @@ def apply_actor_balance(act: dict, path: Path = BALANCE_FILE, campaign: bool = F
     pct = rules.get("aircraft_hp_percent")
     if isinstance(pct, int) and pct != 100 and act.get("aircraft") and not act.get("husk") and isinstance(act.get("hp"), int):
         act["hp"] = max(1, act["hp"] * pct // 100)
+
+
+    ac = act.get("aircraft")
+    if (rules.get("transport_heli_lands") and not campaign and isinstance(ac, dict) and ac.get("can_hover")
+            and ac.get("landable") and act.get("cargo") and not act.get("rearm_actors") and not act.get("husk")):
+        ac["idle_behavior_openra"] = ac.get("idle_behavior", "None")
+        ac["idle_behavior"] = "Land"
     if rules.get("chrono_unlimited") and isinstance(act.get("portable_chrono"), dict):
         act["portable_chrono"]["max_distance"] = 0
 
@@ -1404,11 +1416,12 @@ def main() -> int:
 
 
     for name, act in actors.items():
-        if int(act.get("sabotage_threshold", 0) or 0) > 0 and name not in actors_campaign:
+        if ((int(act.get("sabotage_threshold", 0) or 0) > 0 or int(act.get("capture_time_max", 0) or 0) > 0)
+                and name not in actors_campaign):
             camp = copy.deepcopy(act)
             camp["sabotage_threshold"] = 0
-            if "capture_delay_openra" in camp:
-                camp["capture_delay"] = camp.pop("capture_delay_openra")
+            for key in ("capture_time_max", "capture_time_min", "capture_time_ref"):
+                camp.pop(key, None)
             actors_campaign[name] = camp
 
 

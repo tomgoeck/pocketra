@@ -99,6 +99,14 @@ func build(atlas: PaletteAtlas, overrides: Dictionary = {}, campaign: bool = fal
 
 	if campaign:
 		_apply_actor_overrides(d.get("actors_campaign", {}))
+
+
+		for an in actors:
+			var aac = actors[an].get("aircraft")
+			if aac is Dictionary and aac.has("idle_behavior_openra"):
+				var acopy: Dictionary = actors[an].duplicate(true)
+				acopy["aircraft"]["idle_behavior"] = acopy["aircraft"]["idle_behavior_openra"]
+				actors[an] = acopy
 	_apply_actor_overrides(overrides.get("actors", {}))
 	for name in overrides.get("weapons", {}):
 		weapon_defs[name] = overrides["weapons"][name]
@@ -697,6 +705,11 @@ func _build_type(name: String, a: Dictionary) -> Dictionary:
 
 		"sabotage_threshold": int(a.get("sabotage_threshold", 0)),
 		"sabotage_hp_removal": int(a.get("sabotage_hp_removal", 50)),
+
+
+		"capture_time_max": int(a.get("capture_time_max", 0)),
+		"capture_time_min": int(a.get("capture_time_min", 0)),
+		"capture_time_ref": String(a.get("capture_time_ref", "")),
 
 		"instantly_repairs": a.get("instantly_repairs", false),
 		"instantly_repairable": a.get("instantly_repairable", false),

@@ -322,16 +322,16 @@ func state() -> String:
 
 static func setting(key: String, default: Variant, path: String = SETTINGS) -> Variant:
 	var cfg := ConfigFile.new()
-	if cfg.load(path) != OK:
+	if UserSettings.read(cfg, path) != OK:
 		return default
 	return cfg.get_value(SETTINGS_SECTION, key, default)
 
 
 static func set_setting(key: String, value: Variant, path: String = SETTINGS) -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(path)
+	UserSettings.read(cfg, path)
 	cfg.set_value(SETTINGS_SECTION, key, value)
-	cfg.save(path)
+	UserSettings.write(cfg, path)
 
 
 static func setting_enabled(path: String = SETTINGS) -> bool:
